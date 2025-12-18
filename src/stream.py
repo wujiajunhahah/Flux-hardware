@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import threading
 import time
 from collections import deque
@@ -33,6 +32,15 @@ class EMGSample:
 
 
 @dataclass
+class IMUSample:
+    """Represents one timestamped IMU reading (accel + gyro)."""
+
+    timestamp: float
+    accel: np.ndarray
+    gyro: np.ndarray
+
+
+@dataclass
 class FrameStats:
     total_frames: int = 0
     emg_frames: int = 0
@@ -41,11 +49,16 @@ class FrameStats:
     last_sequence: Optional[int] = None
 
 
-def _decode_signed24(b1: int, b2: int, b3: int) -> int:
+def _decode_signed24(b1: int, b2: int, b3: int) -> float:
     value = (b1 << 16) | (b2 << 8) | b3
     if value & 0x800000:
         value -= 1 << 24
-    return value
+
+    # Convert to volts then microvolts
+    # V_ref = 4.5V, Gain = 1200
+    volts = (value / 8388607.0) * 4.5
+    micro_volts = (volts / 1200.0) * 1_000_000.0
+    return float(micro_volts)
 
 
 class BaseEMGStream:
@@ -59,6 +72,9 @@ class BaseEMGStream:
 
     def consume_samples(self, max_items: int = 256) -> List[EMGSample]:  # pragma: no cover - runtime wiring
         raise NotImplementedError
+
+    def consume_imu(self, max_items: int = 256) -> List[IMUSample]:  # pragma: no cover - runtime wiring
+        return []
 
     def frame_stats(self) -> FrameStats:  # pragma: no cover - runtime wiring
         raise NotImplementedError
@@ -81,12 +97,15 @@ class SerialEMGStream(BaseEMGStream):
         self._running = False
         self._buffer = bytearray()
         self._queue: Deque[EMGSample] = deque(maxlen=8096)
+        self._imu_queue: Deque[IMUSample] = deque(maxlen=4096)
         self._lock = threading.Lock()
+        self._imu_lock = threading.Lock()
         self._stats = FrameStats()
 
     def start(self) -> None:
         if self._running:
             return
+        self._verify_port()
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -165,6 +184,19 @@ class SerialEMGStream(BaseEMGStream):
                 self._queue.append(EMGSample(time.perf_counter(), values))
         elif frame_type == IMU_FLAG:
             stats.imu_frames += 1
+            payload = frame[5 : 5 + 12]
+            accel = np.zeros(3, dtype=float)
+            gyro = np.zeros(3, dtype=float)
+            for idx in range(3):
+                start = idx * 2
+                accel[idx] = int.from_bytes(payload[start : start + 2], "little", signed=True)
+            for idx in range(3):
+                start = 3 * 2 + idx * 2
+                gyro[idx] = int.from_bytes(payload[start : start + 2], "little", signed=True)
+
+            sample = IMUSample(time.perf_counter(), accel, gyro)
+            with self._imu_lock:
+                self._imu_queue.append(sample)
         else:
             # Unknown packet, drop silently.
             return
@@ -179,6 +211,18 @@ class SerialEMGStream(BaseEMGStream):
             items: List[EMGSample] = []
             for _ in range(min(max_items, len(self._queue))):
                 items.append(self._queue.popleft())
+            return items
+
+    def consume_imu(self, max_items: int = 256) -> List[IMUSample]:
+        with self._imu_lock:
+            if max_items <= 0:
+                items = list(self._imu_queue)
+                self._imu_queue.clear()
+                return items
+
+            items: List[IMUSample] = []
+            for _ in range(min(max_items, len(self._imu_queue))):
+                items.append(self._imu_queue.popleft())
             return items
 
     def frame_stats(self) -> FrameStats:
@@ -196,65 +240,12 @@ class SerialEMGStream(BaseEMGStream):
         except Exception as exc:  # pragma: no cover
             print(f"[stream] Failed to send command: {exc}")
 
-
-class SyntheticEMGStream(BaseEMGStream):
-    """Generate pseudo EMG data for demo/testing."""
-
-    def __init__(self, sample_rate: int = 1_000) -> None:
-        self.sample_rate = sample_rate
-        self._queue: Deque[EMGSample] = deque(maxlen=8096)
-        self._lock = threading.Lock()
-        self._running = False
-        self._thread: Optional[threading.Thread] = None
-        self._stats = FrameStats()
-
-    def start(self) -> None:
-        if self._running:
-            return
-        self._running = True
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._running = False
-        if self._thread:
-            self._thread.join(timeout=1)
-
-    def _run(self) -> None:
-        rng = np.random.default_rng()
-        t = 0.0
-        dt = 1.0 / self.sample_rate
-        while self._running:
-            values = np.zeros(CHANNEL_COUNT)
-            for ch in range(CHANNEL_COUNT):
-                baseline = 50.0 * math.sin(2 * math.pi * (0.2 + ch * 0.05) * t)
-                burst = 300.0 * math.sin(2 * math.pi * (1.2 + ch * 0.1) * t)
-                envelope = 0.5 + 0.5 * math.sin(2 * math.pi * 0.1 * t + ch * 0.3)
-                noise = rng.normal(0, 20)
-                values[ch] = baseline + envelope * burst + noise
-
-            sample = EMGSample(time.perf_counter(), values)
-            with self._lock:
-                self._queue.append(sample)
-
-            t += dt
-            time.sleep(dt)
-
-    def consume_samples(self, max_items: int = 256) -> List[EMGSample]:
-        with self._lock:
-            if max_items <= 0:
-                items = list(self._queue)
-                self._queue.clear()
-                return items
-
-            items: List[EMGSample] = []
-            for _ in range(min(max_items, len(self._queue))):
-                items.append(self._queue.popleft())
-            return items
-
-    def frame_stats(self) -> FrameStats:
-        return self._stats
-
-    def send_command(self, data: str) -> None:
-        # Synthetic stream has nothing to send to.
-        return
+    def _verify_port(self) -> None:
+        if serial is None:
+            raise RuntimeError("pyserial is required for hardware streaming")
+        try:
+            conn = serial.Serial(self.port, self.baudrate, timeout=0.01)
+        except Exception as exc:
+            raise RuntimeError(f"Unable to open {self.port}: {exc}") from exc
+        else:
+            conn.close()

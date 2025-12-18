@@ -1,95 +1,68 @@
-# Waveletech Gesture Lab
+# WAVELETECH EMG 传感器数据可视化程序
 
-Complete macOS-friendly toolkit for recording, training, and recognizing custom EMG gestures with the Waveletech 8-channel wristband. The app ingests the binary AA/BB frames (0xD2 headers) via serial, plots real-time waveforms and RMS bars, records labeled gestures, trains a RandomForest model, and runs low-latency inference with trigger actions.
+这是一个用于实时可视化和分析 WAVELETECH EMG 传感器数据的 Python 应用程序。
 
-## Installation
+## 功能特性
+
+- 📊 **实时数据可视化**
+  - EMG 通道数据（3个通道）
+  - 陀螺仪数据（X, Y, Z轴）
+  - 加速度计数据（X, Y, Z轴）
+
+- 🔌 **串口通信**
+  - 自动检测可用串口
+  - 实时数据接收和解析
+
+- 📈 **数据展示**
+  - 实时波形图表
+  - 数据统计面板
+  - 采样率显示
+
+## 安装依赖
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate  # or use conda
 pip install -r requirements.txt
 ```
 
-## Quick start
+## 使用方法
 
-1. Connect the Waveletech USB receiver (shows up as `/dev/cu.usbserial-0001`).
-2. Launch the app (fallbacks to synthetic data if no port is provided):
-
-   ```bash
-   python3 app.py --port /dev/cu.usbserial-0001 --baud 921600
-   ```
-
-3. Use the keyboard shortcuts while the Matplotlib window is focused:
-
-   | Key | Action |
-   | --- | ------ |
-   | `R` | Start/stop recording the current gesture (prompts for a label in the terminal). |
-   | `T` | Train a RandomForest model from all recordings in `data/`. |
-   | `I` | Toggle real-time inference (requires a trained model). |
-   | `S` | Save a screenshot to `screenshots/`. |
-   | `Q` | Quit the app. |
-
-4. During inference, stable detections (≥3 consecutive windows with confidence ≥0.8) print `TRIGGER:<gesture>` and run the configured action from `gestures.yaml`.
-
-### Workflow
-
-1. **Record**: Press `R`, enter a gesture label, perform the gesture, then press `R` again. Files are saved to `data/<gesture>/<timestamp>.csv` with columns `t, ch1..ch8`.
-2. **Train**: Press `T`. The trainer extracts MAV/RMS/WL/ZC/SSC features per channel using 500 ms windows with 100 ms stride, splits data by file (GroupShuffleSplit when possible), and writes `model/model.pkl` + `model/config.json`.
-3. **Infer**: Press `I` to enable inference. The UI shows the latest prediction + confidence, along with RMS-based contact quality (`GOOD/WEAK/NOISY`) for each channel. When a trigger fires, optional serial/HTTP actions run (see below).
-
-### Command-line options
-
-`python3 app.py --help` lists all tunables, including display history (`--history`), RMS window (`--rms-window`), feature window (`--window`), stride (`--stride`), alternate data/model directories, and `--demo` for synthetic playback.
-
-## Gesture actions (`gestures.yaml`)
-
-Map gesture names to actions:
-
-```yaml
-gesture_name:
-  action: print            # print | serial | http
-  message: "TRIGGER:gesture"
-
-fist:
-  action: serial
-  command: "FIST\n"       # sent back over the same serial port
-
-wave:
-  action: http
-  url: "http://localhost:7000/gesture"
-  payload:
-    event: wave
-```
-
-- `print`: logs the message.
-- `serial`: sends `command` bytes to the wristband receiver (also prints a summary).
-- `http`: issues a JSON POST to `url` with the optional `payload`.
-
-Update the file and press `I` again (or restart) to reload.
-
-## Sanity probe
-
-`tools/serial_probe.py` validates connectivity at 921 600 baud before launching the UI:
-
+1. 确保传感器已连接到电脑
+2. 运行程序：
 ```bash
-python3 tools/serial_probe.py --port /dev/cu.usbserial-0001 --seconds 10
+python main.py
 ```
 
-Output includes AA/BB frame ratios, dropped sequence counts, and EMG frame throughput.
-
-## Repository layout
-
-```
-app.py                  # Main entrypoint / keyboard controls / Matplotlib loop
-src/stream.py           # Serial + synthetic readers, packet parsing, frame stats
-src/ring_buffer.py      # Multichannel ring buffer and RMS helper
-src/features.py         # Gesture feature extraction + contact quality
-src/trainer.py          # Recording loader + RandomForest trainer + persistence
-src/recorder.py         # CSV recordings per gesture
-src/inference.py        # Real-time windowing, smoothing, and trigger logic
-src/actions.py          # gestures.yaml loader + serial/HTTP execution
-src/ui.py               # Matplotlib figure, waveform + RMS bars, status text
-tools/serial_probe.py   # Standalone serial link checker
-gestures.yaml           # Default gesture→action map
+或者直接运行：
+```bash
+python visualizer.py
 ```
 
-Legacy prototypes (`visualizer.py`, `emg_rms_realtime.py`, etc.) remain for reference but the recommended entrypoint is always `python3 app.py ...`.
+3. 在程序界面中：
+   - 选择正确的串口（点击"刷新"更新列表）
+   - 点击"连接"按钮开始接收数据
+   - 查看实时数据可视化
+
+## 数据格式说明
+
+根据传感器文档，数据包包含：
+- **EMG通道**: ch1, ch2, ch3（原始ADC值）
+- **陀螺仪**: gr_x, gr_y, gr_z（单位：rad/s，缩放因子：0.0012）
+- **加速度计**: acc_x, acc_y, acc_z（单位：m/s²，缩放因子：0.0005978）
+
+## 配置
+
+默认串口参数：
+- 波特率：115200
+- 数据位：8
+- 停止位：1
+- 校验位：无
+
+如需修改，请编辑 `serial_reader.py` 中的参数。
+
+## 注意事项
+
+- 确保串口未被其他程序占用
+- 如果数据解析不正确，可能需要根据实际数据包格式调整 `data_parser.py`
+- 采样率会根据实际接收速度自动计算
+
+
