@@ -32,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.stream import CHANNEL_COUNT, BaseEMGStream, SerialEMGStream
+from src.stream import CHANNEL_COUNT, BaseEMGStream, BleEMGStream, SerialEMGStream
 from src.energy import StaminaEngine, StaminaState
 from src.decision import DecisionEngine
 
@@ -643,6 +643,8 @@ def main():
 
     parser = argparse.ArgumentParser(description="FluxChi API Server")
     parser.add_argument("--port", help="Serial port for WAVELETECH wristband")
+    parser.add_argument("--ble", nargs="?", const="auto", default=None,
+                        help="Connect via BLE (no USB dongle). Optionally pass device address.")
     parser.add_argument("--demo", action="store_true", help="Demo mode (synthetic data)")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--web-port", type=int, default=8000)
@@ -679,13 +681,18 @@ def main():
         if onnx_session is None:
             onnx_session = DemoClassifier(stream)
             print("[web] Using demo classifier")
+    elif args.ble is not None:
+        addr = None if args.ble == "auto" else args.ble
+        print(f"[web] BLE mode — {'auto-scan' if addr is None else addr}")
+        stream = BleEMGStream(address=addr)
+        stream.start()
     elif args.port:
         print(f"[web] Connecting to {args.port}...")
         stream = SerialEMGStream(args.port)
         stream.start()
     else:
         print("[web] No port specified and --demo not set.")
-        print("[web] Use --port /dev/tty.usbserial-XXXX or --demo")
+        print("[web] Use --port /dev/tty.usbserial-XXXX  or  --ble  or  --demo")
         sys.exit(1)
 
     if onnx_session is None:
@@ -699,7 +706,8 @@ def main():
     print(f"  Swagger     http://localhost:{p}/docs")
     print(f"  SSE stream  http://localhost:{p}/api/v1/stream")
     print(f"  Pulse       http://localhost:{p}/api/v1/pulse")
-    print(f"  Mode: {'demo' if demo_mode else 'live'}  Speed: {speed_multiplier}x\n")
+    mode = "demo" if demo_mode else ("ble" if args.ble is not None else "serial")
+    print(f"  Mode: {mode}  Speed: {speed_multiplier}x\n")
     uvicorn.run(app, host=args.host, port=p, log_level="warning")
 
 

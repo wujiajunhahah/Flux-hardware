@@ -1,7 +1,8 @@
-"""Serial and synthetic EMG data sources."""
+"""Serial, BLE, and synthetic EMG data sources."""
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from collections import deque
@@ -15,12 +16,23 @@ try:  # pragma: no cover - optional at import time
 except Exception:  # pragma: no cover
     serial = None
 
+try:  # pragma: no cover
+    from bleak import BleakClient, BleakScanner  # type: ignore
+except Exception:  # pragma: no cover
+    BleakClient = None  # type: ignore
+    BleakScanner = None  # type: ignore
+
 
 HEADER = b"\xD2\xD2\xD2"
 PACKET_BYTES = 29
 EMG_FLAG = 0xAA
 IMU_FLAG = 0xBB
 CHANNEL_COUNT = 8
+
+BLE_SERVICE_UUID = "974cbe30-3e83-465e-acde-6f92fe712134"
+BLE_DATA_CHAR = "974cbe31-3e83-465e-acde-6f92fe712134"
+BLE_WRITE_CHAR = "974cbe32-3e83-465e-acde-6f92fe712134"
+BLE_DEVICE_PREFIX = "WL"
 
 
 @dataclass
@@ -249,3 +261,158 @@ class SerialEMGStream(BaseEMGStream):
             raise RuntimeError(f"Unable to open {self.port}: {exc}") from exc
         else:
             conn.close()
+
+
+# ─── BLE Stream ──────────────────────────────────────────────
+
+
+class BleEMGStream(BaseEMGStream):
+    """Read Waveletech EMG packets directly via BLE (no USB dongle)."""
+
+    def __init__(self, address: Optional[str] = None) -> None:
+        if BleakClient is None:
+            raise RuntimeError("bleak is required: pip install bleak")
+        self._address = address
+        self._thread: Optional[threading.Thread] = None
+        self._running = False
+        self._queue: Deque[EMGSample] = deque(maxlen=8096)
+        self._imu_queue: Deque[IMUSample] = deque(maxlen=4096)
+        self._lock = threading.Lock()
+        self._imu_lock = threading.Lock()
+        self._stats = FrameStats()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._connected = False
+
+    def start(self) -> None:
+        if self._running:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._running = False
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._loop.stop)
+        if self._thread:
+            self._thread.join(timeout=3)
+
+    def _run(self) -> None:
+        self._loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._loop)
+        try:
+            self._loop.run_until_complete(self._ble_main())
+        except Exception as exc:
+            print(f"[ble] Event loop error: {exc}")
+        finally:
+            self._running = False
+
+    async def _ble_main(self) -> None:
+        address = self._address
+        if not address:
+            address = await self._scan_for_wristband()
+            if not address:
+                print("[ble] Wristband not found. Make sure it's ON and USB dongle is UNPLUGGED.")
+                return
+
+        print(f"[ble] Connecting to {address}...")
+        async with BleakClient(address) as client:
+            self._connected = True
+            print(f"[ble] Connected! MTU={client.mtu_size}")
+
+            await client.start_notify(BLE_DATA_CHAR, self._on_notify)
+            print(f"[ble] Subscribed to EMG data stream")
+
+            while self._running:
+                await asyncio.sleep(0.1)
+
+            await client.stop_notify(BLE_DATA_CHAR)
+            self._connected = False
+            print("[ble] Disconnected")
+
+    async def _scan_for_wristband(self, timeout: float = 10.0) -> Optional[str]:
+        print(f"[ble] Scanning for WAVELETECH wristband ({timeout}s)...")
+        devices = await BleakScanner.discover(timeout=timeout, return_adv=True)
+
+        for addr, (dev, adv) in devices.items():
+            name = dev.name or adv.local_name or ""
+            if name.upper().startswith(BLE_DEVICE_PREFIX):
+                print(f"[ble] Found: {name} ({addr}) RSSI={adv.rssi}")
+                return addr
+
+        for addr, (dev, adv) in devices.items():
+            uuids = adv.service_uuids or []
+            if BLE_SERVICE_UUID in uuids:
+                name = dev.name or "(unknown)"
+                print(f"[ble] Found by UUID: {name} ({addr})")
+                return addr
+
+        return None
+
+    def _on_notify(self, sender: int, data: bytearray) -> None:
+        if len(data) < 20:
+            return
+
+        frame_type = data[0]
+        seq = data[1]
+        stats = self._stats
+        stats.total_frames += 1
+
+        if frame_type == EMG_FLAG:
+            stats.emg_frames += 1
+            if stats.last_sequence is not None:
+                expected = (stats.last_sequence + 1) & 0xFF
+                if seq != expected:
+                    delta = (seq - expected) & 0xFF
+                    stats.dropped_frames += max(delta, 1)
+            stats.last_sequence = seq
+
+            values = np.zeros(CHANNEL_COUNT, dtype=float)
+            payload = data[2:]  # 18 bytes
+            n_channels = min(len(payload) // 3, CHANNEL_COUNT)
+            for i in range(n_channels):
+                b1, b2, b3 = payload[i * 3 : i * 3 + 3]
+                values[i] = _decode_signed24(b1, b2, b3)
+
+            with self._lock:
+                self._queue.append(EMGSample(time.perf_counter(), values))
+
+        elif frame_type == IMU_FLAG:
+            stats.imu_frames += 1
+            payload = data[2:]
+            if len(payload) >= 12:
+                accel = np.zeros(3, dtype=float)
+                gyro = np.zeros(3, dtype=float)
+                for i in range(3):
+                    s = i * 2
+                    accel[i] = int.from_bytes(payload[s : s + 2], "little", signed=True)
+                for i in range(3):
+                    s = 6 + i * 2
+                    gyro[i] = int.from_bytes(payload[s : s + 2], "little", signed=True)
+                with self._imu_lock:
+                    self._imu_queue.append(IMUSample(time.perf_counter(), accel, gyro))
+
+    def consume_samples(self, max_items: int = 256) -> List[EMGSample]:
+        with self._lock:
+            if max_items <= 0:
+                items = list(self._queue)
+                self._queue.clear()
+                return items
+            items: List[EMGSample] = []
+            for _ in range(min(max_items, len(self._queue))):
+                items.append(self._queue.popleft())
+            return items
+
+    def consume_imu(self, max_items: int = 256) -> List[IMUSample]:
+        with self._imu_lock:
+            if max_items <= 0:
+                items = list(self._imu_queue)
+                self._imu_queue.clear()
+                return items
+            items: List[IMUSample] = []
+            for _ in range(min(max_items, len(self._imu_queue))):
+                items.append(self._imu_queue.popleft())
+            return items
+
+    def frame_stats(self) -> FrameStats:
+        return self._stats

@@ -12,3 +12,4 @@ uvicorn[standard]>=0.20
 websockets>=11.0
 skl2onnx>=1.15
 onnxruntime>=1.15
+bleak>=0.21
