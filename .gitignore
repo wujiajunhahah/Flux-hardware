@@ -9,3 +9,6 @@ screenshots/
 game/doom_clone/
 game/three-arena/
 对话.md
+ios/build/
+ios/FluxChi.xcodeproj/xcuserdata/
+*.xcuserstate

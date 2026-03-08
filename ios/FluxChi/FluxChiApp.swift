@@ -27,10 +27,21 @@ struct FluxChiApp: App {
             .environmentObject(service)
             .environmentObject(bleManager)
             .onAppear {
-                service.startSSE()
+                service.startPolling()
+                bleManager.onStateUpdate = { [weak service] state in
+                    Task { @MainActor in
+                        service?.state = state
+                        service?.isConnected = true
+                        service?.connectionError = nil
+                    }
+                }
             }
-            .onDisappear {
-                service.stopSSE()
+            .onChange(of: bleManager.isConnected) { _, connected in
+                if connected {
+                    service.stopPolling()
+                } else {
+                    service.startPolling()
+                }
             }
         }
     }

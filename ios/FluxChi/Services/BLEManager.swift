@@ -31,6 +31,7 @@ final class BLEManager: NSObject, ObservableObject {
     // MARK: - Callbacks
 
     var onEMGSample: (([Double]) -> Void)?
+    var onStateUpdate: ((FluxState) -> Void)?
 
     // MARK: - Private
 
@@ -39,6 +40,9 @@ final class BLEManager: NSObject, ObservableObject {
     private var dataChar: CBCharacteristic?
 
     private let emgBuffer = EMGRingBuffer(capacity: 250)
+    private var workStartTime: Date?
+    private var totalWorkSeconds: Double = 0
+    private var lastActivityIsWork = false
 
     // MARK: - Init
 
@@ -54,13 +58,14 @@ final class BLEManager: NSObject, ObservableObject {
         guard central.state == .poweredOn else { return }
         discoveredDevices.removeAll()
         isScanning = true
+        // Scan ALL devices — wristband doesn't advertise its service UUID
         central.scanForPeripherals(
-            withServices: [Self.serviceUUID],
+            withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
 
         Task {
-            try? await Task.sleep(for: .seconds(10))
+            try? await Task.sleep(for: .seconds(15))
             if isScanning { stopScan() }
         }
     }
@@ -116,8 +121,71 @@ final class BLEManager: NSObject, ObservableObject {
 
             if emgFrameCount % 50 == 0 {
                 latestRMS = emgBuffer.rms()
+                buildAndPushState()
             }
         }
+    }
+
+    private func buildAndPushState() {
+        let rms = latestRMS
+        let avgRMS = rms.reduce(0, +) / max(Double(rms.count), 1)
+        let isWorking = avgRMS > 30
+
+        if isWorking && !lastActivityIsWork {
+            workStartTime = Date()
+            lastActivityIsWork = true
+        } else if !isWorking && lastActivityIsWork {
+            if let start = workStartTime {
+                totalWorkSeconds += Date().timeIntervalSince(start)
+            }
+            workStartTime = nil
+            lastActivityIsWork = false
+        }
+
+        let contWork: Double = {
+            guard let start = workStartTime else { return 0 }
+            return Date().timeIntervalSince(start) / 60
+        }()
+        let totalWork = (totalWorkSeconds + (workStartTime.map { Date().timeIntervalSince($0) } ?? 0)) / 60
+
+        let activity = isWorking ? "working" : "rest"
+        let staminaVal = max(0, 100 - totalWork * 2)
+        let stState = staminaVal > 60 ? "focused" : staminaVal > 30 ? "fading" : "depleted"
+
+        let state = FluxState(
+            timestamp: Date().timeIntervalSince1970,
+            activity: activity,
+            confidence: 1.0,
+            probabilities: [activity: 1.0],
+            rms: rms,
+            emgSampleCount: emgFrameCount,
+            stamina: StaminaData(
+                value: staminaVal,
+                state: isWorking ? stState : "recovering",
+                consistency: 0,
+                tension: 0,
+                fatigue: min(totalWork / 30, 1),
+                drainRate: 2,
+                recoveryRate: 5,
+                suggestedWorkMin: max(0, 30 - contWork),
+                suggestedBreakMin: isWorking ? 0 : 5,
+                continuousWorkMin: contWork,
+                totalWorkMin: totalWork
+            ),
+            decision: DecisionData(
+                state: isWorking ? stState : "recovering",
+                recommendation: staminaVal > 60 ? "keep_working" : staminaVal > 30 ? "take_break" : "rest_more",
+                urgency: staminaVal < 30 ? 0.8 : staminaVal < 60 ? 0.5 : 0,
+                reasons: [isWorking ? "BLE 直连 · 已工作 \(Int(contWork)) 分钟" : "BLE 直连 · 休息中"],
+                stamina: staminaVal,
+                continuousWorkMin: contWork,
+                totalWorkMin: totalWork,
+                suggestedWorkMin: max(0, 30 - contWork),
+                suggestedBreakMin: isWorking ? 0 : 5
+            )
+        )
+
+        onStateUpdate?(state)
     }
 
     private static func decodeSigned24(_ b1: Int, _ b2: Int, _ b3: Int) -> Double {
@@ -148,6 +216,11 @@ extension BLEManager: CBCentralManagerDelegate {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
+        let name = peripheral.name
+            ?? (advertisementData[CBAdvertisementDataLocalNameKey] as? String)
+            ?? ""
+        guard name.uppercased().hasPrefix(Self.devicePrefix) else { return }
+
         Task { @MainActor in
             if !self.discoveredDevices.contains(where: { $0.identifier == peripheral.identifier }) {
                 self.discoveredDevices.append(peripheral)

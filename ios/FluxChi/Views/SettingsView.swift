@@ -6,6 +6,9 @@ struct SettingsView: View {
     @State private var editHost: String = ""
     @State private var editPort: String = ""
     @State private var showResetAlert = false
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case host, port }
 
     var body: some View {
         NavigationStack {
@@ -16,6 +19,17 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("设置")
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") {
+                        focusedField = nil
+                        applyServerConfig()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
             .onAppear {
                 editHost = service.host
                 editPort = "\(service.port)"
@@ -23,10 +37,8 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Server
-
     private var serverSection: some View {
-        Section("服务器") {
+        Section {
             HStack {
                 Image(systemName: "globe")
                     .foregroundStyle(.secondary)
@@ -34,7 +46,10 @@ struct SettingsView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
-                    .onSubmit { applyServerConfig() }
+                    .focused($focusedField, equals: .host)
+                    .onSubmit {
+                        focusedField = .port
+                    }
             }
 
             HStack {
@@ -42,28 +57,40 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 TextField("端口", text: $editPort)
                     .keyboardType(.numberPad)
-                    .onSubmit { applyServerConfig() }
+                    .focused($focusedField, equals: .port)
             }
 
-            Button("应用") {
+            Button {
+                focusedField = nil
                 applyServerConfig()
+            } label: {
+                HStack {
+                    Text("应用并连接")
+                    Spacer()
+                    if service.isConnected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                }
             }
-            .disabled(editHost == service.host && editPort == "\(service.port)")
+        } header: {
+            Text("服务器")
+        } footer: {
+            Text("手机和电脑需在同一 WiFi 下")
         }
     }
 
-    // MARK: - Status
-
     @ViewBuilder
     private var statusSection: some View {
-        if let status = service.serverStatus {
-            Section("服务器状态") {
-                StatusRow(
-                    icon: "circle.fill",
-                    label: "连接",
-                    value: status.connected ? "正常" : "断开",
-                    tint: status.connected ? .green : .red
-                )
+        Section("状态") {
+            StatusRow(
+                icon: "circle.fill",
+                label: "连接",
+                value: service.isConnected ? "已连接" : "未连接",
+                tint: service.isConnected ? .green : .red
+            )
+
+            if let status = service.serverStatus {
                 StatusRow(
                     icon: "brain",
                     label: "模型",
@@ -85,16 +112,24 @@ struct SettingsView: View {
                 if let uptime = status.uptimeSec {
                     StatusRow(
                         icon: "clock",
-                        label: "运行时间",
+                        label: "运行",
                         value: formatUptime(uptime),
                         tint: .secondary
                     )
                 }
             }
+
+            if let err = service.connectionError {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
-
-    // MARK: - Control
 
     private var controlSection: some View {
         Section("控制") {
@@ -117,16 +152,8 @@ struct SettingsView: View {
             } label: {
                 Label("保存状态", systemImage: "square.and.arrow.down")
             }
-
-            Button {
-                Task { await service.fetchStatus() }
-            } label: {
-                Label("刷新状态", systemImage: "arrow.clockwise")
-            }
         }
     }
-
-    // MARK: - About
 
     private var aboutSection: some View {
         Section("关于") {
@@ -136,32 +163,21 @@ struct SettingsView: View {
                 Spacer()
                 Text("EMG Stamina Engine")
                     .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                Text("协议")
-                Spacer()
-                Text("REST / SSE / BLE")
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(.caption)
             }
 
             Link(destination: URL(string: "https://github.com/wujiajunhahah/formydegree")!) {
-                Label("GitHub 仓库", systemImage: "link")
+                Label("GitHub", systemImage: "link")
             }
         }
     }
-
-    // MARK: - Helpers
 
     private func applyServerConfig() {
         service.host = editHost
         if let p = Int(editPort), p > 0, p <= 65535 {
             service.port = p
         }
-        service.stopSSE()
-        service.startSSE()
-        Task { await service.fetchStatus() }
+        service.reconnect()
     }
 
     private func formatUptime(_ seconds: Double) -> String {
@@ -191,9 +207,4 @@ private struct StatusRow: View {
                 .foregroundStyle(.secondary)
         }
     }
-}
-
-#Preview {
-    SettingsView()
-        .environmentObject(FluxService())
 }

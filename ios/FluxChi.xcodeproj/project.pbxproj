@@ -1,0 +1,370 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		32C85255E54CE8BBA79891B9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE36952EACC328036003CF02 /* SettingsView.swift */; };
+		37D1B293D85533CBE3726A66 /* FluxChiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2583B5DFE6B5E2D06D3907A8 /* FluxChiApp.swift */; };
+		41EB0AED9E3D37E9D144B449 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */; };
+		4C00083B10B70FBDBCFC6F1D /* BLEView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBF9348C6BE2D3C47741B9F /* BLEView.swift */; };
+		66E6A5ADCD0E5DFFDB401A86 /* FluxService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2107ECD8E4CA0465E062E56 /* FluxService.swift */; };
+		C88E9A5407EC978105B036F9 /* StaminaRingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E528776B3F3519BE71383DDE /* StaminaRingView.swift */; };
+		FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C4C08A362F4D9CE7712D17 /* BLEManager.swift */; };
+		FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371B9343B23F955F6F6A51BF /* FluxModels.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1716A2E4F26E4B7F2ADFEE42 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		2583B5DFE6B5E2D06D3907A8 /* FluxChiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxChiApp.swift; sourceTree = "<group>"; };
+		32067C2042217E02560ABB85 /* FluxChi.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FluxChi.entitlements; sourceTree = "<group>"; };
+		34C4C08A362F4D9CE7712D17 /* BLEManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEManager.swift; sourceTree = "<group>"; };
+		371B9343B23F955F6F6A51BF /* FluxModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxModels.swift; sourceTree = "<group>"; };
+		858AEC23E1FB855621B1C591 /* FluxChi.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FluxChi.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CE36952EACC328036003CF02 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		E2107ECD8E4CA0465E062E56 /* FluxService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxService.swift; sourceTree = "<group>"; };
+		E528776B3F3519BE71383DDE /* StaminaRingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaminaRingView.swift; sourceTree = "<group>"; };
+		F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		FEBF9348C6BE2D3C47741B9F /* BLEView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		38ABC1A581A08B8D107B365B /* FluxChi */ = {
+			isa = PBXGroup;
+			children = (
+				32067C2042217E02560ABB85 /* FluxChi.entitlements */,
+				2583B5DFE6B5E2D06D3907A8 /* FluxChiApp.swift */,
+				8D9D200F4FE8E3A98EEA8C97 /* Models */,
+				8258423E72BE55DFAC6E9EA6 /* Resources */,
+				96BE7038B8B379D612345B1B /* Services */,
+				59DF8F4E20B2182E4F53621D /* Views */,
+			);
+			path = FluxChi;
+			sourceTree = "<group>";
+		};
+		59DF8F4E20B2182E4F53621D /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				FEBF9348C6BE2D3C47741B9F /* BLEView.swift */,
+				F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */,
+				CE36952EACC328036003CF02 /* SettingsView.swift */,
+				E528776B3F3519BE71383DDE /* StaminaRingView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		8258423E72BE55DFAC6E9EA6 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				1716A2E4F26E4B7F2ADFEE42 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		8D9D200F4FE8E3A98EEA8C97 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				371B9343B23F955F6F6A51BF /* FluxModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		96BE7038B8B379D612345B1B /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				34C4C08A362F4D9CE7712D17 /* BLEManager.swift */,
+				E2107ECD8E4CA0465E062E56 /* FluxService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		9EF54FC37354BBF8BBAFAEED = {
+			isa = PBXGroup;
+			children = (
+				38ABC1A581A08B8D107B365B /* FluxChi */,
+				D9505AD12D52353ADB5395A3 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D9505AD12D52353ADB5395A3 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				858AEC23E1FB855621B1C591 /* FluxChi.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		841CFB8E99450B4CE06E5FA0 /* FluxChi */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E45AA46E2957DEAFFC471032 /* Build configuration list for PBXNativeTarget "FluxChi" */;
+			buildPhases = (
+				BF1238A0032912E47F3CC050 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FluxChi;
+			productName = FluxChi;
+			productReference = 858AEC23E1FB855621B1C591 /* FluxChi.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8DECD7BE60E71A6975067FF8 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					841CFB8E99450B4CE06E5FA0 = {
+						DevelopmentTeam = M4T239BM58;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 2705109AF66E212A15479D12 /* Build configuration list for PBXProject "FluxChi" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 9EF54FC37354BBF8BBAFAEED;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				841CFB8E99450B4CE06E5FA0 /* FluxChi */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BF1238A0032912E47F3CC050 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */,
+				4C00083B10B70FBDBCFC6F1D /* BLEView.swift in Sources */,
+				41EB0AED9E3D37E9D144B449 /* DashboardView.swift in Sources */,
+				37D1B293D85533CBE3726A66 /* FluxChiApp.swift in Sources */,
+				FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */,
+				66E6A5ADCD0E5DFFDB401A86 /* FluxService.swift in Sources */,
+				32C85255E54CE8BBA79891B9 /* SettingsView.swift in Sources */,
+				C88E9A5407EC978105B036F9 /* StaminaRingView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1DA4FE3F00E6FC506A798AC6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = M4T239BM58;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		73EB4530CBC75A5EA895E2B9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = M4T239BM58;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		A3423160F4DF70CF95229890 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = FluxChi/FluxChi.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				DEVELOPMENT_TEAM = M4T239BM58;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FluxChi/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = FluxChi;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "FluxChi 需要蓝牙权限以连接 WAVELETECH EMG 手环，实时接收肌电信号数据。";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "FluxChi 需要蓝牙权限以连接 WAVELETECH EMG 手环。";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FluxChi 需要访问本地网络以连接运行在电脑上的 EMG 数据服务器。";
+				INFOPLIST_KEY_UIBackgroundModes = "bluetooth-central";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluxchi.app;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BE9B35B321DFC5DA8A987537 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = FluxChi/FluxChi.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				DEVELOPMENT_TEAM = M4T239BM58;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FluxChi/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = FluxChi;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "FluxChi 需要蓝牙权限以连接 WAVELETECH EMG 手环，实时接收肌电信号数据。";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "FluxChi 需要蓝牙权限以连接 WAVELETECH EMG 手环。";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FluxChi 需要访问本地网络以连接运行在电脑上的 EMG 数据服务器。";
+				INFOPLIST_KEY_UIBackgroundModes = "bluetooth-central";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluxchi.app;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2705109AF66E212A15479D12 /* Build configuration list for PBXProject "FluxChi" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DA4FE3F00E6FC506A798AC6 /* Debug */,
+				73EB4530CBC75A5EA895E2B9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E45AA46E2957DEAFFC471032 /* Build configuration list for PBXNativeTarget "FluxChi" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A3423160F4DF70CF95229890 /* Debug */,
+				BE9B35B321DFC5DA8A987537 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 8DECD7BE60E71A6975067FF8 /* Project object */;
+}
