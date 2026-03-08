@@ -1,13 +1,16 @@
 """
-FluxChi — Web 后端
+FluxChi — API Server
 =========================================================
-FastAPI + WebSocket 实时推送 EMG 状态到前端仪表盘。
+RESTful API + SSE + WebSocket 三种接入方式。
+
+  REST   — iOS / 第三方轮询       /api/v1/*
+  SSE    — iOS URLSession 实时流  /api/v1/stream
+  WS     — Web 仪表盘实时推送      /ws
 
 用法：
   python web/app.py --port /dev/tty.usbserial-XXXX
-  python web/app.py --demo   # 无硬件演示模式
-
-浏览器打开: http://localhost:8000
+  python web/app.py --demo
+  python web/app.py --demo --speed 10
 =========================================================
 """
 from __future__ import annotations
@@ -24,17 +27,34 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.stream import CHANNEL_COUNT, BaseEMGStream, SerialEMGStream
-from src.fatigue import FatigueEstimator, FatigueReading
-from src.decision import DecisionEngine, DecisionOutput
+from src.energy import StaminaEngine, StaminaState
+from src.decision import DecisionEngine
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="FluxChi", version="1.0")
+app = FastAPI(
+    title="FluxChi",
+    version="2.1",
+    description="EMG-based work sustainability API for iOS, Web, and beyond.",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-Id"],
+)
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ─── Global state ────────────────────────────────────────────
@@ -42,19 +62,28 @@ stream: Optional[BaseEMGStream] = None
 onnx_session = None
 onnx_classes: List[str] = []
 onnx_config: Optional[dict] = None
-fatigue_estimator: Optional[FatigueEstimator] = None
+stamina_engine: Optional[StaminaEngine] = None
 decision_engine: Optional[DecisionEngine] = None
 active_connections: Set[WebSocket] = set()
 demo_mode = False
+speed_multiplier = 1.0
 timeline: List[Dict] = []
+latest_payload: Dict = {}
+_server_start: float = time.time()
 SAMPLE_RATE = 1000
 WINDOW_SEC = 0.25
 
 
+def _ok(data: dict) -> dict:
+    return {"ok": True, "ts": time.time(), "data": data}
+
+
+def _err(code: str, message: str, status: int = 200) -> dict:
+    return {"ok": False, "ts": time.time(), "error": code, "message": message}
+
+
 # ─── ONNX Inference wrapper ─────────────────────────────────
 class ONNXClassifier:
-    """Wraps an ONNX model for activity classification."""
-
     def __init__(self, onnx_path: str, config: dict):
         import onnxruntime as ort
         self.session = ort.InferenceSession(str(onnx_path))
@@ -63,7 +92,6 @@ class ONNXClassifier:
         self.n_features = config.get("n_features", 84)
 
     def predict(self, features: np.ndarray) -> tuple:
-        """Return (class_label, confidence, probabilities_dict)."""
         x = features.astype(np.float32).reshape(1, -1)
         if x.shape[1] < self.n_features:
             x = np.pad(x, ((0, 0), (0, self.n_features - x.shape[1])))
@@ -91,9 +119,8 @@ class ONNXClassifier:
         return label, confidence, probabilities
 
 
-# ─── Enhanced feature extraction (84-dim, matches train_pipeline) ──
+# ─── Feature extraction ─────────────────────────────────────
 def extract_window_features_84(window: np.ndarray, sample_rate: int) -> np.ndarray:
-    """84-dim features: 7 per channel (MAV,RMS,WL,ZC,SSC,MNF,MDF) + 28 correlations."""
     feats = []
     n_ch = min(window.shape[1], CHANNEL_COUNT)
     threshold = 20.0
@@ -147,10 +174,10 @@ def extract_window_features_84(window: np.ndarray, sample_rate: int) -> np.ndarr
     return np.array(feats, dtype=np.float64)
 
 
-# ─── Synthetic stream for demo mode ─────────────────────────
+# ─── Demo streams ───────────────────────────────────────────
 class DemoEMGStream(BaseEMGStream):
     def __init__(self) -> None:
-        from src.stream import EMGSample, FrameStats
+        from src.stream import FrameStats
         self._running = False
         self._stats = FrameStats()
         self._activity_idx = 0
@@ -205,7 +232,6 @@ class DemoEMGStream(BaseEMGStream):
         return self._stats
 
 
-# ─── Demo classifier ────────────────────────────────────────
 class DemoClassifier:
     def __init__(self, stream_ref):
         self._stream = stream_ref
@@ -221,22 +247,238 @@ class DemoClassifier:
         return self.classes[idx], 0.85, probs
 
 
-# ─── Routes ──────────────────────────────────────────────────
-@app.get("/")
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  API v1
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# ── Dashboard ────────────────────────────────────────────────
+@app.get("/", include_in_schema=False)
 async def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
 
 
-@app.get("/api/status")
-async def status():
-    return {
+# ── System ───────────────────────────────────────────────────
+@app.get("/api/v1/status", tags=["System"], summary="服务状态")
+async def v1_status():
+    """返回服务连接、模型、模式等元信息。"""
+    return _ok({
         "connected": stream is not None,
         "model_loaded": onnx_session is not None,
         "demo_mode": demo_mode,
-        "timeline_entries": len(timeline),
-    }
+        "speed": speed_multiplier,
+        "sample_rate": SAMPLE_RATE,
+        "channels": CHANNEL_COUNT,
+        "uptime_sec": round(time.time() - _server_start, 1),
+        "websocket_clients": len(active_connections),
+    })
 
 
+@app.get("/api/v1/model", tags=["System"], summary="模型信息")
+async def v1_model():
+    """返回已加载 ONNX 模型的类别和精度。"""
+    if onnx_config:
+        return _ok({
+            "loaded": True,
+            "classes": onnx_config.get("classes", []),
+            "n_features": onnx_config.get("n_features"),
+            "accuracy": onnx_config.get("accuracy"),
+        })
+    return _ok({"loaded": False, "classes": []})
+
+
+# ── Core — Stamina ───────────────────────────────────────────
+@app.get("/api/v1/pulse", tags=["Core"], summary="轻量心跳（iOS 后台用）")
+async def v1_pulse():
+    """最小化 payload：仅 stamina + state + recommendation。适合 iOS Background Task 每 30s 轮询。"""
+    if not latest_payload:
+        return _err("no_data", "传感器数据尚未就绪")
+    st = latest_payload.get("stamina", {})
+    dec = latest_payload.get("decision", {})
+    return _ok({
+        "stamina": st.get("value", 0),
+        "state": st.get("state", "unknown"),
+        "recommendation": dec.get("recommendation", "unknown"),
+        "urgency": dec.get("urgency", 0),
+        "suggested_work_min": st.get("suggested_work_min", 0),
+        "suggested_break_min": st.get("suggested_break_min", 0),
+    })
+
+
+@app.get("/api/v1/stamina", tags=["Core"], summary="续航详情")
+async def v1_stamina():
+    """完整续航分数 + 三维度指标 + 建议时长。"""
+    if stamina_engine is None or stamina_engine.latest is None:
+        return _err("no_data", "StaminaEngine 尚未初始化")
+    r = stamina_engine.latest
+    return _ok({
+        "stamina": r.stamina,
+        "state": r.state.value,
+        "dimensions": {
+            "consistency": r.consistency,
+            "tension": r.tension,
+            "fatigue": r.fatigue,
+        },
+        "rates": {
+            "drain_per_min": r.drain_rate,
+            "recovery_per_min": r.recovery_rate,
+        },
+        "suggestion": {
+            "work_min": r.suggested_work_min,
+            "break_min": r.suggested_break_min,
+        },
+        "session": {
+            "continuous_work_min": r.continuous_work_min,
+            "total_work_min": r.total_work_min,
+        },
+    })
+
+
+@app.get("/api/v1/decision", tags=["Core"], summary="决策建议")
+async def v1_decision():
+    """当前工作/休息建议 + 原因列表。"""
+    dec = latest_payload.get("decision")
+    if not dec:
+        return _err("no_data", "尚无决策数据")
+    return _ok(dec)
+
+
+@app.get("/api/v1/state", tags=["Core"], summary="完整快照")
+async def v1_state():
+    """返回与 WebSocket / SSE 推送完全相同的完整 payload。"""
+    if not latest_payload:
+        return _err("no_data", "传感器数据尚未就绪")
+    return _ok(latest_payload)
+
+
+# ── Signal ───────────────────────────────────────────────────
+@app.get("/api/v1/emg", tags=["Signal"], summary="EMG 通道 RMS")
+async def v1_emg():
+    """8 通道实时 RMS 值。"""
+    rms = latest_payload.get("rms", [0.0] * CHANNEL_COUNT)
+    return _ok({
+        "channels": CHANNEL_COUNT,
+        "rms": rms,
+        "sample_count": latest_payload.get("emg_sample_count", 0),
+    })
+
+
+# ── History ──────────────────────────────────────────────────
+@app.get("/api/v1/timeline", tags=["History"], summary="提醒历史")
+async def v1_timeline(
+    limit: int = Query(50, ge=1, le=200, description="返回最近 N 条"),
+):
+    """最近的休息提醒历史。"""
+    return _ok({
+        "total": len(timeline),
+        "events": timeline[-limit:],
+    })
+
+
+# ── Control ──────────────────────────────────────────────────
+@app.post("/api/v1/stamina/reset", tags=["Control"], summary="重置续航")
+async def v1_stamina_reset():
+    """将续航重置为 100%。"""
+    if stamina_engine:
+        stamina_engine.reset()
+        return _ok({"stamina": 100.0})
+    return _err("not_ready", "StaminaEngine 未初始化")
+
+
+@app.post("/api/v1/stamina/save", tags=["Control"], summary="持久化状态")
+async def v1_stamina_save():
+    """保存当前续航到磁盘，下次启动可恢复。"""
+    if stamina_engine:
+        stamina_engine.save()
+        return _ok({"stamina": stamina_engine.stamina})
+    return _err("not_ready", "StaminaEngine 未初始化")
+
+
+@app.post("/api/v1/stamina/load", tags=["Control"], summary="加载状态")
+async def v1_stamina_load():
+    """从磁盘恢复上次保存的续航。"""
+    if stamina_engine:
+        loaded = stamina_engine.load()
+        return _ok({"loaded": loaded, "stamina": stamina_engine.stamina})
+    return _err("not_ready", "StaminaEngine 未初始化")
+
+
+# ── SSE Stream (iOS-friendly) ────────────────────────────────
+@app.get("/api/v1/stream", tags=["Realtime"], summary="SSE 实时流")
+async def v1_sse_stream():
+    """
+    Server-Sent Events 流。比 WebSocket 更适合 iOS URLSession。
+
+    每 ~200ms 推送一帧，格式：
+        event: state
+        data: { ... payload JSON ... }
+    """
+    async def event_generator():
+        last_ts = 0.0
+        while True:
+            await asyncio.sleep(0.2)
+            if not latest_payload:
+                continue
+            ts = latest_payload.get("timestamp", 0)
+            if ts == last_ts:
+                continue
+            last_ts = ts
+            payload_json = json.dumps(latest_payload, ensure_ascii=False)
+            yield f"event: state\ndata: {payload_json}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ── Legacy (backward compat, redirect-free) ──────────────────
+@app.get("/api/status", include_in_schema=False)
+async def legacy_status():
+    return await v1_status()
+
+@app.get("/api/stamina", include_in_schema=False)
+async def legacy_stamina():
+    return await v1_stamina()
+
+@app.get("/api/state", include_in_schema=False)
+async def legacy_state():
+    return await v1_state()
+
+@app.get("/api/decision", include_in_schema=False)
+async def legacy_decision():
+    return await v1_decision()
+
+@app.get("/api/emg", include_in_schema=False)
+async def legacy_emg():
+    return await v1_emg()
+
+@app.get("/api/model", include_in_schema=False)
+async def legacy_model():
+    return await v1_model()
+
+@app.get("/api/timeline", include_in_schema=False)
+async def legacy_timeline():
+    return await v1_timeline()
+
+@app.post("/api/stamina/reset", include_in_schema=False)
+async def legacy_reset():
+    return await v1_stamina_reset()
+
+@app.post("/api/stamina/save", include_in_schema=False)
+async def legacy_save():
+    return await v1_stamina_save()
+
+@app.post("/api/stamina/load", include_in_schema=False)
+async def legacy_load():
+    return await v1_stamina_load()
+
+
+# ── WebSocket (Web dashboard) ────────────────────────────────
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
@@ -263,12 +505,12 @@ async def broadcast(data: dict):
     active_connections.difference_update(dead)
 
 
-# ─── Main processing loop ───────────────────────────────────
+# ─── Processing loop ────────────────────────────────────────
 async def processing_loop():
-    global fatigue_estimator, decision_engine
+    global stamina_engine, decision_engine
 
     window_samples = int(WINDOW_SEC * SAMPLE_RATE)
-    fatigue_estimator = FatigueEstimator(sample_rate=SAMPLE_RATE)
+    stamina_engine = StaminaEngine(sample_rate=SAMPLE_RATE, speed=speed_multiplier)
     decision_engine = DecisionEngine()
 
     emg_buffer = np.zeros((0, CHANNEL_COUNT))
@@ -319,20 +561,20 @@ async def processing_loop():
             except Exception as e:
                 print(f"[inference] {e}")
 
-        fatigue_reading = FatigueReading(0.0, 0.0, 0.0, 0.0, 0.0)
-        if fatigue_estimator and emg_buffer.shape[0] >= window_samples:
+        stamina_reading = None
+        if stamina_engine and emg_buffer.shape[0] >= window_samples:
             try:
                 window = emg_buffer[-window_samples:]
-                fatigue_reading = fatigue_estimator.update(now, window)
-            except Exception:
-                pass
+                stamina_reading = stamina_engine.update(window, activity, now)
+            except Exception as e:
+                print(f"[stamina] {e}")
 
         decision = None
-        if decision_engine:
+        if decision_engine and stamina_reading:
             try:
-                decision = decision_engine.update(activity, fatigue_reading.score, now)
-            except Exception:
-                pass
+                decision = decision_engine.update(stamina_reading, activity)
+            except Exception as e:
+                print(f"[decision] {e}")
 
         rms_values = np.sqrt(np.mean(emg_buffer[-min(250, len(emg_buffer)):] ** 2, axis=0)).tolist()
 
@@ -342,25 +584,36 @@ async def processing_loop():
             "activity": activity,
             "confidence": confidence,
             "probabilities": probabilities,
-            "fatigue": {
-                "score": fatigue_reading.score,
-                "mdf_current": fatigue_reading.mdf_current,
-                "mdf_baseline": fatigue_reading.mdf_baseline,
-                "mdf_slope": fatigue_reading.mdf_slope,
-                "confidence": fatigue_reading.confidence,
-            },
             "rms": rms_values,
             "emg_sample_count": len(emg_buffer),
         }
 
+        if stamina_reading:
+            payload["stamina"] = {
+                "value": stamina_reading.stamina,
+                "state": stamina_reading.state.value,
+                "consistency": stamina_reading.consistency,
+                "tension": stamina_reading.tension,
+                "fatigue": stamina_reading.fatigue,
+                "drain_rate": stamina_reading.drain_rate,
+                "recovery_rate": stamina_reading.recovery_rate,
+                "suggested_work_min": stamina_reading.suggested_work_min,
+                "suggested_break_min": stamina_reading.suggested_break_min,
+                "continuous_work_min": stamina_reading.continuous_work_min,
+                "total_work_min": stamina_reading.total_work_min,
+            }
+
         if decision:
             payload["decision"] = {
-                "state": decision.state.value,
+                "state": decision.state,
                 "recommendation": decision.recommendation.value,
                 "urgency": decision.urgency,
                 "reasons": decision.reasons,
+                "stamina": decision.stamina,
                 "continuous_work_min": decision.continuous_work_min,
                 "total_work_min": decision.total_work_min,
+                "suggested_work_min": decision.suggested_work_min,
+                "suggested_break_min": decision.suggested_break_min,
             }
             if decision.urgency >= 0.5:
                 timeline.append({
@@ -371,6 +624,9 @@ async def processing_loop():
                 })
                 if len(timeline) > 200:
                     timeline[:] = timeline[-100:]
+
+        latest_payload.clear()
+        latest_payload.update(payload)
 
         await broadcast(payload)
         await asyncio.sleep(0.01)
@@ -383,17 +639,20 @@ async def startup():
 
 # ─── Entrypoint ──────────────────────────────────────────────
 def main():
-    global stream, onnx_session, onnx_classes, onnx_config, demo_mode
+    global stream, onnx_session, onnx_classes, onnx_config, demo_mode, speed_multiplier
 
-    parser = argparse.ArgumentParser(description="FluxChi Web Server")
+    parser = argparse.ArgumentParser(description="FluxChi API Server")
     parser.add_argument("--port", help="Serial port for WAVELETECH wristband")
-    parser.add_argument("--demo", action="store_true", help="Demo mode (no hardware)")
+    parser.add_argument("--demo", action="store_true", help="Demo mode (synthetic data)")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--web-port", type=int, default=8000)
     parser.add_argument("--model-dir", default="model")
+    parser.add_argument("--speed", type=float, default=1.0,
+                        help="Stamina speed multiplier (default=1, defense demo=10)")
     args = parser.parse_args()
 
     demo_mode = args.demo
+    speed_multiplier = args.speed
 
     model_dir = Path(args.model_dir)
     for prefix in ("activity_classifier", "ninapro_classifier"):
@@ -414,7 +673,7 @@ def main():
                 print(f"[web] Failed to load {onnx_path}: {e}")
 
     if demo_mode:
-        print("[web] Running in DEMO mode (synthetic data)")
+        print("[web] DEMO mode (synthetic data)")
         stream = DemoEMGStream()
         stream.start()
         if onnx_session is None:
@@ -430,13 +689,18 @@ def main():
         sys.exit(1)
 
     if onnx_session is None:
-        print("[web] No model loaded — signal-only mode (EMG + fatigue, no classification)")
+        print("[web] No model — signal-only mode")
 
     import uvicorn
-    print(f"\n  FluxChi Web: http://localhost:{args.web_port}")
-    print(f"  Demo mode: {demo_mode}")
-    print(f"  Model: {'ONNX loaded' if onnx_session else 'none'}\n")
-    uvicorn.run(app, host=args.host, port=args.web_port, log_level="warning")
+    p = args.web_port
+    print(f"\n  FluxChi API Server")
+    print(f"  ─────────────────────────────")
+    print(f"  Dashboard   http://localhost:{p}")
+    print(f"  Swagger     http://localhost:{p}/docs")
+    print(f"  SSE stream  http://localhost:{p}/api/v1/stream")
+    print(f"  Pulse       http://localhost:{p}/api/v1/pulse")
+    print(f"  Mode: {'demo' if demo_mode else 'live'}  Speed: {speed_multiplier}x\n")
+    uvicorn.run(app, host=args.host, port=p, log_level="warning")
 
 
 if __name__ == "__main__":

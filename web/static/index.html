@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FluxChi — 工作状态仪表盘</title>
+<title>FluxChi — 工作续航仪表盘</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
 :root {
@@ -19,6 +19,9 @@
   --rest: #a78bfa;
   --warn: #fbbf24;
   --urgent: #f87171;
+  --green: #34d399;
+  --yellow: #fbbf24;
+  --red: #f87171;
   --radius: 12px;
 }
 
@@ -103,6 +106,7 @@ body {
 }
 .state-icon.resting { background: rgba(167,139,250,0.15); border-color: var(--rest); }
 .state-icon.alert { background: rgba(248,113,113,0.15); border-color: var(--urgent); animation: pulse 1.5s infinite; }
+.state-icon.fading { background: rgba(251,191,36,0.15); border-color: var(--warn); }
 
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.4); }
@@ -122,9 +126,7 @@ body {
   margin-left: auto;
   flex-wrap: wrap;
 }
-.metric {
-  text-align: center;
-}
+.metric { text-align: center; }
 .metric-value {
   font-size: 32px;
   font-weight: 700;
@@ -137,12 +139,80 @@ body {
   letter-spacing: 0.5px;
 }
 
-.gauge-wrap {
+/* Stamina arc gauge */
+.stamina-arc-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  position: relative;
 }
+.stamina-arc-svg {
+  width: 200px;
+  height: 120px;
+}
+.arc-bg {
+  fill: none;
+  stroke: var(--surface-2);
+  stroke-width: 12;
+  stroke-linecap: round;
+}
+.arc-fill {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 12;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.5s, stroke 0.5s;
+}
+.stamina-center {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+.stamina-big {
+  font-size: 42px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.stamina-unit {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.stamina-state-label {
+  font-size: 13px;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+/* Three dimensions */
+.dim-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+.dim-item {
+  flex: 1;
+  text-align: center;
+  padding: 8px 4px;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+.dim-value {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.dim-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
 .gauge {
   width: 100%;
   height: 8px;
@@ -161,11 +231,7 @@ body {
 .gauge-fill.urgent { background: var(--urgent); }
 
 .prob-bars { display: flex; flex-direction: column; gap: 8px; }
-.prob-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.prob-row { display: flex; align-items: center; gap: 8px; }
 .prob-label {
   width: 80px;
   font-size: 12px;
@@ -221,19 +287,12 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.timeline-wrap { grid-column: 1 / -1; height: 120px; }
-
 .emg-channels {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
 }
-.ch-bar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
+.ch-bar { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .ch-bar-label { font-size: 10px; color: var(--text-muted); }
 .ch-bar-track {
   width: 100%;
@@ -252,11 +311,7 @@ body {
   transition: height 0.2s;
   opacity: 0.8;
 }
-.ch-bar-val {
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-}
+.ch-bar-val { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 
 .footer {
   text-align: center;
@@ -265,6 +320,29 @@ body {
   color: var(--text-muted);
   border-top: 1px solid var(--border);
   margin-top: 20px;
+}
+
+.suggestion-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+}
+.suggestion-item {
+  flex: 1;
+  padding: 10px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  text-align: center;
+}
+.suggestion-val {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.suggestion-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 </style>
 </head>
@@ -283,12 +361,16 @@ body {
   <!-- State Card -->
   <div class="card state-card">
     <div class="state-main">
-      <div class="state-icon" id="stateIcon">⌨</div>
+      <div class="state-icon" id="stateIcon">⏳</div>
       <div class="state-text">
         <h2 id="stateTitle">等待连接</h2>
         <p id="stateSubtitle">正在连接传感器...</p>
       </div>
       <div class="state-metrics">
+        <div class="metric">
+          <div class="metric-value" id="staminaQuick">—</div>
+          <div class="metric-label">续航</div>
+        </div>
         <div class="metric">
           <div class="metric-value" id="workMin">0</div>
           <div class="metric-label">连续工作(分)</div>
@@ -298,9 +380,48 @@ body {
           <div class="metric-label">累计工作(分)</div>
         </div>
         <div class="metric">
-          <div class="metric-value" id="fatiguePercent">0%</div>
-          <div class="metric-label">疲劳度</div>
+          <div class="metric-value" id="suggestTime">—</div>
+          <div class="metric-label" id="suggestLabel">预估</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stamina Gauge -->
+  <div class="card">
+    <div class="card-title">工作续航</div>
+    <div class="stamina-arc-wrap">
+      <svg class="stamina-arc-svg" viewBox="0 0 200 120">
+        <path class="arc-bg" d="M 20 110 A 80 80 0 0 1 180 110" />
+        <path class="arc-fill" id="staminaArc" d="M 20 110 A 80 80 0 0 1 180 110" />
+      </svg>
+      <div class="stamina-center">
+        <div class="stamina-big" id="staminaValue">100</div>
+        <div class="stamina-state-label" id="staminaStateLabel">初始化...</div>
+      </div>
+    </div>
+    <div class="suggestion-row">
+      <div class="suggestion-item">
+        <div class="suggestion-val" id="sugWorkMin">—</div>
+        <div class="suggestion-label">可专注 (分钟)</div>
+      </div>
+      <div class="suggestion-item">
+        <div class="suggestion-val" id="sugBreakMin">—</div>
+        <div class="suggestion-label">需休息 (分钟)</div>
+      </div>
+    </div>
+    <div class="dim-row">
+      <div class="dim-item">
+        <div class="dim-value" id="dimConsistency">—</div>
+        <div class="dim-label">专注度</div>
+      </div>
+      <div class="dim-item">
+        <div class="dim-value" id="dimTension">—</div>
+        <div class="dim-label">紧张度</div>
+      </div>
+      <div class="dim-item">
+        <div class="dim-value" id="dimFatigue">—</div>
+        <div class="dim-label">肌肉退化</div>
       </div>
     </div>
   </div>
@@ -315,25 +436,6 @@ body {
       <div class="gauge-fill" id="confGauge" style="width:0%"></div>
     </div>
     <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">置信度</div>
-  </div>
-
-  <!-- Fatigue -->
-  <div class="card">
-    <div class="card-title">肌肉疲劳</div>
-    <div class="gauge-wrap">
-      <div class="metric-value" id="fatigueScore" style="font-size:48px;">0%</div>
-      <div class="gauge" style="width:100%;">
-        <div class="gauge-fill" id="fatigueGauge" style="width:0%"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;width:100%;font-size:11px;color:var(--text-muted);">
-        <span>轻松</span><span>疲劳</span>
-      </div>
-    </div>
-    <div style="margin-top:16px;font-size:12px;color:var(--text-muted);">
-      <div>MDF: <span id="mdfCurrent">—</span> Hz</div>
-      <div>基线: <span id="mdfBaseline">—</span> Hz</div>
-      <div>趋势: <span id="mdfSlope">—</span> Hz/s</div>
-    </div>
   </div>
 
   <!-- EMG Channels -->
@@ -359,17 +461,17 @@ body {
     </div>
   </div>
 
-  <!-- Timeline Chart -->
+  <!-- Stamina Trend Chart -->
   <div class="card" style="grid-column: 1 / -1;">
-    <div class="card-title">疲劳趋势</div>
+    <div class="card-title">续航趋势</div>
     <div class="rms-chart-wrap">
-      <canvas id="fatigueChart"></canvas>
+      <canvas id="staminaChart"></canvas>
     </div>
   </div>
 
 </div>
 
-<div class="footer">FluxChi v1.0 — 数字游民工作状态管理系统</div>
+<div class="footer">FluxChi v2.0 — 数字游民工作续航管理系统</div>
 
 <script>
 const ACTIVITY_NAMES = {
@@ -378,23 +480,29 @@ const ACTIVITY_NAMES = {
   wrist_flex: '手腕屈曲', wrist_movement: '手腕运动'
 };
 let knownClasses = new Set();
-const STATE_NAMES = { working: '工作中', resting: '休息中', transition: '切换中' };
+
+const STATE_LABELS = {
+  focused: { text: '专注中', color: '#34d399' },
+  fading: { text: '效率下降', color: '#fbbf24' },
+  depleted: { text: '续航耗尽', color: '#f87171' },
+  recovering: { text: '恢复中', color: '#a78bfa' }
+};
 const REC_NAMES = { keep_working: '继续工作', take_break: '建议休息', start_working: '可以开始', rest_more: '继续休息' };
 
 let ws = null;
 let reconnectTimer = null;
-let fatigueHistory = [];
-const MAX_HISTORY = 120;
+let staminaHistory = [];
+const MAX_HISTORY = 150;
 
-const fatigueChart = new Chart(document.getElementById('fatigueChart'), {
+const staminaChart = new Chart(document.getElementById('staminaChart'), {
   type: 'line',
   data: {
     labels: [],
     datasets: [{
-      label: '疲劳度',
+      label: '续航',
       data: [],
       borderColor: '#4ecdc4',
-      backgroundColor: 'rgba(78,205,196,0.1)',
+      backgroundColor: 'rgba(78,205,196,0.08)',
       fill: true,
       tension: 0.3,
       pointRadius: 0,
@@ -407,19 +515,31 @@ const fatigueChart = new Chart(document.getElementById('fatigueChart'), {
     animation: { duration: 0 },
     scales: {
       x: { display: false },
-      y: { min: 0, max: 1, ticks: { color: '#888899' }, grid: { color: '#2a2a3a' } }
+      y: {
+        min: 0, max: 100,
+        ticks: { color: '#888899', callback: v => v + '%' },
+        grid: { color: '#2a2a3a' }
+      }
     },
     plugins: {
       legend: { display: false },
-      annotation: {
-        annotations: {
-          warnLine: { type: 'line', yMin: 0.4, yMax: 0.4, borderColor: '#fbbf24', borderWidth: 1, borderDash: [4, 4] },
-          urgentLine: { type: 'line', yMin: 0.7, yMax: 0.7, borderColor: '#f87171', borderWidth: 1, borderDash: [4, 4] },
-        }
-      }
     }
   }
 });
+
+/* Stamina arc geometry */
+const ARC_PATH = document.getElementById('staminaArc');
+const ARC_LENGTH = ARC_PATH.getTotalLength();
+ARC_PATH.style.strokeDasharray = ARC_LENGTH;
+ARC_PATH.style.strokeDashoffset = 0;
+
+function setStaminaArc(pct) {
+  const offset = ARC_LENGTH * (1 - pct / 100);
+  ARC_PATH.style.strokeDashoffset = offset;
+  if (pct > 60) ARC_PATH.style.stroke = '#34d399';
+  else if (pct > 30) ARC_PATH.style.stroke = '#fbbf24';
+  else ARC_PATH.style.stroke = '#f87171';
+}
 
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -429,13 +549,11 @@ function connect() {
     document.getElementById('statusDot').className = 'status-dot connected';
     document.getElementById('statusText').textContent = '已连接';
   };
-
   ws.onclose = () => {
     document.getElementById('statusDot').className = 'status-dot disconnected';
     document.getElementById('statusText').textContent = '断开，重连中...';
     reconnectTimer = setTimeout(connect, 2000);
   };
-
   ws.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
     if (data.type === 'state_update') updateUI(data);
@@ -443,7 +561,6 @@ function connect() {
 }
 
 function updateUI(d) {
-  // Activity probabilities — dynamically build bars
   const probs = d.probabilities || {};
   const probContainer = document.getElementById('probBars');
   const newClasses = Object.keys(probs);
@@ -465,29 +582,43 @@ function updateUI(d) {
     if (pv) pv.textContent = `${(val * 100).toFixed(0)}%`;
   }
 
-  // Confidence gauge
   const confGauge = document.getElementById('confGauge');
   confGauge.style.width = `${(d.confidence * 100).toFixed(0)}%`;
 
-  // Fatigue
-  const fs = d.fatigue || {};
-  const fatiguePercent = ((fs.score || 0) * 100).toFixed(0);
-  document.getElementById('fatigueScore').textContent = `${fatiguePercent}%`;
-  document.getElementById('fatiguePercent').textContent = `${fatiguePercent}%`;
-  const fg = document.getElementById('fatigueGauge');
-  fg.style.width = `${fatiguePercent}%`;
-  fg.className = 'gauge-fill' + (fs.score >= 0.7 ? ' urgent' : fs.score >= 0.4 ? ' warn' : '');
+  // --- Stamina ---
+  const st = d.stamina || {};
+  const staminaVal = st.value != null ? st.value : 100;
+  const stState = st.state || 'focused';
 
-  document.getElementById('mdfCurrent').textContent = (fs.mdf_current || 0).toFixed(1);
-  document.getElementById('mdfBaseline').textContent = (fs.mdf_baseline || 0).toFixed(1);
-  document.getElementById('mdfSlope').textContent = (fs.mdf_slope || 0).toFixed(3);
+  setStaminaArc(staminaVal);
+  document.getElementById('staminaValue').textContent = Math.round(staminaVal);
+  document.getElementById('staminaQuick').textContent = `${Math.round(staminaVal)}%`;
+  document.getElementById('staminaQuick').style.color =
+    staminaVal > 60 ? '#34d399' : staminaVal > 30 ? '#fbbf24' : '#f87171';
 
-  // Fatigue chart
-  fatigueHistory.push(fs.score || 0);
-  if (fatigueHistory.length > MAX_HISTORY) fatigueHistory.shift();
-  fatigueChart.data.labels = fatigueHistory.map((_, i) => i);
-  fatigueChart.data.datasets[0].data = fatigueHistory;
-  fatigueChart.update();
+  const sl = STATE_LABELS[stState] || STATE_LABELS.focused;
+  const stLabel = document.getElementById('staminaStateLabel');
+  stLabel.textContent = sl.text;
+  stLabel.style.color = sl.color;
+
+  document.getElementById('sugWorkMin').textContent =
+    st.suggested_work_min != null ? Math.round(st.suggested_work_min) : '—';
+  document.getElementById('sugBreakMin').textContent =
+    st.suggested_break_min != null ? Math.round(st.suggested_break_min) : '—';
+
+  document.getElementById('dimConsistency').textContent =
+    st.consistency != null ? (st.consistency * 100).toFixed(0) + '%' : '—';
+  document.getElementById('dimTension').textContent =
+    st.tension != null ? (st.tension * 100).toFixed(0) + '%' : '—';
+  document.getElementById('dimFatigue').textContent =
+    st.fatigue != null ? (st.fatigue * 100).toFixed(0) + '%' : '—';
+
+  // Stamina trend
+  staminaHistory.push(staminaVal);
+  if (staminaHistory.length > MAX_HISTORY) staminaHistory.shift();
+  staminaChart.data.labels = staminaHistory.map((_, i) => i);
+  staminaChart.data.datasets[0].data = staminaHistory;
+  staminaChart.update();
 
   // EMG channels
   const rms = d.rms || [];
@@ -500,30 +631,29 @@ function updateUI(d) {
     if (valEl) valEl.textContent = val.toFixed(0);
   }
 
-  // Decision state
+  // Decision
   const dec = d.decision || {};
   const stateIcon = document.getElementById('stateIcon');
   const stateTitle = document.getElementById('stateTitle');
   const stateSub = document.getElementById('stateSubtitle');
-
   const activityName = ACTIVITY_NAMES[d.activity] || d.activity;
 
-  const WORK_ACTS = new Set(['typing','mouse_use','finger_movement','wrist_flex','wrist_extend','wrist_movement']);
-  const isWorking = dec.state === 'working' || WORK_ACTS.has(d.activity);
-
-  if (isWorking) {
+  if (stState === 'focused') {
     stateIcon.className = 'state-icon';
-    stateIcon.textContent = '💪';
-    if (dec.urgency >= 0.5) {
-      stateIcon.className = 'state-icon alert';
-      stateTitle.textContent = '需要休息';
-    } else {
-      stateTitle.textContent = `活动中 · ${activityName}`;
-    }
+    stateIcon.textContent = '🔥';
+    stateTitle.textContent = `专注中 · ${activityName}`;
+  } else if (stState === 'fading') {
+    stateIcon.className = 'state-icon fading';
+    stateIcon.textContent = '⚡';
+    stateTitle.textContent = `效率下降 · ${activityName}`;
+  } else if (stState === 'depleted') {
+    stateIcon.className = 'state-icon alert';
+    stateIcon.textContent = '🔋';
+    stateTitle.textContent = '续航耗尽 · 需要休息';
   } else {
     stateIcon.className = 'state-icon resting';
-    stateIcon.textContent = '😌';
-    stateTitle.textContent = `休息中 · ${activityName}`;
+    stateIcon.textContent = '🌿';
+    stateTitle.textContent = `恢复中 · ${activityName}`;
   }
 
   const recName = REC_NAMES[dec.recommendation] || '';
@@ -533,7 +663,16 @@ function updateUI(d) {
   document.getElementById('workMin').textContent = (dec.continuous_work_min || 0).toFixed(0);
   document.getElementById('totalWork').textContent = (dec.total_work_min || 0).toFixed(0);
 
-  // Notifications
+  const suggestEl = document.getElementById('suggestTime');
+  const suggestLabelEl = document.getElementById('suggestLabel');
+  if (stState === 'recovering') {
+    suggestEl.textContent = `${Math.round(st.suggested_break_min || 0)}分`;
+    suggestLabelEl.textContent = '需休息';
+  } else {
+    suggestEl.textContent = `${Math.round(st.suggested_work_min || 0)}分`;
+    suggestLabelEl.textContent = '可专注';
+  }
+
   if (dec.urgency >= 0.5) {
     addNotification(reasons, dec.urgency >= 0.7);
   }
@@ -541,22 +680,16 @@ function updateUI(d) {
 
 function addNotification(msg, urgent) {
   const container = document.getElementById('notifications');
-  if (container.children.length === 1 && container.children[0].tagName !== 'DIV') {
-    container.innerHTML = '';
-  }
   const firstChild = container.firstElementChild;
   if (firstChild && firstChild.textContent && firstChild.textContent.includes('等待')) {
     container.innerHTML = '';
   }
-
   const now = new Date();
   const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-
   const el = document.createElement('div');
   el.className = `notification${urgent ? ' urgent' : ''}`;
   el.innerHTML = `<span class="notification-time">${timeStr}</span><span>${msg}</span>`;
   container.prepend(el);
-
   while (container.children.length > 20) container.removeChild(container.lastChild);
 }
 
