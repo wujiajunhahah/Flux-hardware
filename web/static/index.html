@@ -309,10 +309,7 @@ body {
   <div class="card">
     <div class="card-title">活动识别</div>
     <div class="prob-bars" id="probBars">
-      <div class="prob-row"><span class="prob-label">打字</span><div class="prob-bar-bg"><div class="prob-bar-fill" id="prob-typing" style="width:0%"></div></div><span class="prob-value" id="pv-typing">0%</span></div>
-      <div class="prob-row"><span class="prob-label">鼠标</span><div class="prob-bar-bg"><div class="prob-bar-fill" id="prob-mouse_use" style="width:0%"></div></div><span class="prob-value" id="pv-mouse_use">0%</span></div>
-      <div class="prob-row"><span class="prob-label">静止</span><div class="prob-bar-bg"><div class="prob-bar-fill" id="prob-idle" style="width:0%"></div></div><span class="prob-value" id="pv-idle">0%</span></div>
-      <div class="prob-row"><span class="prob-label">伸展</span><div class="prob-bar-bg"><div class="prob-bar-fill" id="prob-stretching" style="width:0%"></div></div><span class="prob-value" id="pv-stretching">0%</span></div>
+      <!-- dynamically generated from model classes -->
     </div>
     <div class="gauge" style="margin-top:16px;">
       <div class="gauge-fill" id="confGauge" style="width:0%"></div>
@@ -375,7 +372,12 @@ body {
 <div class="footer">FluxChi v1.0 — 数字游民工作状态管理系统</div>
 
 <script>
-const ACTIVITY_NAMES = { typing: '打字', mouse_use: '鼠标', idle: '静止', stretching: '伸展' };
+const ACTIVITY_NAMES = {
+  typing: '打字', mouse_use: '鼠标', idle: '静止', stretching: '伸展',
+  finger_movement: '手指运动', rest: '静止', wrist_extend: '手腕伸展',
+  wrist_flex: '手腕屈曲', wrist_movement: '手腕运动'
+};
+let knownClasses = new Set();
 const STATE_NAMES = { working: '工作中', resting: '休息中', transition: '切换中' };
 const REC_NAMES = { keep_working: '继续工作', take_break: '建议休息', start_working: '可以开始', rest_more: '继续休息' };
 
@@ -441,8 +443,21 @@ function connect() {
 }
 
 function updateUI(d) {
-  // Activity probabilities
+  // Activity probabilities — dynamically build bars
   const probs = d.probabilities || {};
+  const probContainer = document.getElementById('probBars');
+  const newClasses = Object.keys(probs);
+  if (newClasses.length > 0 && newClasses.some(c => !knownClasses.has(c))) {
+    knownClasses = new Set(newClasses);
+    probContainer.innerHTML = '';
+    for (const key of newClasses) {
+      const label = ACTIVITY_NAMES[key] || key;
+      const row = document.createElement('div');
+      row.className = 'prob-row';
+      row.innerHTML = `<span class="prob-label">${label}</span><div class="prob-bar-bg"><div class="prob-bar-fill" id="prob-${key}" style="width:0%"></div></div><span class="prob-value" id="pv-${key}">0%</span>`;
+      probContainer.appendChild(row);
+    }
+  }
   for (const [key, val] of Object.entries(probs)) {
     const bar = document.getElementById(`prob-${key}`);
     const pv = document.getElementById(`pv-${key}`);
@@ -493,18 +508,21 @@ function updateUI(d) {
 
   const activityName = ACTIVITY_NAMES[d.activity] || d.activity;
 
-  if (dec.state === 'working') {
+  const WORK_ACTS = new Set(['typing','mouse_use','finger_movement','wrist_flex','wrist_extend','wrist_movement']);
+  const isWorking = dec.state === 'working' || WORK_ACTS.has(d.activity);
+
+  if (isWorking) {
     stateIcon.className = 'state-icon';
-    stateIcon.textContent = d.activity === 'typing' ? '⌨' : '🖱';
+    stateIcon.textContent = '💪';
     if (dec.urgency >= 0.5) {
       stateIcon.className = 'state-icon alert';
       stateTitle.textContent = '需要休息';
     } else {
-      stateTitle.textContent = `工作中 · ${activityName}`;
+      stateTitle.textContent = `活动中 · ${activityName}`;
     }
   } else {
     stateIcon.className = 'state-icon resting';
-    stateIcon.textContent = d.activity === 'stretching' ? '🤸' : '😌';
+    stateIcon.textContent = '😌';
     stateTitle.textContent = `休息中 · ${activityName}`;
   }
 

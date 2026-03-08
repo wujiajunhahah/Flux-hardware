@@ -39,25 +39,120 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ─── Global state ────────────────────────────────────────────
 stream: Optional[BaseEMGStream] = None
-model = None
-model_config: Optional[dict] = None
+onnx_session = None
+onnx_classes: List[str] = []
+onnx_config: Optional[dict] = None
 fatigue_estimator: Optional[FatigueEstimator] = None
 decision_engine: Optional[DecisionEngine] = None
-feature_extractor = None
 active_connections: Set[WebSocket] = set()
 demo_mode = False
 timeline: List[Dict] = []
+SAMPLE_RATE = 1000
+WINDOW_SEC = 0.25
+
+
+# ─── ONNX Inference wrapper ─────────────────────────────────
+class ONNXClassifier:
+    """Wraps an ONNX model for activity classification."""
+
+    def __init__(self, onnx_path: str, config: dict):
+        import onnxruntime as ort
+        self.session = ort.InferenceSession(str(onnx_path))
+        self.input_name = self.session.get_inputs()[0].name
+        self.classes = config.get("classes", [])
+        self.n_features = config.get("n_features", 84)
+
+    def predict(self, features: np.ndarray) -> tuple:
+        """Return (class_label, confidence, probabilities_dict)."""
+        x = features.astype(np.float32).reshape(1, -1)
+        if x.shape[1] < self.n_features:
+            x = np.pad(x, ((0, 0), (0, self.n_features - x.shape[1])))
+        elif x.shape[1] > self.n_features:
+            x = x[:, :self.n_features]
+
+        outputs = self.session.run(None, {self.input_name: x})
+        label = str(outputs[0][0])
+        proba_list = outputs[1] if len(outputs) > 1 else None
+
+        probabilities = {}
+        confidence = 1.0
+        if proba_list is not None:
+            proba_dict = proba_list[0]
+            if isinstance(proba_dict, dict):
+                probabilities = {str(k): float(v) for k, v in proba_dict.items()}
+                confidence = max(probabilities.values()) if probabilities else 1.0
+            elif isinstance(proba_dict, (list, np.ndarray)):
+                arr = np.array(proba_dict).flatten()
+                for i, cls in enumerate(self.classes):
+                    if i < len(arr):
+                        probabilities[cls] = float(arr[i])
+                confidence = float(np.max(arr)) if len(arr) > 0 else 1.0
+
+        return label, confidence, probabilities
+
+
+# ─── Enhanced feature extraction (84-dim, matches train_pipeline) ──
+def extract_window_features_84(window: np.ndarray, sample_rate: int) -> np.ndarray:
+    """84-dim features: 7 per channel (MAV,RMS,WL,ZC,SSC,MNF,MDF) + 28 correlations."""
+    feats = []
+    n_ch = min(window.shape[1], CHANNEL_COUNT)
+    threshold = 20.0
+
+    for ch in range(n_ch):
+        sig = window[:, ch]
+        mav = np.mean(np.abs(sig))
+        rms = np.sqrt(np.mean(sig ** 2))
+        wl = np.sum(np.abs(np.diff(sig))) if len(sig) > 1 else 0.0
+
+        diffs = np.diff(np.sign(sig))
+        abs_diff = np.abs(np.diff(sig))
+        zc = int(np.sum((diffs != 0) & (abs_diff > threshold)))
+
+        if len(sig) >= 3:
+            d1 = sig[1:-1] - sig[:-2]
+            d2 = sig[2:] - sig[1:-1]
+            ssc = int(np.sum((d1 * d2 < 0) & (np.abs(d1) > threshold) & (np.abs(d2) > threshold)))
+        else:
+            ssc = 0
+
+        if len(sig) >= 4:
+            freqs = np.fft.rfftfreq(len(sig), d=1.0 / sample_rate)
+            psd = np.abs(np.fft.rfft(sig)) ** 2
+            total_power = np.sum(psd)
+            if total_power > 1e-12:
+                mnf = float(np.sum(freqs * psd) / total_power)
+                cumulative = np.cumsum(psd)
+                idx = np.searchsorted(cumulative, total_power / 2.0)
+                mdf = float(freqs[min(idx, len(freqs) - 1)])
+            else:
+                mnf, mdf = 0.0, 0.0
+        else:
+            mnf, mdf = 0.0, 0.0
+
+        feats.extend([mav, rms, wl, zc, ssc, mnf, mdf])
+
+    if window.shape[0] >= 2:
+        try:
+            corr = np.corrcoef(window[:, :n_ch], rowvar=False)
+            corr = np.nan_to_num(corr, nan=0.0)
+        except Exception:
+            corr = np.zeros((n_ch, n_ch))
+        for i in range(n_ch):
+            for j in range(i + 1, n_ch):
+                feats.append(corr[i, j])
+    else:
+        n_pairs = n_ch * (n_ch - 1) // 2
+        feats.extend([0.0] * n_pairs)
+
+    return np.array(feats, dtype=np.float64)
 
 
 # ─── Synthetic stream for demo mode ─────────────────────────
 class DemoEMGStream(BaseEMGStream):
-    """Generates synthetic EMG data that cycles through activities."""
-
     def __init__(self) -> None:
         from src.stream import EMGSample, FrameStats
         self._running = False
         self._stats = FrameStats()
-        self._phase = 0.0
         self._activity_idx = 0
         self._activities = ["typing", "typing", "mouse_use", "idle", "stretching"]
         self._switch_interval = 30.0
@@ -77,7 +172,6 @@ class DemoEMGStream(BaseEMGStream):
         elapsed = time.perf_counter() - self._start_time
         self._activity_idx = int(elapsed / self._switch_interval) % len(self._activities)
         activity = self._activities[self._activity_idx]
-
         samples = []
         now = time.perf_counter()
         for i in range(50):
@@ -91,13 +185,11 @@ class DemoEMGStream(BaseEMGStream):
         rng = np.random.default_rng(int(t * 1000) % (2**31))
         base = rng.normal(0, 1, CHANNEL_COUNT)
         if activity == "typing":
-            base[:4] *= 50
-            base[4:] *= 10
+            base[:4] *= 50; base[4:] *= 10
             for i in range(4):
                 base[i] += 30 * np.sin(2 * np.pi * 3 * t + i)
         elif activity == "mouse_use":
-            base[:2] *= 40
-            base[2:] *= 5
+            base[:2] *= 40; base[2:] *= 5
         elif activity == "stretching":
             base *= 60
             for i in range(CHANNEL_COUNT):
@@ -115,24 +207,18 @@ class DemoEMGStream(BaseEMGStream):
 
 # ─── Demo classifier ────────────────────────────────────────
 class DemoClassifier:
-    """Fake classifier that returns the demo stream's current activity."""
-    classes_ = np.array(["typing", "mouse_use", "idle", "stretching"])
+    def __init__(self, stream_ref):
+        self._stream = stream_ref
+        self.classes = ["typing", "mouse_use", "idle", "stretching"]
+        self.n_features = 84
 
-    def predict_proba(self, X):
-        idx = demo_stream_activity_idx()
-        probs = np.full((len(X), 4), 0.05)
-        probs[:, idx] = 0.85
-        return probs
-
-    @property
-    def n_features_in_(self):
-        return 84
-
-
-def demo_stream_activity_idx() -> int:
-    if stream and isinstance(stream, DemoEMGStream):
-        return stream._activity_idx
-    return 0
+    def predict(self, features: np.ndarray) -> tuple:
+        idx = 0
+        if self._stream and isinstance(self._stream, DemoEMGStream):
+            idx = self._stream._activity_idx % len(self.classes)
+        probs = {c: 0.05 for c in self.classes}
+        probs[self.classes[idx]] = 0.85
+        return self.classes[idx], 0.85, probs
 
 
 # ─── Routes ──────────────────────────────────────────────────
@@ -144,8 +230,8 @@ async def index():
 @app.get("/api/status")
 async def status():
     return {
-        "connected": stream is not None and (hasattr(stream, '_running') and stream._running if hasattr(stream, '_running') else True),
-        "model_loaded": model is not None,
+        "connected": stream is not None,
+        "model_loaded": onnx_session is not None,
         "demo_mode": demo_mode,
         "timeline_entries": len(timeline),
     }
@@ -179,23 +265,16 @@ async def broadcast(data: dict):
 
 # ─── Main processing loop ───────────────────────────────────
 async def processing_loop():
-    """Continuously read EMG, classify, estimate fatigue, decide."""
-    global fatigue_estimator, decision_engine, feature_extractor
+    global fatigue_estimator, decision_engine
 
-    from src.features import FeatureExtractor
-
-    sample_rate = 1000 if not demo_mode else 1000
-    fe = FeatureExtractor(
-        sample_rate=sample_rate,
-        window_seconds=0.25,
-        stride_seconds=0.1,
-    )
-    feature_extractor = fe
-    fatigue_estimator = FatigueEstimator(sample_rate=sample_rate)
+    window_samples = int(WINDOW_SEC * SAMPLE_RATE)
+    fatigue_estimator = FatigueEstimator(sample_rate=SAMPLE_RATE)
     decision_engine = DecisionEngine()
 
     emg_buffer = np.zeros((0, CHANNEL_COUNT))
     last_push = time.time()
+    total_received = 0
+    log_interval = time.time()
 
     while True:
         if stream is None:
@@ -207,13 +286,22 @@ async def processing_loop():
             await asyncio.sleep(0.02)
             continue
 
+        total_received += len(samples)
         new_data = np.array([s.values for s in samples])
         emg_buffer = np.vstack([emg_buffer, new_data]) if emg_buffer.size else new_data
 
-        if emg_buffer.shape[0] > sample_rate * 10:
-            emg_buffer = emg_buffer[-sample_rate * 5:]
+        if emg_buffer.shape[0] > SAMPLE_RATE * 10:
+            emg_buffer = emg_buffer[-SAMPLE_RATE * 5:]
 
         now = time.time()
+        if now - log_interval >= 5.0:
+            stats = stream.frame_stats()
+            rms_now = np.sqrt(np.mean(new_data ** 2, axis=0))
+            print(f"[data] total={total_received}, buffer={emg_buffer.shape[0]}, "
+                  f"emg_frames={stats.emg_frames}, dropped={stats.dropped_frames}, "
+                  f"rms_ch1={rms_now[0]:.1f}")
+            log_interval = now
+
         if now - last_push < 0.2:
             await asyncio.sleep(0.01)
             continue
@@ -223,32 +311,18 @@ async def processing_loop():
         confidence = 0.0
         probabilities = {}
 
-        if model is not None and emg_buffer.shape[0] >= fe.window_samples:
-            window = emg_buffer[-fe.window_samples:]
+        if onnx_session is not None and emg_buffer.shape[0] >= window_samples:
+            window = emg_buffer[-window_samples:]
             try:
-                feats = fe.transform_window(window)
-
-                expected = model.n_features_in_
-                if len(feats) < expected:
-                    feats.extend([0.0] * (expected - len(feats)))
-                elif len(feats) > expected:
-                    feats = feats[:expected]
-
-                proba = model.predict_proba([feats])[0]
-                best_idx = int(np.argmax(proba))
-                activity = str(model.classes_[best_idx])
-                confidence = float(proba[best_idx])
-                probabilities = {
-                    str(model.classes_[i]): float(proba[i])
-                    for i in range(len(model.classes_))
-                }
+                feats = extract_window_features_84(window, SAMPLE_RATE)
+                activity, confidence, probabilities = onnx_session.predict(feats)
             except Exception as e:
                 print(f"[inference] {e}")
 
         fatigue_reading = FatigueReading(0.0, 0.0, 0.0, 0.0, 0.0)
-        if fatigue_estimator and emg_buffer.shape[0] >= fe.window_samples:
+        if fatigue_estimator and emg_buffer.shape[0] >= window_samples:
             try:
-                window = emg_buffer[-fe.window_samples:]
+                window = emg_buffer[-window_samples:]
                 fatigue_reading = fatigue_estimator.update(now, window)
             except Exception:
                 pass
@@ -309,7 +383,7 @@ async def startup():
 
 # ─── Entrypoint ──────────────────────────────────────────────
 def main():
-    global stream, model, model_config, demo_mode
+    global stream, onnx_session, onnx_classes, onnx_config, demo_mode
 
     parser = argparse.ArgumentParser(description="FluxChi Web Server")
     parser.add_argument("--port", help="Serial port for WAVELETECH wristband")
@@ -322,23 +396,29 @@ def main():
     demo_mode = args.demo
 
     model_dir = Path(args.model_dir)
-    for prefix in ("activity_classifier", "ninapro_classifier", "model"):
-        pkl_path = model_dir / f"{prefix}.pkl"
-        if pkl_path.exists():
-            import joblib
-            model = joblib.load(pkl_path)
-            config_path = model_dir / f"{prefix}_config.json"
-            if config_path.exists():
-                model_config = json.loads(config_path.read_text())
-            print(f"[web] Loaded model: {pkl_path}")
-            break
+    for prefix in ("activity_classifier", "ninapro_classifier"):
+        onnx_path = model_dir / f"{prefix}.onnx"
+        config_path = model_dir / f"{prefix}_config.json"
+        if onnx_path.exists() and config_path.exists():
+            config = json.loads(config_path.read_text())
+            try:
+                onnx_session = ONNXClassifier(str(onnx_path), config)
+                onnx_config = config
+                onnx_classes = config.get("classes", [])
+                print(f"[web] Loaded ONNX model: {onnx_path}")
+                print(f"[web]   Classes: {onnx_classes}")
+                print(f"[web]   Features: {config.get('n_features', '?')}")
+                print(f"[web]   Accuracy: {config.get('accuracy', '?')}")
+                break
+            except Exception as e:
+                print(f"[web] Failed to load {onnx_path}: {e}")
 
     if demo_mode:
         print("[web] Running in DEMO mode (synthetic data)")
         stream = DemoEMGStream()
         stream.start()
-        if model is None:
-            model = DemoClassifier()
+        if onnx_session is None:
+            onnx_session = DemoClassifier(stream)
             print("[web] Using demo classifier")
     elif args.port:
         print(f"[web] Connecting to {args.port}...")
@@ -349,10 +429,13 @@ def main():
         print("[web] Use --port /dev/tty.usbserial-XXXX or --demo")
         sys.exit(1)
 
+    if onnx_session is None:
+        print("[web] No model loaded — signal-only mode (EMG + fatigue, no classification)")
+
     import uvicorn
     print(f"\n  FluxChi Web: http://localhost:{args.web_port}")
     print(f"  Demo mode: {demo_mode}")
-    print(f"  Model: {'loaded' if model else 'none'}\n")
+    print(f"  Model: {'ONNX loaded' if onnx_session else 'none'}\n")
     uvicorn.run(app, host=args.host, port=args.web_port, log_level="warning")
 
 

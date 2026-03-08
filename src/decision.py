@@ -35,8 +35,11 @@ class Recommendation(str, Enum):
     REST_MORE = "rest_more"
 
 
-WORK_ACTIVITIES = {"typing", "mouse_use"}
-REST_ACTIVITIES = {"idle", "stretching"}
+WORK_ACTIVITIES = {
+    "typing", "mouse_use",
+    "finger_movement", "wrist_flex", "wrist_extend", "wrist_movement",
+}
+REST_ACTIVITIES = {"idle", "stretching", "rest"}
 
 
 @dataclass
