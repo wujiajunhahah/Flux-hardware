@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>FluxChi 需要蓝牙权限以连接 WAVELETECH EMG 手环，实时接收肌电信号数据。</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>FluxChi 需要蓝牙权限以连接 WAVELETECH EMG 手环。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>FluxChi 需要访问本地网络以连接运行在电脑上的 EMG 数据服务器。</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
+</dict>
+</plist>
