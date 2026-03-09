@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var service: FluxService
+    @EnvironmentObject var bleManager: BLEManager
+    @EnvironmentObject var personalization: PersonalizationManager
 
     @State private var editHost: String = ""
     @State private var editPort: String = ""
@@ -13,8 +15,10 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                bleSection
                 serverSection
                 statusSection
+                personalizationSection
                 controlSection
                 aboutSection
             }
@@ -37,6 +41,76 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - BLE
+
+    private var bleSection: some View {
+        Section {
+            HStack {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(bleManager.isConnected
+                             ? (bleManager.connectedDeviceName ?? "已连接")
+                             : "未连接")
+                            .fontWeight(.medium)
+                        Text(bleManager.isConnected
+                             ? "EMG \(bleManager.emgFrameCount) 帧"
+                             : "扫描并连接 WAVELETECH 手环")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: bleManager.isConnected
+                          ? "antenna.radiowaves.left.and.right"
+                          : "antenna.radiowaves.left.and.right.slash")
+                        .foregroundStyle(bleManager.isConnected ? .green : .secondary)
+                        .symbolEffect(.pulse, isActive: bleManager.isConnected)
+                }
+
+                Spacer()
+
+                Circle()
+                    .fill(bleManager.isConnected ? .green : .red)
+                    .frame(width: 10, height: 10)
+            }
+
+            if bleManager.isConnected {
+                Button("断开蓝牙", role: .destructive) {
+                    bleManager.disconnect()
+                }
+            } else {
+                if bleManager.isScanning {
+                    HStack {
+                        ProgressView()
+                        Text("正在扫描…")
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 8)
+                    }
+                }
+
+                ForEach(bleManager.discoveredDevices, id: \.identifier) { device in
+                    Button {
+                        bleManager.connect(to: device)
+                    } label: {
+                        Label(device.name ?? "Unknown", systemImage: "waveform.badge.plus")
+                    }
+                }
+
+                Button {
+                    bleManager.startScan()
+                } label: {
+                    Label("扫描设备", systemImage: "arrow.clockwise")
+                }
+                .disabled(bleManager.isScanning)
+            }
+        } header: {
+            Text("蓝牙直连")
+        } footer: {
+            Text("BLE 连接时自动停止 WiFi 轮询")
+        }
+    }
+
+    // MARK: - Server
+
     private var serverSection: some View {
         Section {
             HStack {
@@ -47,9 +121,7 @@ struct SettingsView: View {
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
                     .focused($focusedField, equals: .host)
-                    .onSubmit {
-                        focusedField = .port
-                    }
+                    .onSubmit { focusedField = .port }
             }
 
             HStack {
@@ -74,11 +146,13 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("服务器")
+            Text("WiFi 服务器")
         } footer: {
             Text("手机和电脑需在同一 WiFi 下")
         }
     }
+
+    // MARK: - Status
 
     @ViewBuilder
     private var statusSection: some View {
@@ -86,36 +160,20 @@ struct SettingsView: View {
             StatusRow(
                 icon: "circle.fill",
                 label: "连接",
-                value: service.isConnected ? "已连接" : "未连接",
-                tint: service.isConnected ? .green : .red
+                value: service.isConnected ? "已连接" : (bleManager.isConnected ? "BLE" : "未连接"),
+                tint: (service.isConnected || bleManager.isConnected) ? .green : .red
             )
 
             if let status = service.serverStatus {
-                StatusRow(
-                    icon: "brain",
-                    label: "模型",
-                    value: status.modelLoaded ? "已加载" : "未加载",
-                    tint: status.modelLoaded ? .green : .orange
-                )
-                StatusRow(
-                    icon: "gauge.with.dots.needle.33percent",
-                    label: "模式",
-                    value: status.demoMode ? "演示" : "实时",
-                    tint: status.demoMode ? .orange : .blue
-                )
-                StatusRow(
-                    icon: "speedometer",
-                    label: "速度",
-                    value: "\(String(format: "%.1f", status.speed))×",
-                    tint: .secondary
-                )
+                StatusRow(icon: "brain", label: "模型",
+                          value: status.modelLoaded ? "已加载" : "未加载",
+                          tint: status.modelLoaded ? .green : .orange)
+                StatusRow(icon: "gauge.with.dots.needle.33percent", label: "模式",
+                          value: status.demoMode ? "演示" : "实时",
+                          tint: status.demoMode ? .orange : .blue)
                 if let uptime = status.uptimeSec {
-                    StatusRow(
-                        icon: "clock",
-                        label: "运行",
-                        value: formatUptime(uptime),
-                        tint: .secondary
-                    )
+                    StatusRow(icon: "clock", label: "运行",
+                              value: formatUptime(uptime), tint: .secondary)
                 }
             }
 
@@ -130,6 +188,64 @@ struct SettingsView: View {
             }
         }
     }
+
+    // MARK: - Personalization
+
+    private var personalizationSection: some View {
+        Section {
+            HStack {
+                Label("学习次数", systemImage: "brain.head.profile")
+                Spacer()
+                Text("\(personalization.trainingCount)")
+                    .foregroundStyle(.secondary)
+            }
+
+            if personalization.trainingCount > 0 {
+                HStack {
+                    Label("校准偏移", systemImage: "slider.horizontal.3")
+                    Spacer()
+                    Text(String(format: "%+.1f", personalization.calibrationOffset))
+                        .font(Flux.Typography.mono)
+                        .foregroundStyle(.secondary)
+                }
+
+                if personalization.estimatedAccuracy > 0 {
+                    HStack {
+                        Label("估计准确度", systemImage: "target")
+                        Spacer()
+                        Text("\(Int(personalization.estimatedAccuracy))%")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if let date = personalization.lastTrainedAt {
+                HStack {
+                    Label("上次训练", systemImage: "clock.arrow.circlepath")
+                    Spacer()
+                    Text(date, style: .relative)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if personalization.isTraining {
+                HStack {
+                    ProgressView()
+                    Text("模型训练中…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 8)
+                }
+            }
+        } header: {
+            Text("个性化")
+        } footer: {
+            Text("每次记录反馈后，模型会自动学习你的个人特征")
+        }
+    }
+
+    // MARK: - Control
 
     private var controlSection: some View {
         Section("控制") {
@@ -155,22 +271,26 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - About
+
     private var aboutSection: some View {
         Section("关于") {
             HStack {
-                Text("FluxChi")
+                Text(Flux.App.name)
                     .fontWeight(.medium)
                 Spacer()
-                Text("EMG Stamina Engine")
+                Text("v\(Flux.App.version) · EMG Stamina Engine")
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }
 
-            Link(destination: URL(string: "https://github.com/wujiajunhahah/formydegree")!) {
+            Link(destination: Flux.App.githubURL) {
                 Label("GitHub", systemImage: "link")
             }
         }
     }
+
+    // MARK: - Helpers
 
     private func applyServerConfig() {
         service.host = editHost
@@ -181,12 +301,7 @@ struct SettingsView: View {
     }
 
     private func formatUptime(_ seconds: Double) -> String {
-        let h = Int(seconds) / 3600
-        let m = (Int(seconds) % 3600) / 60
-        let s = Int(seconds) % 60
-        if h > 0 { return "\(h)h \(m)m" }
-        if m > 0 { return "\(m)m \(s)s" }
-        return "\(s)s"
+        Flux.formatDuration(seconds)
     }
 }
 

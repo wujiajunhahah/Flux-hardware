@@ -1,21 +1,29 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct FluxChiApp: App {
     @StateObject private var service = FluxService()
     @StateObject private var bleManager = BLEManager()
+    @StateObject private var sessionManager = SessionManager()
+    @StateObject private var personalization = PersonalizationManager()
 
     var body: some Scene {
         WindowGroup {
             TabView {
                 DashboardView()
                     .tabItem {
-                        Label("仪表盘", systemImage: "gauge.with.dots.needle.67percent")
+                        Label("状态", systemImage: "gauge.with.dots.needle.67percent")
                     }
 
-                BLEView()
+                RecorderView()
                     .tabItem {
-                        Label("蓝牙", systemImage: "antenna.radiowaves.left.and.right")
+                        Label("记录", systemImage: "record.circle")
+                    }
+
+                HistoryView()
+                    .tabItem {
+                        Label("历史", systemImage: "clock.arrow.circlepath")
                     }
 
                 SettingsView()
@@ -26,6 +34,8 @@ struct FluxChiApp: App {
             .tint(.red)
             .environmentObject(service)
             .environmentObject(bleManager)
+            .environmentObject(sessionManager)
+            .environmentObject(personalization)
             .onAppear {
                 service.startPolling()
                 bleManager.onStateUpdate = { [weak service] state in
@@ -44,5 +54,11 @@ struct FluxChiApp: App {
                 }
             }
         }
+        .modelContainer(for: [
+            Session.self,
+            Segment.self,
+            FluxSnapshot.self,
+            UserFeedback.self
+        ])
     }
 }
