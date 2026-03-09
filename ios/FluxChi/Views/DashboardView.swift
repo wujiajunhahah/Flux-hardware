@@ -1,7 +1,17 @@
 import SwiftUI
+import SwiftData
 
 struct DashboardView: View {
     @EnvironmentObject var service: FluxService
+    @EnvironmentObject var bleManager: BLEManager
+    @EnvironmentObject var sessionManager: SessionManager
+    @EnvironmentObject var alertManager: AlertManager
+    @EnvironmentObject var liveActivityManager: LiveActivityManager
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var showSegmentPicker = false
+    @State private var showFeedback = false
+    @State private var finishedSession: Session?
 
     private var stamina: StaminaData? { service.state?.stamina }
     private var decision: DecisionData? { service.state?.decision }
@@ -9,186 +19,191 @@ struct DashboardView: View {
     private var staminaState: StaminaState {
         StaminaState(rawValue: stamina?.state ?? "focused") ?? .focused
     }
-    private var rec: Recommendation {
-        Recommendation(rawValue: decision?.recommendation ?? "") ?? .keepWorking
-    }
+    private var isLive: Bool { service.isConnected || bleManager.isConnected }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
-                    connectionBanner
+                VStack(spacing: 16) {
+                    if !isLive { connectionBanner }
                     staminaSection
+                    if sessionManager.isRecording { recordingBar }
                     recommendationCard
+                    dimensionsRow
                     statsRow
-                    dimensionsSection
-                    activitySection
                     emgSection
                 }
-                .padding()
+                .padding(.horizontal)
+                .padding(.bottom, 80)
             }
             .navigationTitle("FluxChi")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    connectionIndicator
+                ToolbarItem(placement: .topBarLeading) {
+                    FluxLiveIndicator(isLive: isLive)
                 }
+                ToolbarItem(placement: .topBarTrailing) { recordButton }
             }
-            .refreshable {
-                await service.fetchState()
+            .onAppear {
+                sessionManager.configure(
+                    modelContext: modelContext,
+                    stateProvider: { [weak service] in service?.state }
+                )
+            }
+            .sheet(isPresented: $showFeedback) {
+                if let s = finishedSession { FeedbackView(session: s) }
             }
         }
     }
 
-    // MARK: - Connection Banner
+    // MARK: - Connection
 
     @ViewBuilder
     private var connectionBanner: some View {
-        if !service.isConnected {
-            HStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("未连接到服务器")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    if let err = service.connectionError {
-                        Text(err)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("未连接")
+                .font(.subheadline.weight(.medium))
+            Spacer()
+            if let err = service.connectionError {
+                Text(err).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
-            .padding()
-            .background(.orange.opacity(0.1), in: .rect(cornerRadius: 12))
         }
+        .padding(12)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
     }
 
     // MARK: - Stamina Ring
 
     private var staminaSection: some View {
         StaminaRingView(value: staminaValue, state: staminaState)
-            .padding(.vertical, 8)
+            .padding(.vertical, 4)
     }
 
-    // MARK: - Recommendation Card
+    // MARK: - Recommendation
 
     @ViewBuilder
     private var recommendationCard: some View {
-        if let decision {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Label(rec.displayName, systemImage: rec.systemImage)
-                        .font(.headline)
-                        .foregroundStyle(urgencyColor(decision.urgency))
+        if let d = decision {
+            let rec = Recommendation(rawValue: d.recommendation) ?? .keepWorking
+            HStack(spacing: 12) {
+                Image(systemName: rec.systemImage)
+                    .font(.title2)
+                    .foregroundStyle(Flux.Colors.forUrgency(d.urgency))
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(width: 40)
 
-                    Spacer()
-
-                    if decision.urgency >= 0.5 {
-                        Text("!")
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(rec.displayName)
+                        .font(.subheadline.weight(.semibold))
+                    if let reason = d.reasons.first {
+                        Text(reason)
                             .font(.caption)
-                            .fontWeight(.bold)
-                            .padding(6)
-                            .background(urgencyColor(decision.urgency).opacity(0.15))
-                            .clipShape(Circle())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
                 }
-
-                ForEach(decision.reasons, id: \.self) { reason in
-                    Text(reason)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Spacer()
             }
-            .padding()
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+            .padding(14)
+            .background(.regularMaterial, in: .rect(cornerRadius: 16))
         }
     }
 
-    // MARK: - Stats Row
+    // MARK: - Dimensions (3 pill cards with animated progress)
+
+    private var dimensionsRow: some View {
+        HStack(spacing: 10) {
+            dimensionCard(
+                "一致性",
+                value: stamina?.consistency ?? 0,
+                icon: "waveform.path",
+                tint: .blue,
+                description: "信号稳定度"
+            )
+            dimensionCard(
+                "紧张度",
+                value: stamina?.tension ?? 0,
+                icon: "arrow.up.right",
+                tint: .orange,
+                description: "肌肉张力"
+            )
+            dimensionCard(
+                "疲劳度",
+                value: stamina?.fatigue ?? 0,
+                icon: "flame",
+                tint: .red,
+                description: "频谱衰减"
+            )
+        }
+    }
+
+    private func dimensionCard(_ title: String, value: Double, icon: String,
+                               tint: Color, description: String) -> some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .stroke(tint.opacity(0.15), lineWidth: 4)
+                    .frame(width: 44, height: 44)
+                Circle()
+                    .trim(from: 0, to: max(0.02, value))
+                    .stroke(tint.gradient, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 44, height: 44)
+                    .animation(.easeOut(duration: 0.3), value: value)
+
+                Text("\(Int(value * 100))")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .contentTransition(.numericText(value: value))
+            }
+
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Text(description)
+                .font(.system(size: 8))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial, in: .rect(cornerRadius: 16))
+    }
+
+    // MARK: - Stats
 
     private var statsRow: some View {
         HStack(spacing: 0) {
-            StatCell(
-                value: formatMinutes(decision?.continuousWorkMin ?? 0),
-                label: "本次",
-                icon: "timer"
+            compactStat(
+                formatMin(decision?.continuousWorkMin ?? 0),
+                "本次", "timer"
             )
-            Divider().frame(height: 40)
-            StatCell(
-                value: formatMinutes(decision?.totalWorkMin ?? 0),
-                label: "累计",
-                icon: "clock.fill"
+            Divider().frame(height: 32)
+            compactStat(
+                formatMin(decision?.totalWorkMin ?? 0),
+                "累计", "clock.fill"
             )
-            Divider().frame(height: 40)
-            StatCell(
-                value: formatMinutes(
-                    staminaState == .recovering
-                        ? (stamina?.suggestedBreakMin ?? 0)
-                        : (stamina?.suggestedWorkMin ?? 0)
-                ),
-                label: staminaState == .recovering ? "休息" : "专注",
-                icon: staminaState == .recovering ? "moon.fill" : "bolt.fill"
+            Divider().frame(height: 32)
+            compactStat(
+                formatMin(staminaState == .recovering
+                    ? (stamina?.suggestedBreakMin ?? 0)
+                    : (stamina?.suggestedWorkMin ?? 0)),
+                staminaState == .recovering ? "休息" : "专注",
+                staminaState == .recovering ? "moon.fill" : "bolt.fill"
             )
         }
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: .rect(cornerRadius: 16))
     }
 
-    // MARK: - Dimensions
-
-    private var dimensionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("三维度", systemImage: "chart.bar.xaxis")
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .tracking(1)
-
-            HStack(spacing: 12) {
-                DimensionCard(
-                    title: "专注",
-                    value: stamina?.consistency ?? 0,
-                    icon: "eye.fill",
-                    tint: .blue
-                )
-                DimensionCard(
-                    title: "紧张",
-                    value: stamina?.tension ?? 0,
-                    icon: "waveform.path.ecg",
-                    tint: .orange
-                )
-                DimensionCard(
-                    title: "疲劳",
-                    value: stamina?.fatigue ?? 0,
-                    icon: "battery.25percent",
-                    tint: .red
-                )
-            }
+    private func compactStat(_ value: String, _ label: String, _ icon: String) -> some View {
+        VStack(spacing: 3) {
+            Image(systemName: icon).font(.caption2).foregroundStyle(.secondary)
+            Text(value).font(.title3.weight(.bold).monospacedDigit())
+            Text(label).font(.system(size: 9)).foregroundStyle(.secondary).tracking(0.5)
         }
-    }
-
-    // MARK: - Activity
-
-    @ViewBuilder
-    private var activitySection: some View {
-        if let probs = service.state?.probabilities, !probs.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("活动分类", systemImage: "hand.raised.fingers.spread.fill")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(1)
-
-                let sorted = probs.sorted { $0.value > $1.value }
-                ForEach(sorted, id: \.key) { key, value in
-                    ActivityRow(name: key, probability: value, isTop: key == sorted.first?.key)
-                }
-            }
-        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - EMG
@@ -196,153 +211,103 @@ struct DashboardView: View {
     @ViewBuilder
     private var emgSection: some View {
         if let rms = service.state?.rms, !rms.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("EMG 信号", systemImage: "waveform")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(1)
-
-                HStack(alignment: .bottom, spacing: 6) {
-                    let maxVal = max(rms.max() ?? 1, 1)
-                    ForEach(Array(rms.enumerated()), id: \.offset) { idx, val in
-                        VStack(spacing: 4) {
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(.red.opacity(0.7))
-                                .frame(width: nil, height: max(4, CGFloat(val / maxVal) * 60))
-                                .animation(.easeOut(duration: 0.15), value: val)
-
-                            Text("\(idx + 1)")
-                                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                .frame(height: 80)
-                .padding()
-                .background(.ultraThinMaterial, in: .rect(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 8) {
+                FluxSectionLabel(title: "EMG", icon: "waveform")
+                FluxEMGBars(rms: rms, height: 50)
+                    .padding(12)
+                    .background(.regularMaterial, in: .rect(cornerRadius: 16))
             }
         }
+    }
+
+    // MARK: - Recording
+
+    private var recordButton: some View {
+        Button {
+            if sessionManager.isRecording {
+                liveActivityManager.endActivity()
+                if let session = sessionManager.endSession() {
+                    let summary = SummaryEngine.generate(for: session)
+                    SummaryEngine.apply(summary, to: session)
+                    try? modelContext.save()
+                    finishedSession = session
+                    showFeedback = true
+                }
+            } else {
+                let source: SessionSource = bleManager.isConnected ? .ble : .wifi
+                sessionManager.startSession(source: source)
+
+                let fmt = DateFormatter()
+                fmt.locale = Locale(identifier: "zh_CN")
+                fmt.dateFormat = "HH:mm"
+                let title = "记录中 · \(fmt.string(from: Date()))"
+                liveActivityManager.startActivity(title: title)
+            }
+        } label: {
+            Image(systemName: sessionManager.isRecording ? "stop.circle.fill" : "record.circle")
+                .font(.title3)
+                .foregroundStyle(sessionManager.isRecording ? .red : (isLive ? .primary : .secondary))
+                .symbolEffect(.pulse, isActive: sessionManager.isRecording)
+        }
+        .disabled(!isLive && !sessionManager.isRecording)
+    }
+
+    @ViewBuilder
+    private var recordingBar: some View {
+        HStack(spacing: 12) {
+            Circle().fill(.red).frame(width: 8, height: 8)
+                .opacity(sessionManager.isPaused ? 0.3 : 1)
+
+            Text(Flux.formatDuration(sessionManager.elapsed))
+                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                .contentTransition(.numericText())
+
+            Spacer()
+
+            if let seg = sessionManager.activeSegment {
+                Text(seg.label.displayName)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(seg.label.color)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(seg.label.color.opacity(0.12), in: Capsule())
+            }
+
+            Button {
+                showSegmentPicker = true
+            } label: {
+                Image(systemName: "rectangle.split.1x2")
+                    .font(.subheadline)
+            }
+            .confirmationDialog("新建分段", isPresented: $showSegmentPicker) {
+                ForEach(SegmentLabel.allCases) { label in
+                    Button(label.displayName) { sessionManager.addSegment(label: label) }
+                }
+            }
+
+            Button {
+                sessionManager.isPaused ? sessionManager.resumeSession() : sessionManager.pauseSession()
+            } label: {
+                Image(systemName: sessionManager.isPaused ? "play.fill" : "pause.fill")
+                    .font(.subheadline)
+            }
+        }
+        .padding(12)
+        .background(.red.opacity(0.06), in: .rect(cornerRadius: 16))
     }
 
     // MARK: - Helpers
 
-    private var connectionIndicator: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(service.isConnected ? .green : .red)
-                .frame(width: 8, height: 8)
-            Text(service.isConnected ? "LIVE" : "OFF")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func urgencyColor(_ urgency: Double) -> Color {
-        urgency >= 0.7 ? .red : urgency >= 0.5 ? .orange : .primary
-    }
-
-    private func formatMinutes(_ m: Double) -> String {
-        if m < 1 { return "< 1" }
-        return "\(Int(m))"
-    }
-}
-
-// MARK: - Subviews
-
-private struct StatCell: View {
-    let value: String
-    let label: String
-    let icon: String
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
-                .fontDesign(.rounded)
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .tracking(1)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct DimensionCard: View {
-    let title: String
-    let value: Double
-    let icon: String
-    let tint: Color
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(tint)
-
-            Text("\(Int(value * 100))%")
-                .font(.title3)
-                .fontWeight(.bold)
-                .fontDesign(.rounded)
-                .contentTransition(.numericText(value: value))
-
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .tracking(1)
-
-            ProgressView(value: value)
-                .tint(tint)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 14))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title) \(Int(value * 100))%")
-    }
-}
-
-private struct ActivityRow: View {
-    let name: String
-    let probability: Double
-    let isTop: Bool
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(name)
-                .font(.system(size: 13, weight: isTop ? .semibold : .regular, design: .monospaced))
-                .foregroundStyle(isTop ? .primary : .secondary)
-                .frame(width: 80, alignment: .trailing)
-
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color(.systemGray5))
-                    Capsule()
-                        .fill(isTop ? .red : Color(.systemGray3))
-                        .frame(width: max(2, geo.size.width * probability))
-                        .animation(.easeOut(duration: 0.3), value: probability)
-                }
-            }
-            .frame(height: 6)
-
-            Text("\(Int(probability * 100))%")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 36, alignment: .trailing)
-        }
+    private func formatMin(_ m: Double) -> String {
+        m < 1 ? "<1" : "\(Int(m))"
     }
 }
 
 #Preview {
     DashboardView()
         .environmentObject(FluxService())
+        .environmentObject(BLEManager())
+        .environmentObject(SessionManager())
+        .environmentObject(AlertManager())
+        .environmentObject(LiveActivityManager())
 }

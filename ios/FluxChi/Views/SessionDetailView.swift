@@ -6,8 +6,10 @@ struct SessionDetailView: View {
     let session: Session
     @Environment(\.modelContext) private var modelContext
     @State private var showFeedback = false
-    @State private var showExportSheet = false
-    @State private var exportURL: URL?
+    @State private var exportError: String?
+    @State private var showExportError = false
+    @State private var nlpSummary: String?
+    @State private var isGeneratingSummary = false
 
     private var allSnapshots: [FluxSnapshot] {
         session.segments
@@ -22,13 +24,43 @@ struct SessionDetailView: View {
         return (0..<200).map { all[min(Int(Double($0) * step), all.count - 1)] }
     }
 
+    private var avgConsistency: Double {
+        let snaps = allSnapshots
+        guard !snaps.isEmpty else { return 0 }
+        return snaps.map(\.consistency).reduce(0, +) / Double(snaps.count)
+    }
+
+    private var avgTension: Double {
+        let snaps = allSnapshots
+        guard !snaps.isEmpty else { return 0 }
+        return snaps.map(\.tension).reduce(0, +) / Double(snaps.count)
+    }
+
+    private var avgFatigue: Double {
+        let snaps = allSnapshots
+        guard !snaps.isEmpty else { return 0 }
+        return snaps.map(\.fatigue).reduce(0, +) / Double(snaps.count)
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: Flux.Spacing.section) {
                 summaryCard
-                staminaChart
-                stateTimeline
+                StaminaCurveChart(snapshots: chartSnapshots)
+
+                HStack(alignment: .top, spacing: Flux.Spacing.item) {
+                    DimensionRadarView(
+                        consistency: avgConsistency,
+                        tension: avgTension,
+                        fatigue: avgFatigue
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+
+                FocusClockView(snapshots: allSnapshots, sessionStart: session.startedAt)
+                ADHDDotMap(snapshots: allSnapshots, sessionStart: session.startedAt)
                 statsGrid
+                stateTimeline
                 segmentsList
                 feedbackSection
             }
@@ -42,6 +74,9 @@ struct SessionDetailView: View {
                     Button { exportSession() } label: {
                         Label("导出 JSON", systemImage: "square.and.arrow.up")
                     }
+                    Button { generateNLPSummary() } label: {
+                        Label("AI 总结", systemImage: "sparkles")
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -50,71 +85,47 @@ struct SessionDetailView: View {
         .sheet(isPresented: $showFeedback) {
             FeedbackView(session: session)
         }
-        .sheet(isPresented: $showExportSheet) {
-            if let url = exportURL { ShareSheet(items: [url]) }
+        .alert("导出失败", isPresented: $showExportError) {
+            Button("好") {}
+        } message: {
+            Text(exportError ?? "未知错误")
+        }
+        .task {
+            if nlpSummary == nil && session.summaryText == nil {
+                generateNLPSummary()
+            }
         }
     }
 
-    // MARK: - Summary
+    // MARK: - NLP Summary Card
 
     @ViewBuilder
     private var summaryCard: some View {
-        if let text = session.summaryText, !text.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                FluxSectionLabel(title: "总结", icon: "text.quote")
+        let text = nlpSummary ?? session.summaryText
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                FluxSectionLabel(title: "智能总结", icon: "sparkles")
+                Spacer()
+                if isGeneratingSummary {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+            }
+
+            if let text, !text.isEmpty {
                 Text(text)
                     .font(.subheadline)
-                    .lineSpacing(4)
-            }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
-        }
-    }
-
-    // MARK: - Chart
-
-    @ViewBuilder
-    private var staminaChart: some View {
-        if !chartSnapshots.isEmpty {
-            VStack(alignment: .leading, spacing: Flux.Spacing.item) {
-                FluxSectionLabel(title: "Stamina 曲线", icon: "chart.xyaxis.line")
-
-                Chart {
-                    ForEach(Array(chartSnapshots.enumerated()), id: \.offset) { _, snap in
-                        LineMark(
-                            x: .value("时间", snap.timestamp),
-                            y: .value("Stamina", snap.stamina)
-                        )
-                        .interpolationMethod(.catmullRom)
-                    }
-
-                    RuleMark(y: .value("高效", 60))
-                        .foregroundStyle(.green.opacity(0.3))
-                        .lineStyle(StrokeStyle(dash: [4]))
-
-                    RuleMark(y: .value("警告", 30))
-                        .foregroundStyle(.red.opacity(0.3))
-                        .lineStyle(StrokeStyle(dash: [4]))
-
-                    ForEach(Array(session.segments.dropFirst().enumerated()), id: \.offset) { _, seg in
-                        RuleMark(x: .value("分段", seg.startedAt))
-                            .foregroundStyle(.secondary.opacity(0.4))
-                            .lineStyle(StrokeStyle(dash: [2, 4]))
-                    }
-                }
-                .chartYScale(domain: 0...100)
-                .chartYAxis {
-                    AxisMarks(values: [0, 30, 60, 100])
-                }
-                .chartForegroundStyleScale([
-                    "Stamina": Flux.Colors.accent
-                ])
-                .frame(height: 200)
-                .padding()
-                .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.medium))
+                    .lineSpacing(6)
+                    .foregroundStyle(.primary.opacity(0.85))
+            } else if !isGeneratingSummary {
+                Text(session.summaryText ?? "点击右上角菜单生成 AI 总结")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
     }
 
     // MARK: - State Timeline
@@ -152,9 +163,7 @@ struct SessionDetailView: View {
                         if count > 0 {
                             HStack(spacing: 4) {
                                 Circle().fill(label.color).frame(width: 8, height: 8)
-                                Text(label.displayName)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                Text(label.displayName).font(.caption2).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -255,10 +264,36 @@ struct SessionDetailView: View {
         }
     }
 
+    // MARK: - Actions
+
     private func exportSession() {
         do {
-            exportURL = try ExportManager.shareURL(for: session)
-            showExportSheet = true
-        } catch {}
+            let url = try ExportManager.shareURL(for: session)
+            FluxShare.shareFile(url: url)
+        } catch {
+            exportError = error.localizedDescription
+            showExportError = true
+        }
+    }
+
+    private func generateNLPSummary() {
+        guard !isGeneratingSummary else { return }
+        isGeneratingSummary = true
+
+        Task {
+            if #available(iOS 26.0, *) {
+                let engine = NLPSummaryEngine.shared
+                let result = await engine.generateSummary(for: session)
+                nlpSummary = result
+                session.summaryText = result
+                try? modelContext.save()
+            } else {
+                let summary = SummaryEngine.generate(for: session)
+                SummaryEngine.apply(summary, to: session)
+                nlpSummary = summary.text
+                try? modelContext.save()
+            }
+            isGeneratingSummary = false
+        }
     }
 }

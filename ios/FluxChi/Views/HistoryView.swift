@@ -5,9 +5,21 @@ struct HistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Session.startedAt, order: .reverse) private var sessions: [Session]
 
+    @State private var viewMode: ViewMode = .calendar
     @State private var searchText = ""
-    @State private var shareURL: URL?
-    @State private var showShareSheet = false
+    @State private var exportError: String?
+    @State private var showExportError = false
+
+    enum ViewMode: String, CaseIterable {
+        case calendar, list
+
+        var icon: String {
+            switch self {
+            case .calendar: return "calendar"
+            case .list:     return "list.bullet"
+            }
+        }
+    }
 
     private var completedSessions: [Session] {
         sessions.filter { !$0.isActive }
@@ -29,24 +41,119 @@ struct HistoryView: View {
         return dict.sorted { ($0.value.first?.startedAt ?? .distantPast) > ($1.value.first?.startedAt ?? .distantPast) }
     }
 
+    // MARK: - Summary Stats
+
+    private var todaySessions: [Session] {
+        completedSessions.filter { Calendar.current.isDateInToday($0.startedAt) }
+    }
+
+    private var todayWorkMinutes: Int {
+        Int(todaySessions.reduce(0.0) { $0 + ($1.workDurationSec ?? 0) } / 60)
+    }
+
+    private var todayAvgStamina: Double {
+        let vals = todaySessions.compactMap(\.avgStamina)
+        guard !vals.isEmpty else { return 0 }
+        return vals.reduce(0, +) / Double(vals.count)
+    }
+
+    private var weekSessionCount: Int {
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        return completedSessions.filter { $0.startedAt >= weekAgo }.count
+    }
+
     var body: some View {
         NavigationStack {
             Group {
                 if completedSessions.isEmpty {
                     emptyState
                 } else {
-                    sessionList
+                    VStack(spacing: 0) {
+                        todaySummaryBar
+                        Divider()
+                        viewToggle
+                        switch viewMode {
+                        case .calendar:
+                            FluxCalendarView()
+                        case .list:
+                            sessionList
+                        }
+                    }
                 }
             }
             .navigationTitle("历史")
             .searchable(text: $searchText, prompt: "搜索记录")
-            .sheet(isPresented: $showShareSheet) {
-                if let url = shareURL {
-                    ShareSheet(items: [url])
-                }
+            .alert("导出失败", isPresented: $showExportError) {
+                Button("好") {}
+            } message: {
+                Text(exportError ?? "未知错误")
             }
         }
     }
+
+    // MARK: - Today Summary
+
+    private var todaySummaryBar: some View {
+        HStack(spacing: 20) {
+            VStack(spacing: 2) {
+                Text("\(todaySessions.count)")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                Text("今日记录")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider().frame(height: 30)
+
+            VStack(spacing: 2) {
+                Text("\(todayWorkMinutes)")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(.blue)
+                Text("工作分钟")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider().frame(height: 30)
+
+            VStack(spacing: 2) {
+                Text("\(Int(todayAvgStamina))")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(todayAvgStamina >= 60 ? .green : .orange)
+                Text("平均专注")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider().frame(height: 30)
+
+            VStack(spacing: 2) {
+                Text("\(weekSessionCount)")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundStyle(.purple)
+                Text("本周")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - View Toggle
+
+    private var viewToggle: some View {
+        Picker("视图", selection: $viewMode) {
+            ForEach(ViewMode.allCases, id: \.self) { mode in
+                Image(systemName: mode.icon).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - Empty
 
     private var emptyState: some View {
         ContentUnavailableView {
@@ -55,6 +162,8 @@ struct HistoryView: View {
             Text("开始录制后，历史记录将显示在这里")
         }
     }
+
+    // MARK: - List
 
     private var sessionList: some View {
         List {
@@ -87,9 +196,12 @@ struct HistoryView: View {
 
     private func exportSession(_ session: Session) {
         do {
-            shareURL = try ExportManager.shareURL(for: session)
-            showShareSheet = true
-        } catch {}
+            let url = try ExportManager.shareURL(for: session)
+            FluxShare.shareFile(url: url)
+        } catch {
+            exportError = error.localizedDescription
+            showExportError = true
+        }
     }
 }
 

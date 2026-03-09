@@ -7,58 +7,70 @@ struct FluxChiApp: App {
     @StateObject private var bleManager = BLEManager()
     @StateObject private var sessionManager = SessionManager()
     @StateObject private var personalization = PersonalizationManager()
+    @StateObject private var alertManager = AlertManager()
+    @StateObject private var liveActivityManager = LiveActivityManager()
 
     var body: some Scene {
         WindowGroup {
             TabView {
                 DashboardView()
-                    .tabItem {
-                        Label("状态", systemImage: "gauge.with.dots.needle.67percent")
-                    }
-
-                RecorderView()
-                    .tabItem {
-                        Label("记录", systemImage: "record.circle")
-                    }
+                    .tabItem { Image(systemName: "waveform") }
 
                 HistoryView()
-                    .tabItem {
-                        Label("历史", systemImage: "clock.arrow.circlepath")
-                    }
+                    .tabItem { Image(systemName: "clock.arrow.circlepath") }
 
                 SettingsView()
-                    .tabItem {
-                        Label("设置", systemImage: "gearshape")
-                    }
+                    .tabItem { Image(systemName: "gearshape") }
             }
             .tint(.red)
             .environmentObject(service)
             .environmentObject(bleManager)
             .environmentObject(sessionManager)
             .environmentObject(personalization)
+            .environmentObject(alertManager)
+            .environmentObject(liveActivityManager)
             .onAppear {
                 service.startPolling()
-                bleManager.onStateUpdate = { [weak service] state in
+                alertManager.requestPermission()
+
+                bleManager.onStateUpdate = { [weak service, weak alertManager, weak liveActivityManager] state in
                     Task { @MainActor in
                         service?.state = state
                         service?.isConnected = true
                         service?.connectionError = nil
+
+                        if let s = state.stamina {
+                            alertManager?.evaluate(
+                                stamina: s.value,
+                                state: s.state,
+                                continuousWorkMin: s.continuousWorkMin
+                            )
+
+                            liveActivityManager?.updateActivity(
+                                stamina: s.value,
+                                state: s.state,
+                                workMin: s.continuousWorkMin,
+                                activity: state.activity,
+                                consistency: s.consistency,
+                                tension: s.tension,
+                                fatigue: s.fatigue
+                            )
+                        }
                     }
                 }
             }
             .onChange(of: bleManager.isConnected) { _, connected in
-                if connected {
-                    service.stopPolling()
-                } else {
-                    service.startPolling()
-                }
+                if connected { service.stopPolling() } else { service.startPolling() }
+            }
+            .alert(alertManager.alertTitle, isPresented: $alertManager.showBreakAlert) {
+                Button("休息一下") { alertManager.dismissAlert() }
+                Button("继续工作", role: .cancel) { alertManager.dismissAlert() }
+            } message: {
+                Text(alertManager.alertMessage)
             }
         }
         .modelContainer(for: [
-            Session.self,
-            Segment.self,
-            FluxSnapshot.self,
-            UserFeedback.self
+            Session.self, Segment.self, FluxSnapshot.self, UserFeedback.self
         ])
     }
 }

@@ -1,61 +1,66 @@
 import SwiftUI
 
 struct StaminaRingView: View {
-    let value: Double      // 0–100
+    let value: Double
     let state: StaminaState
 
     private var progress: Double { min(max(value / 100, 0), 1) }
 
     private var ringColor: Color {
         switch state {
-        case .focused:    return .red
+        case .focused:    return .green
         case .fading:     return .orange
-        case .depleted:   return .red.opacity(0.6)
-        case .recovering: return .green
+        case .depleted:   return .red
+        case .recovering: return .blue
         }
     }
 
     var body: some View {
         ZStack {
-            // Track
             Circle()
-                .stroke(Color(.systemGray5), lineWidth: 6)
+                .fill(.ultraThinMaterial)
+                .frame(width: 190, height: 190)
 
-            // Dot pattern ring
             Circle()
-                .stroke(Color(.systemGray4), style: StrokeStyle(lineWidth: 2, dash: [2, 6]))
-                .padding(-8)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 10)
+                .frame(width: 170, height: 170)
 
-            // Progress arc
             Circle()
                 .trim(from: 0, to: progress)
                 .stroke(
-                    ringColor,
-                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                    AngularGradient(
+                        colors: [ringColor.opacity(0.3), ringColor],
+                        center: .center,
+                        startAngle: .degrees(-90),
+                        endAngle: .degrees(-90 + 360 * progress)
+                    ),
+                    style: StrokeStyle(lineWidth: 10, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .shadow(color: ringColor.opacity(0.4), radius: 8)
-                .animation(.easeInOut(duration: 0.8), value: progress)
+                .frame(width: 170, height: 170)
+                .shadow(color: ringColor.opacity(0.35), radius: 10, y: 2)
+                .animation(.spring(duration: 0.8), value: progress)
 
-            // Center content
-            VStack(spacing: 4) {
+            VStack(spacing: 2) {
                 Text("\(Int(value))")
-                    .font(.system(size: 56, weight: .bold, design: .rounded))
+                    .font(.system(size: 52, weight: .bold, design: .rounded))
                     .foregroundStyle(.primary)
                     .contentTransition(.numericText(value: value))
                     .animation(.easeInOut, value: Int(value))
 
                 Text("STAMINA")
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-                    .tracking(2)
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .tracking(3)
 
-                Label(state.displayName, systemImage: state.systemImage)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(ringColor)
-                    .padding(.top, 2)
+                HStack(spacing: 4) {
+                    Image(systemName: state.systemImage)
+                        .font(.system(size: 11))
+                    Text(state.displayName)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundStyle(ringColor)
+                .padding(.top, 4)
             }
         }
         .frame(width: 200, height: 200)

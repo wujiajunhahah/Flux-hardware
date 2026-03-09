@@ -2,20 +2,19 @@ import Foundation
 import CoreBluetooth
 import Combine
 
-/// CoreBluetooth manager for direct WAVELETECH wristband connection.
 @MainActor
 final class BLEManager: NSObject, ObservableObject {
 
-    // MARK: - Constants (reverse-engineered from WAVELETECH protocol)
+    // MARK: - BLE Constants
 
-    static let serviceUUID    = CBUUID(string: "974CBE30-3E83-465E-ACDE-6F92FE712134")
-    static let dataCharUUID   = CBUUID(string: "974CBE31-3E83-465E-ACDE-6F92FE712134")
-    static let writeCharUUID  = CBUUID(string: "974CBE32-3E83-465E-ACDE-6F92FE712134")
-    static let devicePrefix   = "WL"
+    static let serviceUUID   = CBUUID(string: "974CBE30-3E83-465E-ACDE-6F92FE712134")
+    static let dataCharUUID  = CBUUID(string: "974CBE31-3E83-465E-ACDE-6F92FE712134")
+    static let writeCharUUID = CBUUID(string: "974CBE32-3E83-465E-ACDE-6F92FE712134")
+    static let devicePrefix  = "WL"
 
     private static let emgFlag: UInt8 = 0xAA
     private static let imuFlag: UInt8 = 0xBB
-    private static let channelCount = 8
+    private static let bleChannelCount = 6
 
     // MARK: - Published
 
@@ -23,8 +22,9 @@ final class BLEManager: NSObject, ObservableObject {
     @Published var discoveredDevices: [CBPeripheral] = []
     @Published var connectedDeviceName: String?
     @Published var isScanning = false
-    @Published var latestRMS: [Double] = Array(repeating: 0, count: 8)
+    @Published var latestRMS: [Double] = Array(repeating: 0, count: 6)
     @Published var emgFrameCount: Int = 0
+    @Published var activeChannelCount: Int = 6
 
     var isConnected: Bool { peripheralState == .connected }
 
@@ -40,9 +40,8 @@ final class BLEManager: NSObject, ObservableObject {
     private var dataChar: CBCharacteristic?
 
     private let emgBuffer = EMGRingBuffer(capacity: 250)
-    private var workStartTime: Date?
-    private var totalWorkSeconds: Double = 0
-    private var lastActivityIsWork = false
+    private let staminaEngine = OnDeviceStaminaEngine()
+    private let classifier = EMGActivityInference()
 
     // MARK: - Init
 
@@ -58,12 +57,10 @@ final class BLEManager: NSObject, ObservableObject {
         guard central.state == .poweredOn else { return }
         discoveredDevices.removeAll()
         isScanning = true
-        // Scan ALL devices — wristband doesn't advertise its service UUID
         central.scanForPeripherals(
             withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
-
         Task {
             try? await Task.sleep(for: .seconds(15))
             if isScanning { stopScan() }
@@ -85,116 +82,98 @@ final class BLEManager: NSObject, ObservableObject {
 
     func disconnect() {
         guard let p = peripheral else { return }
-        if let c = dataChar {
-            p.setNotifyValue(false, for: c)
-        }
+        if let c = dataChar { p.setNotifyValue(false, for: c) }
         central.cancelPeripheralConnection(p)
         peripheral = nil
         dataChar = nil
         connectedDeviceName = nil
         peripheralState = .disconnected
+        staminaEngine.reset()
     }
 
     // MARK: - EMG Parsing
 
     private func handleNotification(_ data: Data) {
-        guard data.count >= 20 else { return }
+        guard data.count >= 20, data[0] == Self.emgFlag else { return }
 
-        let frameType = data[0]
+        let payload = data.dropFirst(2)
+        let nCh = min(payload.count / 3, Self.bleChannelCount)
+        activeChannelCount = nCh
 
-        if frameType == Self.emgFlag {
-            var values = [Double](repeating: 0, count: Self.channelCount)
-            let payload = data.dropFirst(2) // skip type + seq
-            let nChannels = min(payload.count / 3, Self.channelCount)
+        var values = [Double](repeating: 0, count: nCh)
+        for i in 0..<nCh {
+            let off = i * 3
+            let b1 = Int(payload[payload.startIndex + off])
+            let b2 = Int(payload[payload.startIndex + off + 1])
+            let b3 = Int(payload[payload.startIndex + off + 2])
+            values[i] = Self.decodeSigned24(b1, b2, b3)
+        }
 
-            for i in 0..<nChannels {
-                let offset = i * 3
-                let b1 = Int(payload[payload.startIndex + offset])
-                let b2 = Int(payload[payload.startIndex + offset + 1])
-                let b3 = Int(payload[payload.startIndex + offset + 2])
-                values[i] = Self.decodeSigned24(b1, b2, b3)
-            }
+        emgBuffer.append(values)
+        emgFrameCount += 1
+        onEMGSample?(values)
 
-            emgBuffer.append(values)
-            emgFrameCount += 1
-            onEMGSample?(values)
-
-            if emgFrameCount % 50 == 0 {
-                latestRMS = emgBuffer.rms()
-                buildAndPushState()
-            }
+        if emgFrameCount % 50 == 0 {
+            latestRMS = emgBuffer.rms()
+            buildAndPushState()
         }
     }
 
     private func buildAndPushState() {
         let rms = latestRMS
-        let avgRMS = rms.reduce(0, +) / max(Double(rms.count), 1)
-        let isWorking = avgRMS > 30
+        let now = Date().timeIntervalSince1970
+        let rawChannels = emgBuffer.channelTimeSeries()
 
-        if isWorking && !lastActivityIsWork {
-            workStartTime = Date()
-            lastActivityIsWork = true
-        } else if !isWorking && lastActivityIsWork {
-            if let start = workStartTime {
-                totalWorkSeconds += Date().timeIntervalSince(start)
-            }
-            workStartTime = nil
-            lastActivityIsWork = false
-        }
+        let prediction = classifier.predict(channels: rawChannels)
+        let classifiedActivity = prediction?.label
 
-        let contWork: Double = {
-            guard let start = workStartTime else { return 0 }
-            return Date().timeIntervalSince(start) / 60
-        }()
-        let totalWork = (totalWorkSeconds + (workStartTime.map { Date().timeIntervalSince($0) } ?? 0)) / 60
+        let r = staminaEngine.update(rms: rms, rawChannels: rawChannels, timestamp: now, classifiedActivity: classifiedActivity)
 
-        let activity = isWorking ? "working" : "rest"
-        let staminaVal = max(0, 100 - totalWork * 2)
-        let stState = staminaVal > 60 ? "focused" : staminaVal > 30 ? "fading" : "depleted"
+        let activity = classifiedActivity ?? (r.isWorking ? "working" : "rest")
+        let confidence = prediction?.confidence ?? 1.0
+        let probs = prediction?.probabilities ?? [activity: 1.0]
 
         let state = FluxState(
-            timestamp: Date().timeIntervalSince1970,
+            timestamp: now,
             activity: activity,
-            confidence: 1.0,
-            probabilities: [activity: 1.0],
+            confidence: confidence,
+            probabilities: probs,
             rms: rms,
             emgSampleCount: emgFrameCount,
             stamina: StaminaData(
-                value: staminaVal,
-                state: isWorking ? stState : "recovering",
-                consistency: 0,
-                tension: 0,
-                fatigue: min(totalWork / 30, 1),
-                drainRate: 2,
-                recoveryRate: 5,
-                suggestedWorkMin: max(0, 30 - contWork),
-                suggestedBreakMin: isWorking ? 0 : 5,
-                continuousWorkMin: contWork,
-                totalWorkMin: totalWork
+                value: r.stamina,
+                state: r.state,
+                consistency: r.consistency,
+                tension: r.tension,
+                fatigue: r.fatigue,
+                drainRate: r.drainRate,
+                recoveryRate: r.recoveryRate,
+                suggestedWorkMin: r.suggestedWorkMin,
+                suggestedBreakMin: r.suggestedBreakMin,
+                continuousWorkMin: r.continuousWorkMin,
+                totalWorkMin: r.totalWorkMin
             ),
             decision: DecisionData(
-                state: isWorking ? stState : "recovering",
-                recommendation: staminaVal > 60 ? "keep_working" : staminaVal > 30 ? "take_break" : "rest_more",
-                urgency: staminaVal < 30 ? 0.8 : staminaVal < 60 ? 0.5 : 0,
-                reasons: [isWorking ? "BLE 直连 · 已工作 \(Int(contWork)) 分钟" : "BLE 直连 · 休息中"],
-                stamina: staminaVal,
-                continuousWorkMin: contWork,
-                totalWorkMin: totalWork,
-                suggestedWorkMin: max(0, 30 - contWork),
-                suggestedBreakMin: isWorking ? 0 : 5
+                state: r.state,
+                recommendation: r.stamina > 60 ? "keep_working" : r.stamina > 30 ? "take_break" : "rest_more",
+                urgency: r.stamina < 30 ? 0.8 : r.stamina < 60 ? 0.5 : 0,
+                reasons: [r.isWorking
+                    ? "BLE 直连 · 已工作 \(Int(r.continuousWorkMin)) 分钟 · Stamina \(Int(r.stamina))"
+                    : "BLE 直连 · 恢复中 · Stamina \(Int(r.stamina))"],
+                stamina: r.stamina,
+                continuousWorkMin: r.continuousWorkMin,
+                totalWorkMin: r.totalWorkMin,
+                suggestedWorkMin: r.suggestedWorkMin,
+                suggestedBreakMin: r.suggestedBreakMin
             )
         )
-
         onStateUpdate?(state)
     }
 
     private static func decodeSigned24(_ b1: Int, _ b2: Int, _ b3: Int) -> Double {
         var value = (b1 << 16) | (b2 << 8) | b3
-        if value & 0x800000 != 0 {
-            value -= 1 << 24
-        }
-        let volts = Double(value) / 8_388_607.0 * 4.5
-        return (volts / 1200.0) * 1_000_000.0
+        if value & 0x800000 != 0 { value -= 1 << 24 }
+        return Double(value) / 8_388_607.0 * 4.5 / 1200.0 * 1_000_000.0
     }
 }
 
@@ -203,11 +182,7 @@ final class BLEManager: NSObject, ObservableObject {
 extension BLEManager: CBCentralManagerDelegate {
 
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        Task { @MainActor in
-            if central.state == .poweredOn {
-                // Ready to scan
-            }
-        }
+        Task { @MainActor in _ = central.state }
     }
 
     nonisolated func centralManager(
@@ -220,7 +195,6 @@ extension BLEManager: CBCentralManagerDelegate {
             ?? (advertisementData[CBAdvertisementDataLocalNameKey] as? String)
             ?? ""
         guard name.uppercased().hasPrefix(Self.devicePrefix) else { return }
-
         Task { @MainActor in
             if !self.discoveredDevices.contains(where: { $0.identifier == peripheral.identifier }) {
                 self.discoveredDevices.append(peripheral)
@@ -256,10 +230,7 @@ extension BLEManager: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard let services = peripheral.services else { return }
         for service in services where service.uuid == Self.serviceUUID {
-            peripheral.discoverCharacteristics(
-                [Self.dataCharUUID, Self.writeCharUUID],
-                for: service
-            )
+            peripheral.discoverCharacteristics([Self.dataCharUUID, Self.writeCharUUID], for: service)
         }
     }
 
@@ -269,11 +240,9 @@ extension BLEManager: CBPeripheralDelegate {
         error: Error?
     ) {
         guard let chars = service.characteristics else { return }
-        for char in chars {
-            if char.uuid == Self.dataCharUUID {
-                Task { @MainActor in self.dataChar = char }
-                peripheral.setNotifyValue(true, for: char)
-            }
+        for char in chars where char.uuid == Self.dataCharUUID {
+            Task { @MainActor in self.dataChar = char }
+            peripheral.setNotifyValue(true, for: char)
         }
     }
 
@@ -283,19 +252,17 @@ extension BLEManager: CBPeripheralDelegate {
         error: Error?
     ) {
         guard let data = characteristic.value else { return }
-        Task { @MainActor in
-            self.handleNotification(data)
-        }
+        Task { @MainActor in self.handleNotification(data) }
     }
 }
 
 // MARK: - EMG Ring Buffer
 
-private final class EMGRingBuffer {
+final class EMGRingBuffer {
     private var buffer: [[Double]]
     private var head = 0
-    private var count = 0
-    private let capacity: Int
+    private(set) var count = 0
+    let capacity: Int
 
     init(capacity: Int) {
         self.capacity = capacity
@@ -308,9 +275,13 @@ private final class EMGRingBuffer {
         count = min(count + 1, capacity)
     }
 
+    var nChannels: Int {
+        buffer.first(where: { !$0.isEmpty })?.count ?? 6
+    }
+
     func rms() -> [Double] {
-        guard count > 0 else { return Array(repeating: 0, count: 8) }
-        let nCh = buffer.first(where: { !$0.isEmpty })?.count ?? 8
+        let nCh = nChannels
+        guard count > 0 else { return Array(repeating: 0, count: nCh) }
         var sums = [Double](repeating: 0, count: nCh)
         let start = (head - count + capacity) % capacity
         for i in 0..<count {
@@ -320,5 +291,19 @@ private final class EMGRingBuffer {
             }
         }
         return sums.map { sqrt($0 / Double(count)) }
+    }
+
+    func channelTimeSeries() -> [[Double]] {
+        let nCh = nChannels
+        guard count > 0 else { return [] }
+        var result = [[Double]](repeating: [], count: nCh)
+        let start = (head - count + capacity) % capacity
+        for i in 0..<count {
+            let row = buffer[(start + i) % capacity]
+            for ch in 0..<min(row.count, nCh) {
+                result[ch].append(row[ch])
+            }
+        }
+        return result
     }
 }

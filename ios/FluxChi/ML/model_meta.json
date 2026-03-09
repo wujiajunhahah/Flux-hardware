@@ -1,0 +1,23 @@
+{
+  "classes": [
+    "finger_movement",
+    "rest",
+    "wrist_extend",
+    "wrist_flex",
+    "wrist_movement"
+  ],
+  "n_features": 84,
+  "features_per_channel": 7,
+  "channel_features": [
+    "MAV",
+    "RMS",
+    "WL",
+    "ZC",
+    "SSC",
+    "MNF",
+    "MDF"
+  ],
+  "n_channels": 8,
+  "n_pairs": 28,
+  "note": "Channels 7-8 zero-filled in BLE mode (6ch)"
+}

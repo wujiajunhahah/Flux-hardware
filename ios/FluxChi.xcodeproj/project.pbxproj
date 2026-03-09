@@ -7,44 +7,96 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0E7705B78C0617D5054DCF05 /* OnDeviceStaminaEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74753401A3431315E6EED0CE /* OnDeviceStaminaEngine.swift */; };
+		1CE778873864D4E66D662D7F /* FluxChiLive.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 7B91852213E03E125E4DD708 /* FluxChiLive.appex */; };
 		20258A5445FFADF89345BB8C /* SummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9F63942587BE4E4AB46CDE /* SummaryEngine.swift */; };
+		2894A586BC7D4FEC4DA96468 /* FluxChiLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D963C643474157682B7673F /* FluxChiLiveActivity.swift */; };
+		2C17DEBF311E0371CC8E5D50 /* AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC8E7B9F0363CDCC7D003AE /* AlertManager.swift */; };
 		32C85255E54CE8BBA79891B9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE36952EACC328036003CF02 /* SettingsView.swift */; };
 		353B5A96BB85286952CF2A1A /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4785E01E03B638F651433EC /* Session.swift */; };
 		37D1B293D85533CBE3726A66 /* FluxChiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2583B5DFE6B5E2D06D3907A8 /* FluxChiApp.swift */; };
+		41D01B608D506EF66567135B /* FluxChiLiveBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C82F52C084FF7B4B9B98F3 /* FluxChiLiveBundle.swift */; };
 		41EB0AED9E3D37E9D144B449 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */; };
 		4C00083B10B70FBDBCFC6F1D /* BLEView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBF9348C6BE2D3C47741B9F /* BLEView.swift */; };
 		4E31F1403404087AC5CD20C6 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380BBB1F3FD98322B2060455 /* HistoryView.swift */; };
+		57E11A9E5A3BD9DAF5D53D16 /* ActivityClassifier.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = 5CF6C81769725D1F6E224ADE /* ActivityClassifier.mlpackage */; };
 		5909BF9467E24D418EE4A8F4 /* FluxTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = C32BDA8520B5BD858B560924 /* FluxTokens.swift */; };
 		614E45DDEA41D0C4FDC16C92 /* ExportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B5C110FA9FAA6244ADABB3C /* ExportManager.swift */; };
 		66E6A5ADCD0E5DFFDB401A86 /* FluxService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2107ECD8E4CA0465E062E56 /* FluxService.swift */; };
 		6EFF16B400DC0E33C06A07B8 /* FeedbackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B304D5891CBDFF2564CBBE02 /* FeedbackView.swift */; };
 		701071DF158BF888B11A340A /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE6963DF0F6852BB158A0DB /* SessionDetailView.swift */; };
+		7491661A48102D7610F8F1B3 /* SessionChartsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9992B47B1D2369E9BB080354 /* SessionChartsView.swift */; };
 		8136648A6B96AFFAFDF8EFE2 /* PersonalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B14342F8A691567B25C488F /* PersonalizationManager.swift */; };
+		9838B0DD287D1F821E2BC65D /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */; };
+		A29B654F2338B5CE0220D51F /* EMGFeatureExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BCD5428E4F4BBD013EC82A /* EMGFeatureExtractor.swift */; };
 		A9EBB5B316A867AB2285ABE3 /* FluxComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E24A0B2A711EEB09198CB250 /* FluxComponents.swift */; };
 		AA704822512F0A9E50C8DE25 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A322440B9C6FD9D20D692178 /* SessionManager.swift */; };
 		BE91CA074125C5C5DF3E6233 /* RecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1E2E60D7D16A91E3045405 /* RecorderView.swift */; };
 		C88E9A5407EC978105B036F9 /* StaminaRingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E528776B3F3519BE71383DDE /* StaminaRingView.swift */; };
+		CF1C870298895E3CC7746B39 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFE9F1742177A39AF876CD42 /* CalendarView.swift */; };
+		D5B3D9BA8B95EA1FAAAD8B63 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6AC773BB66B35AC34CD5E48F /* Foundation.framework */; };
+		D866EFFE47F922A1A563C184 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */; };
+		EADBB984082147C681789360 /* model_meta.json in Resources */ = {isa = PBXBuildFile; fileRef = 3CB0F83592C8DF2E36A992D2 /* model_meta.json */; };
 		FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C4C08A362F4D9CE7712D17 /* BLEManager.swift */; };
+		FDBD1A530498FCADA98A80E7 /* NLPSummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */; };
 		FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371B9343B23F955F6F6A51BF /* FluxModels.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		2EA3DC8AD3A0DCF3D30FCEFD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8DECD7BE60E71A6975067FF8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A7F0BF31D85D0B66CF3273EC;
+			remoteInfo = FluxChiLive;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A5B927CC4F48A6D68AF9FDBE /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				1CE778873864D4E66D662D7F /* FluxChiLive.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		1716A2E4F26E4B7F2ADFEE42 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		23BCD5428E4F4BBD013EC82A /* EMGFeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EMGFeatureExtractor.swift; sourceTree = "<group>"; };
 		2583B5DFE6B5E2D06D3907A8 /* FluxChiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxChiApp.swift; sourceTree = "<group>"; };
 		2B5C110FA9FAA6244ADABB3C /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
+		2EC8E7B9F0363CDCC7D003AE /* AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertManager.swift; sourceTree = "<group>"; };
 		32067C2042217E02560ABB85 /* FluxChi.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FluxChi.entitlements; sourceTree = "<group>"; };
 		34C4C08A362F4D9CE7712D17 /* BLEManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEManager.swift; sourceTree = "<group>"; };
 		371B9343B23F955F6F6A51BF /* FluxModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxModels.swift; sourceTree = "<group>"; };
 		380BBB1F3FD98322B2060455 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		3CB0F83592C8DF2E36A992D2 /* model_meta.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = model_meta.json; sourceTree = "<group>"; };
 		5B14342F8A691567B25C488F /* PersonalizationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationManager.swift; sourceTree = "<group>"; };
+		5CF6C81769725D1F6E224ADE /* ActivityClassifier.mlpackage */ = {isa = PBXFileReference; path = ActivityClassifier.mlpackage; sourceTree = "<group>"; };
+		6AC773BB66B35AC34CD5E48F /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		6D963C643474157682B7673F /* FluxChiLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FluxChiLiveActivity.swift; sourceTree = "<group>"; };
+		74753401A3431315E6EED0CE /* OnDeviceStaminaEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceStaminaEngine.swift; sourceTree = "<group>"; };
+		74C82F52C084FF7B4B9B98F3 /* FluxChiLiveBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FluxChiLiveBundle.swift; sourceTree = "<group>"; };
+		7B91852213E03E125E4DD708 /* FluxChiLive.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FluxChiLive.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NLPSummaryEngine.swift; sourceTree = "<group>"; };
 		858AEC23E1FB855621B1C591 /* FluxChi.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FluxChi.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9992B47B1D2369E9BB080354 /* SessionChartsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionChartsView.swift; sourceTree = "<group>"; };
 		A322440B9C6FD9D20D692178 /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
+		AFE9F1742177A39AF876CD42 /* CalendarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
 		B304D5891CBDFF2564CBBE02 /* FeedbackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackView.swift; sourceTree = "<group>"; };
 		C32BDA8520B5BD858B560924 /* FluxTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxTokens.swift; sourceTree = "<group>"; };
 		C4785E01E03B638F651433EC /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
+		C9347838A8E7866E13F8FA2B /* FluxChiLive */ = {isa = PBXFileReference; includeInIndex = 0; path = FluxChiLive; sourceTree = BUILT_PRODUCTS_DIR; };
 		CE36952EACC328036003CF02 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		CF9F63942587BE4E4AB46CDE /* SummaryEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SummaryEngine.swift; sourceTree = "<group>"; };
 		CFE6963DF0F6852BB158A0DB /* SessionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDetailView.swift; sourceTree = "<group>"; };
+		DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
 		E2107ECD8E4CA0465E062E56 /* FluxService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxService.swift; sourceTree = "<group>"; };
 		E24A0B2A711EEB09198CB250 /* FluxComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxComponents.swift; sourceTree = "<group>"; };
 		E528776B3F3519BE71383DDE /* StaminaRingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaminaRingView.swift; sourceTree = "<group>"; };
@@ -53,19 +105,58 @@
 		FEBF9348C6BE2D3C47741B9F /* BLEView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		7C8E4DD977CD670F3BC22CEE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D5B3D9BA8B95EA1FAAAD8B63 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
+		1CAEC2618DC01322F11B4DF5 /* FluxChiLive */ = {
+			isa = PBXGroup;
+			children = (
+				74C82F52C084FF7B4B9B98F3 /* FluxChiLiveBundle.swift */,
+				6D963C643474157682B7673F /* FluxChiLiveActivity.swift */,
+			);
+			name = FluxChiLive;
+			path = FluxChiLive;
+			sourceTree = "<group>";
+		};
+		34064A2C12F56D85ADA71A29 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B58209DAC1B9D4CEE724C9C6 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		38ABC1A581A08B8D107B365B /* FluxChi */ = {
 			isa = PBXGroup;
 			children = (
 				32067C2042217E02560ABB85 /* FluxChi.entitlements */,
 				2583B5DFE6B5E2D06D3907A8 /* FluxChiApp.swift */,
 				86337844217AA09FAC1A99FC /* Design */,
+				42A45F70D5E1D395F3142345 /* ML */,
 				8D9D200F4FE8E3A98EEA8C97 /* Models */,
 				8258423E72BE55DFAC6E9EA6 /* Resources */,
 				96BE7038B8B379D612345B1B /* Services */,
 				59DF8F4E20B2182E4F53621D /* Views */,
 			);
 			path = FluxChi;
+			sourceTree = "<group>";
+		};
+		42A45F70D5E1D395F3142345 /* ML */ = {
+			isa = PBXGroup;
+			children = (
+				5CF6C81769725D1F6E224ADE /* ActivityClassifier.mlpackage */,
+				3CB0F83592C8DF2E36A992D2 /* model_meta.json */,
+			);
+			path = ML;
 			sourceTree = "<group>";
 		};
 		59DF8F4E20B2182E4F53621D /* Views */ = {
@@ -79,6 +170,8 @@
 				CFE6963DF0F6852BB158A0DB /* SessionDetailView.swift */,
 				CE36952EACC328036003CF02 /* SettingsView.swift */,
 				E528776B3F3519BE71383DDE /* StaminaRingView.swift */,
+				AFE9F1742177A39AF876CD42 /* CalendarView.swift */,
+				9992B47B1D2369E9BB080354 /* SessionChartsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -112,12 +205,17 @@
 		96BE7038B8B379D612345B1B /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				2EC8E7B9F0363CDCC7D003AE /* AlertManager.swift */,
 				34C4C08A362F4D9CE7712D17 /* BLEManager.swift */,
+				23BCD5428E4F4BBD013EC82A /* EMGFeatureExtractor.swift */,
 				2B5C110FA9FAA6244ADABB3C /* ExportManager.swift */,
 				E2107ECD8E4CA0465E062E56 /* FluxService.swift */,
+				74753401A3431315E6EED0CE /* OnDeviceStaminaEngine.swift */,
 				5B14342F8A691567B25C488F /* PersonalizationManager.swift */,
 				A322440B9C6FD9D20D692178 /* SessionManager.swift */,
 				CF9F63942587BE4E4AB46CDE /* SummaryEngine.swift */,
+				7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */,
+				DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -127,13 +225,25 @@
 			children = (
 				38ABC1A581A08B8D107B365B /* FluxChi */,
 				D9505AD12D52353ADB5395A3 /* Products */,
+				1CAEC2618DC01322F11B4DF5 /* FluxChiLive */,
+				34064A2C12F56D85ADA71A29 /* Frameworks */,
 			);
+			sourceTree = "<group>";
+		};
+		B58209DAC1B9D4CEE724C9C6 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				6AC773BB66B35AC34CD5E48F /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 		D9505AD12D52353ADB5395A3 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				858AEC23E1FB855621B1C591 /* FluxChi.app */,
+				C9347838A8E7866E13F8FA2B /* FluxChiLive */,
+				7B91852213E03E125E4DD708 /* FluxChiLive.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -146,15 +256,35 @@
 			buildConfigurationList = E45AA46E2957DEAFFC471032 /* Build configuration list for PBXNativeTarget "FluxChi" */;
 			buildPhases = (
 				BF1238A0032912E47F3CC050 /* Sources */,
+				B68F03B48380CAF2F4DEB54B /* Resources */,
+				A5B927CC4F48A6D68AF9FDBE /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F62450A6690AF8F472A8571F /* PBXTargetDependency */,
 			);
 			name = FluxChi;
 			productName = FluxChi;
 			productReference = 858AEC23E1FB855621B1C591 /* FluxChi.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A7F0BF31D85D0B66CF3273EC /* FluxChiLive */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 63C96088E005DE515B11C6A2 /* Build configuration list for PBXNativeTarget "FluxChiLive" */;
+			buildPhases = (
+				568C578626FBC171BB7F0E90 /* Sources */,
+				7C8E4DD977CD670F3BC22CEE /* Frameworks */,
+				3E357E8DB00F96434F1C5ED3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FluxChiLive;
+			productName = FluxChiLive;
+			productReference = 7B91852213E03E125E4DD708 /* FluxChiLive.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -180,22 +310,55 @@
 				en,
 			);
 			mainGroup = 9EF54FC37354BBF8BBAFAEED;
+			productRefGroup = D9505AD12D52353ADB5395A3 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				841CFB8E99450B4CE06E5FA0 /* FluxChi */,
+				A7F0BF31D85D0B66CF3273EC /* FluxChiLive */,
 			);
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		3E357E8DB00F96434F1C5ED3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B68F03B48380CAF2F4DEB54B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EADBB984082147C681789360 /* model_meta.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
+		568C578626FBC171BB7F0E90 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				41D01B608D506EF66567135B /* FluxChiLiveBundle.swift in Sources */,
+				2894A586BC7D4FEC4DA96468 /* FluxChiLiveActivity.swift in Sources */,
+				D866EFFE47F922A1A563C184 /* LiveActivityManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BF1238A0032912E47F3CC050 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				57E11A9E5A3BD9DAF5D53D16 /* ActivityClassifier.mlpackage in Sources */,
+				2C17DEBF311E0371CC8E5D50 /* AlertManager.swift in Sources */,
 				FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */,
 				4C00083B10B70FBDBCFC6F1D /* BLEView.swift in Sources */,
 				41EB0AED9E3D37E9D144B449 /* DashboardView.swift in Sources */,
+				A29B654F2338B5CE0220D51F /* EMGFeatureExtractor.swift in Sources */,
 				614E45DDEA41D0C4FDC16C92 /* ExportManager.swift in Sources */,
 				6EFF16B400DC0E33C06A07B8 /* FeedbackView.swift in Sources */,
 				37D1B293D85533CBE3726A66 /* FluxChiApp.swift in Sources */,
@@ -204,6 +367,7 @@
 				66E6A5ADCD0E5DFFDB401A86 /* FluxService.swift in Sources */,
 				5909BF9467E24D418EE4A8F4 /* FluxTokens.swift in Sources */,
 				4E31F1403404087AC5CD20C6 /* HistoryView.swift in Sources */,
+				0E7705B78C0617D5054DCF05 /* OnDeviceStaminaEngine.swift in Sources */,
 				8136648A6B96AFFAFDF8EFE2 /* PersonalizationManager.swift in Sources */,
 				BE91CA074125C5C5DF3E6233 /* RecorderView.swift in Sources */,
 				353B5A96BB85286952CF2A1A /* Session.swift in Sources */,
@@ -212,12 +376,47 @@
 				32C85255E54CE8BBA79891B9 /* SettingsView.swift in Sources */,
 				C88E9A5407EC978105B036F9 /* StaminaRingView.swift in Sources */,
 				20258A5445FFADF89345BB8C /* SummaryEngine.swift in Sources */,
+				CF1C870298895E3CC7746B39 /* CalendarView.swift in Sources */,
+				7491661A48102D7610F8F1B3 /* SessionChartsView.swift in Sources */,
+				FDBD1A530498FCADA98A80E7 /* NLPSummaryEngine.swift in Sources */,
+				9838B0DD287D1F821E2BC65D /* LiveActivityManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		F62450A6690AF8F472A8571F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = FluxChiLive;
+			target = A7F0BF31D85D0B66CF3273EC /* FluxChiLive */;
+			targetProxy = 2EA3DC8AD3A0DCF3D30FCEFD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		02684F8FD90FD0000A4AE01E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "FluxChi Live";
+				INFOPLIST_KEY_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluxchi.app.live;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
 		1DA4FE3F00E6FC506A798AC6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -395,6 +594,29 @@
 			};
 			name = Release;
 		};
+		D029FE3F41D44710415772AE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "FluxChi Live";
+				INFOPLIST_KEY_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluxchi.app.live;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -406,6 +628,15 @@
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
+		};
+		63C96088E005DE515B11C6A2 /* Build configuration list for PBXNativeTarget "FluxChiLive" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D029FE3F41D44710415772AE /* Release */,
+				02684F8FD90FD0000A4AE01E /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		E45AA46E2957DEAFFC471032 /* Build configuration list for PBXNativeTarget "FluxChi" */ = {
 			isa = XCConfigurationList;

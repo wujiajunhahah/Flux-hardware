@@ -78,11 +78,21 @@ struct FluxEMGBars: View {
     let rms: [Double]
     var height: CGFloat = 60
     var barColor: Color = Flux.Colors.accent
+    var hideDeadChannels: Bool = true
+
+    private var activeChannels: [(index: Int, value: Double)] {
+        rms.enumerated().compactMap { idx, val in
+            if hideDeadChannels && val.isZero { return nil }
+            return (idx, val)
+        }
+    }
 
     var body: some View {
+        let channels = activeChannels.isEmpty ? Array(rms.enumerated().map { ($0.offset, $0.element) }) : activeChannels
+        let maxVal = max(channels.map(\.value).max() ?? 1, 1)
+
         HStack(alignment: .bottom, spacing: 4) {
-            let maxVal = max(rms.max() ?? 1, 1)
-            ForEach(Array(rms.enumerated()), id: \.offset) { idx, val in
+            ForEach(channels, id: \.index) { idx, val in
                 VStack(spacing: 2) {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(barColor.gradient)
@@ -129,14 +139,23 @@ struct FluxCard<Content: View>: View {
     }
 }
 
-// MARK: - Share Sheet
+// MARK: - Share Helper
 
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
+enum FluxShare {
+    static func present(items: [Any]) {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let root = windowScene.windows.first?.rootViewController else { return }
+        var top = root
+        while let presented = top.presentedViewController { top = presented }
+        let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        vc.popoverPresentationController?.sourceView = top.view
+        vc.popoverPresentationController?.sourceRect = CGRect(
+            x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0
+        )
+        top.present(vc, animated: true)
     }
 
-    func updateUIViewController(_: UIActivityViewController, context: Context) {}
+    static func shareFile(url: URL) {
+        present(items: [url])
+    }
 }
