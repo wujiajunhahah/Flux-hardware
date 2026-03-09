@@ -4,8 +4,9 @@ SwiftUI 原生 iOS 客户端，连接 FluxChi EMG Stamina Engine。
 
 ## 功能
 
-- **SSE 实时数据流** — 通过 WiFi 连接电脑端 FluxChi 服务器
-- **BLE 直连手环** — 使用 CoreBluetooth 直接连接 WAVELETECH 手环（无需 USB 接收器）
+- **REST 实时轮询** — 通过 WiFi 连接电脑端 FluxChi 服务器 (500ms 间隔)
+- **BLE 直连手环** — CoreBluetooth 直接连接 WAVELETECH 手环（无需 USB 接收器或电脑）
+- **自动模式切换** — BLE 连接时停止 WiFi 轮询，断开时自动恢复
 - **续航仪表盘** — 实时显示 Stamina 环、三维度、活动分类、EMG 信号
 - **Apple HIG** — 遵循 Human Interface Guidelines，支持 Dynamic Type、深色模式
 
@@ -17,7 +18,7 @@ FluxChi/
 ├── Models/
 │   └── FluxModels.swift          # Codable 数据模型
 ├── Services/
-│   ├── FluxService.swift         # REST API + SSE 客户端
+│   ├── FluxService.swift         # REST API 轮询客户端
 │   └── BLEManager.swift          # CoreBluetooth 直连手环
 ├── Views/
 │   ├── DashboardView.swift       # 主仪表盘

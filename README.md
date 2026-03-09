@@ -1,71 +1,126 @@
-# WAVELETECH EMG 传感器数据可视化程序
+# FluxChi
 
-这是一个用于实时可视化和分析 WAVELETECH EMG 传感器数据的 Python 应用程序。
+EMG-driven work sustainability engine for digital nomads.
 
-## 功能特性
+Wristband → BLE / USB → ML inference → Web dashboard + native iOS app.
 
-- 📊 **实时数据可视化**
-  - EMG 通道数据（3个通道）
-  - 陀螺仪数据（X, Y, Z轴）
-  - 加速度计数据（X, Y, Z轴）
+## What it does
 
-- 🔌 **串口通信**
-  - 自动检测可用串口
-  - 实时数据接收和解析
+FluxChi reads real-time EMG signals from a WAVELETECH wristband and answers one question: **should you keep working or take a break?**
 
-- 📈 **数据展示**
-  - 实时波形图表
-  - 数据统计面板
-  - 采样率显示
+Instead of a simple fatigue detector, it runs a **StaminaEngine** that accumulates state over time across three dimensions:
 
-## 安装依赖
+| Dimension | What it measures |
+|-----------|-----------------|
+| Pattern Consistency | How stable your muscle activation patterns remain |
+| Baseline Tension | Resting muscle tone — rises with accumulated strain |
+| Sustained Capacity | Long-term degradation of work output quality |
+
+These combine into a **stamina score (0–100)** with four states: `focused` → `fading` → `depleted` → `recovering`.
+
+## Quick start
 
 ```bash
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+
+# BLE direct (no USB dongle)
+python web/app.py --ble
+
+# USB serial
+python web/app.py --port /dev/tty.usbserial-0001
+
+# Demo mode (synthetic data)
+python web/app.py --demo
 ```
 
-## 使用方法
+Open `http://localhost:8000` in your browser.
 
-1. 确保传感器已连接到电脑
-2. 运行程序：
-```bash
-python main.py
+## Architecture
+
+```
+┌──────────────┐     BLE 5.0      ┌─────────────────┐
+│ WAVELETECH   │ ◄──────────────► │  iPhone App     │  CoreBluetooth direct
+│ EMG wristband│                  │  SwiftUI        │
+│ 8ch · 1kHz   │     BLE / USB    ├─────────────────┤
+│ 6-axis IMU   │ ◄──────────────► │  Python backend │  FastAPI + uvicorn
+└──────────────┘                  │  StaminaEngine  │
+                                  │  ONNX inference │
+                                  ├─────────────────┤
+                                  │  Web dashboard  │  Nothing OS style
+                                  └─────────────────┘
 ```
 
-或者直接运行：
-```bash
-python visualizer.py
+## Project structure
+
+```
+.
+├── web/
+│   ├── app.py                    # FastAPI backend (REST + SSE)
+│   └── static/index.html         # Nothing OS-style dashboard
+├── src/
+│   ├── stream.py                 # SerialEMGStream / BleEMGStream
+│   ├── features.py               # 84-dim feature extraction
+│   ├── inference.py              # ONNX model inference
+│   ├── energy.py                 # StaminaEngine (core model)
+│   ├── decision.py               # Recommendation engine
+│   └── ...
+├── ios/                          # Native iOS app (SwiftUI)
+│   ├── FluxChi/
+│   │   ├── Models/               # Codable data models
+│   │   ├── Services/             # FluxService (REST) + BLEManager
+│   │   └── Views/                # Dashboard, BLE, Settings
+│   └── project.yml               # xcodegen config
+├── tools/
+│   └── ble_scan.py               # BLE protocol reverse-engineering tool
+├── docs/
+│   └── API.md                    # REST / SSE API reference (iOS examples)
+└── model/                        # Trained ONNX models
 ```
 
-3. 在程序界面中：
-   - 选择正确的串口（点击"刷新"更新列表）
-   - 点击"连接"按钮开始接收数据
-   - 查看实时数据可视化
+## API
 
-## 数据格式说明
+The backend exposes a versioned REST API at `/api/v1/`. Full documentation with Swift examples in [`docs/API.md`](docs/API.md).
 
-根据传感器文档，数据包包含：
-- **EMG通道**: ch1, ch2, ch3（原始ADC值）
-- **陀螺仪**: gr_x, gr_y, gr_z（单位：rad/s，缩放因子：0.0012）
-- **加速度计**: acc_x, acc_y, acc_z（单位：m/s²，缩放因子：0.0005978）
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/state` | GET | Current state (activity, stamina, recommendation) |
+| `/api/v1/status` | GET | Server status (model, uptime, sample count) |
+| `/api/v1/stream` | GET | SSE real-time event stream |
+| `/api/v1/stamina/reset` | POST | Reset stamina engine |
+| `/api/v1/stamina/save` | POST | Persist stamina snapshot |
 
-## 配置
+## iOS app
 
-默认串口参数：
-- 波特率：115200
-- 数据位：8
-- 停止位：1
-- 校验位：无
+See [`ios/README.md`](ios/README.md) for setup. Two connection modes:
 
-如需修改，请编辑 `serial_reader.py` 中的参数。
+- **WiFi** — phone polls the Mac backend over REST (500ms interval)
+- **BLE direct** — CoreBluetooth connects to the wristband without any computer
 
-## 注意事项
+## BLE protocol (reverse-engineered)
 
-- 确保串口未被其他程序占用
-- 如果数据解析不正确，可能需要根据实际数据包格式调整 `data_parser.py`
-- 采样率会根据实际接收速度自动计算
+| Parameter | Value |
+|-----------|-------|
+| Service UUID | `974CBE30-3E83-465E-ACDE-6F92FE712134` |
+| Data Notify | `974CBE31-...` |
+| Write | `974CBE32-...` |
+| Frame size | 20 bytes |
+| EMG frame | `0xAA` + seq + 6ch × 24-bit signed |
+| IMU frame | `0xBB` + seq + 6-axis × 16-bit signed |
 
+The wristband **does not advertise its Service UUID** — scan all devices and filter by name prefix `WL`.
 
+## Tech stack
 
+| Layer | Tech |
+|-------|------|
+| Hardware | WAVELETECH 8ch EMG + 6-axis IMU, BLE 5.0 |
+| Backend | Python, FastAPI, uvicorn, ONNX Runtime |
+| ML | scikit-learn → ONNX, StaminaEngine |
+| Web | HTML / CSS / JS, Chart.js, Canvas animations |
+| iOS | SwiftUI, CoreBluetooth, URLSession |
+| Tools | xcodegen, bleak, pyserial |
 
+## License
 
+Academic project — Shenzhen Technology University.
