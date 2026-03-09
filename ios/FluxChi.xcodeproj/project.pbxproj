@@ -81,6 +81,7 @@
 		5CF6C81769725D1F6E224ADE /* ActivityClassifier.mlpackage */ = {isa = PBXFileReference; path = ActivityClassifier.mlpackage; sourceTree = "<group>"; };
 		6AC773BB66B35AC34CD5E48F /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		6D963C643474157682B7673F /* FluxChiLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FluxChiLiveActivity.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		74753401A3431315E6EED0CE /* OnDeviceStaminaEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceStaminaEngine.swift; sourceTree = "<group>"; };
 		74C82F52C084FF7B4B9B98F3 /* FluxChiLiveBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FluxChiLiveBundle.swift; sourceTree = "<group>"; };
 		7B91852213E03E125E4DD708 /* FluxChiLive.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FluxChiLive.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -120,6 +121,7 @@
 		1CAEC2618DC01322F11B4DF5 /* FluxChiLive */ = {
 			isa = PBXGroup;
 			children = (
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* Info.plist */,
 				74C82F52C084FF7B4B9B98F3 /* FluxChiLiveBundle.swift */,
 				6D963C643474157682B7673F /* FluxChiLiveActivity.swift */,
 			);
@@ -401,9 +403,9 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "FluxChi Live";
-				INFOPLIST_KEY_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
+				DEVELOPMENT_TEAM = M4T239BM58;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FluxChiLive/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -600,9 +602,9 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "FluxChi Live";
-				INFOPLIST_KEY_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
+				DEVELOPMENT_TEAM = M4T239BM58;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FluxChiLive/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
