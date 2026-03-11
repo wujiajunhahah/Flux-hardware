@@ -84,7 +84,6 @@ struct FluxChiLiveActivity: Widget {
     @ViewBuilder
     private func lockScreenBanner(context: ActivityViewContext<FluxChiLiveAttributes>) -> some View {
         let color = staminaColor(context.state.state)
-        let progress = clampProgress(context.state.stamina)
 
         HStack(spacing: 16) {
             // Stamina ring
