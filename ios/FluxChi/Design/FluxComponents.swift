@@ -116,14 +116,13 @@ struct FluxLiveIndicator: View {
     let isLive: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(isLive ? .green : .red)
-                .frame(width: 8, height: 8)
-            Text(isLive ? "LIVE" : "OFF")
-                .font(Flux.Typography.monoSmall)
-                .foregroundStyle(.secondary)
-        }
+        Circle()
+            .fill(isLive ? .green : Color.primary.opacity(0.2))
+            .frame(width: 8, height: 8)
+            .shadow(color: isLive ? .green.opacity(0.5) : .clear, radius: 4)
+            .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true),
+                        value: isLive)
+            .accessibilityLabel(isLive ? "已连接" : "未连接")
     }
 }
 

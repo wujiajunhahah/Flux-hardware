@@ -8,7 +8,6 @@ struct FluxChiLiveAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
         var stamina: Double
         var state: String
-        var continuousWorkMin: Double
         var activity: String
         var consistency: Double
         var tension: Double
@@ -16,7 +15,6 @@ struct FluxChiLiveAttributes: ActivityAttributes {
     }
 
     var sessionTitle: String
-    var startedAt: Date
 }
 
 // MARK: - Live Activity Manager
@@ -33,22 +31,18 @@ final class LiveActivityManager: ObservableObject {
             return
         }
 
-        let attributes = FluxChiLiveAttributes(
-            sessionTitle: title,
-            startedAt: Date()
-        )
+        let attributes = FluxChiLiveAttributes(sessionTitle: title)
 
         let initialState = FluxChiLiveAttributes.ContentState(
             stamina: 100,
             state: "focused",
-            continuousWorkMin: 0,
             activity: "rest",
             consistency: 0,
             tension: 0,
             fatigue: 0
         )
 
-        let content = ActivityContent(state: initialState, staleDate: nil)
+        let content = ActivityContent(state: initialState, staleDate: Date.now.addingTimeInterval(60))
 
         do {
             activity = try Activity.request(
@@ -63,7 +57,7 @@ final class LiveActivityManager: ObservableObject {
         }
     }
 
-    func updateActivity(stamina: Double, state: String, workMin: Double,
+    func updateActivity(stamina: Double, state: String,
                         activity act: String, consistency: Double,
                         tension: Double, fatigue: Double) {
         guard let activity else { return }
@@ -71,14 +65,13 @@ final class LiveActivityManager: ObservableObject {
         let updatedState = FluxChiLiveAttributes.ContentState(
             stamina: stamina,
             state: state,
-            continuousWorkMin: workMin,
             activity: act,
             consistency: consistency,
             tension: tension,
             fatigue: fatigue
         )
 
-        let content = ActivityContent(state: updatedState, staleDate: nil)
+        let content = ActivityContent(state: updatedState, staleDate: Date.now.addingTimeInterval(30))
 
         Task {
             await activity.update(content)
@@ -91,7 +84,6 @@ final class LiveActivityManager: ObservableObject {
         let finalState = FluxChiLiveAttributes.ContentState(
             stamina: 0,
             state: "ended",
-            continuousWorkMin: 0,
             activity: "rest",
             consistency: 0,
             tension: 0,
@@ -101,7 +93,7 @@ final class LiveActivityManager: ObservableObject {
         let content = ActivityContent(state: finalState, staleDate: nil)
 
         Task {
-            await activity.end(content, dismissalPolicy: .default)
+            await activity.end(content, dismissalPolicy: .immediate)
         }
 
         self.activity = nil

@@ -116,8 +116,6 @@ struct FluxCalendarView: View {
         let avgStamina = daySessions.isEmpty ? nil :
             daySessions.compactMap(\.avgStamina).reduce(0, +) / max(1, Double(daySessions.compactMap(\.avgStamina).count))
 
-        let totalWorkMin = daySessions.reduce(0.0) { $0 + ($1.workDurationSec ?? 0) } / 60
-
         return Button {
             withAnimation(.easeInOut(duration: 0.15)) { selectedDate = date }
         } label: {

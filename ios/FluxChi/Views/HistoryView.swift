@@ -5,18 +5,18 @@ struct HistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Session.startedAt, order: .reverse) private var sessions: [Session]
 
-    @State private var viewMode: ViewMode = .calendar
+    @State private var viewMode: ViewMode = .list
     @State private var searchText = ""
     @State private var exportError: String?
     @State private var showExportError = false
 
     enum ViewMode: String, CaseIterable {
-        case calendar, list
+        case list, calendar
 
         var icon: String {
             switch self {
-            case .calendar: return "calendar"
             case .list:     return "list.bullet"
+            case .calendar: return "calendar"
             }
         }
     }
@@ -35,31 +35,13 @@ struct HistoryView: View {
     private var grouped: [(String, [Session])] {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年M月d日"
+        formatter.doesRelativeDateFormatting = true
+        formatter.dateStyle = .medium
 
         let dict = Dictionary(grouping: filtered) { formatter.string(from: $0.startedAt) }
-        return dict.sorted { ($0.value.first?.startedAt ?? .distantPast) > ($1.value.first?.startedAt ?? .distantPast) }
-    }
-
-    // MARK: - Summary Stats
-
-    private var todaySessions: [Session] {
-        completedSessions.filter { Calendar.current.isDateInToday($0.startedAt) }
-    }
-
-    private var todayWorkMinutes: Int {
-        Int(todaySessions.reduce(0.0) { $0 + ($1.workDurationSec ?? 0) } / 60)
-    }
-
-    private var todayAvgStamina: Double {
-        let vals = todaySessions.compactMap(\.avgStamina)
-        guard !vals.isEmpty else { return 0 }
-        return vals.reduce(0, +) / Double(vals.count)
-    }
-
-    private var weekSessionCount: Int {
-        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-        return completedSessions.filter { $0.startedAt >= weekAgo }.count
+        return dict.sorted {
+            ($0.value.first?.startedAt ?? .distantPast) > ($1.value.first?.startedAt ?? .distantPast)
+        }
     }
 
     var body: some View {
@@ -68,21 +50,32 @@ struct HistoryView: View {
                 if completedSessions.isEmpty {
                     emptyState
                 } else {
-                    VStack(spacing: 0) {
-                        todaySummaryBar
-                        Divider()
-                        viewToggle
-                        switch viewMode {
-                        case .calendar:
-                            FluxCalendarView()
-                        case .list:
-                            sessionList
-                        }
+                    switch viewMode {
+                    case .list:
+                        sessionList
+                    case .calendar:
+                        FluxCalendarView()
                     }
                 }
             }
             .navigationTitle("历史")
-            .searchable(text: $searchText, prompt: "搜索记录")
+            .searchable(text: $searchText, prompt: "搜索")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("视图", selection: $viewMode) {
+                            ForEach(ViewMode.allCases, id: \.self) { mode in
+                                Label(mode == .list ? "列表" : "日历",
+                                      systemImage: mode.icon)
+                                .tag(mode)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: viewMode.icon)
+                            .font(.body)
+                    }
+                }
+            }
             .alert("导出失败", isPresented: $showExportError) {
                 Button("好") {}
             } message: {
@@ -91,75 +84,13 @@ struct HistoryView: View {
         }
     }
 
-    // MARK: - Today Summary
-
-    private var todaySummaryBar: some View {
-        HStack(spacing: 20) {
-            VStack(spacing: 2) {
-                Text("\(todaySessions.count)")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                Text("今日记录")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            Divider().frame(height: 30)
-
-            VStack(spacing: 2) {
-                Text("\(todayWorkMinutes)")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(.blue)
-                Text("工作分钟")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            Divider().frame(height: 30)
-
-            VStack(spacing: 2) {
-                Text("\(Int(todayAvgStamina))")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(todayAvgStamina >= 60 ? .green : .orange)
-                Text("平均专注")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            Divider().frame(height: 30)
-
-            VStack(spacing: 2) {
-                Text("\(weekSessionCount)")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundStyle(.purple)
-                Text("本周")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - View Toggle
-
-    private var viewToggle: some View {
-        Picker("视图", selection: $viewMode) {
-            ForEach(ViewMode.allCases, id: \.self) { mode in
-                Image(systemName: mode.icon).tag(mode)
-            }
-        }
-        .pickerStyle(.segmented)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-    }
-
     // MARK: - Empty
 
     private var emptyState: some View {
         ContentUnavailableView {
             Label("暂无记录", systemImage: "clock.arrow.circlepath")
         } description: {
-            Text("开始录制后，历史记录将显示在这里")
+            Text("开始录制后，记录将显示在这里")
         }
     }
 
@@ -168,7 +99,7 @@ struct HistoryView: View {
     private var sessionList: some View {
         List {
             ForEach(grouped, id: \.0) { dateStr, daySessions in
-                Section(dateStr) {
+                Section {
                     ForEach(daySessions) { session in
                         NavigationLink(destination: SessionDetailView(session: session)) {
                             SessionRow(session: session)
@@ -189,9 +120,12 @@ struct HistoryView: View {
                             .tint(.blue)
                         }
                     }
+                } header: {
+                    Text(dateStr)
                 }
             }
         }
+        .listStyle(.insetGrouped)
     }
 
     private func exportSession(_ session: Session) {
@@ -210,42 +144,64 @@ struct HistoryView: View {
 private struct SessionRow: View {
     let session: Session
 
+    private var timeRange: String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        let start = fmt.string(from: session.startedAt)
+        let end = fmt.string(from: session.startedAt.addingTimeInterval(session.duration))
+        return "\(start)–\(end)"
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(session.title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-
-                Spacer()
-
-                Label(session.source.displayName, systemImage: session.source.icon)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            // Stamina gauge
+            if let avg = session.avgStamina {
+                staminaIndicator(avg)
             }
 
-            HStack(spacing: 16) {
-                Label(Flux.formatDuration(session.duration), systemImage: "clock")
+            // Content
+            VStack(alignment: .leading, spacing: 3) {
+                Text(timeRange)
+                    .font(.subheadline.weight(.medium))
 
-                if let avg = session.avgStamina {
-                    Label("\(Int(avg))", systemImage: "gauge.with.dots.needle.67percent")
-                        .foregroundStyle(avg > 60 ? .green : avg > 30 ? .orange : .red)
-                }
+                HStack(spacing: 8) {
+                    Text(Flux.formatDuration(session.duration))
+                        .foregroundStyle(.secondary)
 
-                if let count = session.segmentCount, count > 0 {
-                    Label("\(count) 段", systemImage: "rectangle.split.1x2")
+                    if let count = session.segmentCount, count > 0 {
+                        Text("\(count) 段")
+                            .foregroundStyle(.secondary)
+                    }
                 }
-
-                if session.feedback != nil {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .font(.caption)
-                }
+                .font(.caption)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+
+            Spacer()
+
+            // Source icon
+            Image(systemName: session.source.icon)
+                .font(.caption)
+                .foregroundStyle(.quaternary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
+    }
+
+    private func staminaIndicator(_ avg: Double) -> some View {
+        let color: Color = avg > 60 ? .green : avg > 30 ? .orange : .red
+
+        return ZStack {
+            Circle()
+                .stroke(color.opacity(0.15), lineWidth: 3)
+                .frame(width: 36, height: 36)
+            Circle()
+                .trim(from: 0, to: avg / 100)
+                .stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .frame(width: 36, height: 36)
+
+            Text("\(Int(avg))")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(color)
+        }
     }
 }

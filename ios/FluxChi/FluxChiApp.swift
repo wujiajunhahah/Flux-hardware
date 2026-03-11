@@ -49,7 +49,6 @@ struct FluxChiApp: App {
                             liveActivityManager?.updateActivity(
                                 stamina: s.value,
                                 state: s.state,
-                                workMin: s.continuousWorkMin,
                                 activity: state.activity,
                                 consistency: s.consistency,
                                 tension: s.tension,

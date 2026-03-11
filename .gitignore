@@ -12,3 +12,6 @@ game/three-arena/
 ios/build/
 ios/FluxChi.xcodeproj/xcuserdata/
 *.xcuserstate
+*.p8
+*.env
+keys.*

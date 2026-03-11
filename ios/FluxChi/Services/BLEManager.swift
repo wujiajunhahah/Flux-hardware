@@ -2,19 +2,21 @@ import Foundation
 import CoreBluetooth
 import Combine
 
-@MainActor
-final class BLEManager: NSObject, ObservableObject {
-
-    // MARK: - BLE Constants
-
+// BLE constants extracted to a nonisolated enum so CBCentralManager / CBPeripheral
+// delegate callbacks (which run nonisolated) can reference them without crossing
+// the @MainActor boundary.  Fixes Swift 6 strict-concurrency diagnostics.
+private enum BLEConstants {
     static let serviceUUID   = CBUUID(string: "974CBE30-3E83-465E-ACDE-6F92FE712134")
     static let dataCharUUID  = CBUUID(string: "974CBE31-3E83-465E-ACDE-6F92FE712134")
     static let writeCharUUID = CBUUID(string: "974CBE32-3E83-465E-ACDE-6F92FE712134")
     static let devicePrefix  = "WL"
+    static let emgFlag: UInt8 = 0xAA
+    static let imuFlag: UInt8 = 0xBB
+    static let channelCount  = 6
+}
 
-    private static let emgFlag: UInt8 = 0xAA
-    private static let imuFlag: UInt8 = 0xBB
-    private static let bleChannelCount = 6
+@MainActor
+final class BLEManager: NSObject, ObservableObject {
 
     // MARK: - Published
 
@@ -94,10 +96,10 @@ final class BLEManager: NSObject, ObservableObject {
     // MARK: - EMG Parsing
 
     private func handleNotification(_ data: Data) {
-        guard data.count >= 20, data[0] == Self.emgFlag else { return }
+        guard data.count >= 20, data[0] == BLEConstants.emgFlag else { return }
 
         let payload = data.dropFirst(2)
-        let nCh = min(payload.count / 3, Self.bleChannelCount)
+        let nCh = min(payload.count / 3, BLEConstants.channelCount)
         activeChannelCount = nCh
 
         var values = [Double](repeating: 0, count: nCh)
@@ -194,7 +196,7 @@ extension BLEManager: CBCentralManagerDelegate {
         let name = peripheral.name
             ?? (advertisementData[CBAdvertisementDataLocalNameKey] as? String)
             ?? ""
-        guard name.uppercased().hasPrefix(Self.devicePrefix) else { return }
+        guard name.uppercased().hasPrefix(BLEConstants.devicePrefix) else { return }
         Task { @MainActor in
             if !self.discoveredDevices.contains(where: { $0.identifier == peripheral.identifier }) {
                 self.discoveredDevices.append(peripheral)
@@ -207,7 +209,7 @@ extension BLEManager: CBCentralManagerDelegate {
             self.peripheralState = .connected
             self.connectedDeviceName = peripheral.name ?? "WAVELETECH"
             peripheral.delegate = self
-            peripheral.discoverServices([Self.serviceUUID])
+            peripheral.discoverServices([BLEConstants.serviceUUID])
         }
     }
 
@@ -229,8 +231,8 @@ extension BLEManager: CBPeripheralDelegate {
 
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard let services = peripheral.services else { return }
-        for service in services where service.uuid == Self.serviceUUID {
-            peripheral.discoverCharacteristics([Self.dataCharUUID, Self.writeCharUUID], for: service)
+        for service in services where service.uuid == BLEConstants.serviceUUID {
+            peripheral.discoverCharacteristics([BLEConstants.dataCharUUID, BLEConstants.writeCharUUID], for: service)
         }
     }
 
@@ -240,7 +242,7 @@ extension BLEManager: CBPeripheralDelegate {
         error: Error?
     ) {
         guard let chars = service.characteristics else { return }
-        for char in chars where char.uuid == Self.dataCharUUID {
+        for char in chars where char.uuid == BLEConstants.dataCharUUID {
             Task { @MainActor in self.dataChar = char }
             peripheral.setNotifyValue(true, for: char)
         }
