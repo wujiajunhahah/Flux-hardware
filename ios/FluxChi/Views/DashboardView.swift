@@ -9,9 +9,20 @@ struct DashboardView: View {
     @EnvironmentObject var liveActivityManager: LiveActivityManager
     @Environment(\.modelContext) private var modelContext
 
+    // 只查今日已完成的 session，避免加载全部历史
+    @Query private var todaySessions: [Session]
+
     @State private var showSegmentPicker = false
     @State private var showFeedback = false
     @State private var finishedSession: Session?
+
+    init() {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        let predicate = #Predicate<Session> { session in
+            session.startedAt >= startOfDay && session.endedAt != nil
+        }
+        _todaySessions = Query(filter: predicate, sort: \Session.startedAt, order: .reverse)
+    }
 
     private var stamina: StaminaData? { service.state?.stamina }
     private var decision: DecisionData? { service.state?.decision }
@@ -21,22 +32,43 @@ struct DashboardView: View {
     }
     private var isLive: Bool { service.isConnected || bleManager.isConnected }
 
+    // MARK: - Body
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 20) {
                     if !isLive { connectionBanner }
-                    staminaSection
+
+                    StaminaRingView(value: staminaValue, state: staminaState)
+                        .drawingGroup() // GPU 离屏渲染，避免 AngularGradient 每帧重算
+                        .padding(.vertical, 4)
+
                     if sessionManager.isRecording { recordingBar }
+
                     recommendationCard
-                    dimensionsRow
-                    statsRow
+
+                    // 提取为独立 struct，stamina 不变时不重绘
+                    DimensionsRow(
+                        consistency: stamina?.consistency ?? 0,
+                        tension: stamina?.tension ?? 0,
+                        fatigue: stamina?.fatigue ?? 0
+                    )
+
+                    TodaySummaryCard(
+                        sessions: todaySessions,
+                        decision: decision,
+                        staminaState: staminaState,
+                        suggestedBreakMin: stamina?.suggestedBreakMin ?? 0,
+                        suggestedWorkMin: stamina?.suggestedWorkMin ?? 0
+                    )
+
                     emgSection
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 80)
             }
-            .navigationTitle("FluxChi")
+            .navigationTitle("FocuX")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -74,25 +106,24 @@ struct DashboardView: View {
         .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
     }
 
-    // MARK: - Stamina Ring
-
-    private var staminaSection: some View {
-        StaminaRingView(value: staminaValue, state: staminaState)
-            .padding(.vertical, 4)
-    }
-
     // MARK: - Recommendation
 
     @ViewBuilder
     private var recommendationCard: some View {
         if let d = decision {
             let rec = Recommendation(rawValue: d.recommendation) ?? .keepWorking
-            HStack(spacing: 12) {
-                Image(systemName: rec.systemImage)
-                    .font(.title2)
-                    .foregroundStyle(Flux.Colors.forUrgency(d.urgency))
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(width: 40)
+            let urgencyColor = Flux.Colors.forUrgency(d.urgency)
+
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(urgencyColor.opacity(0.12))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: rec.systemImage)
+                        .font(.title3)
+                        .foregroundStyle(urgencyColor)
+                        .symbolRenderingMode(.hierarchical)
+                }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(rec.displayName)
@@ -111,101 +142,6 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Dimensions (3 pill cards with animated progress)
-
-    private var dimensionsRow: some View {
-        HStack(spacing: 10) {
-            dimensionCard(
-                "一致性",
-                value: stamina?.consistency ?? 0,
-                icon: "waveform.path",
-                tint: .blue,
-                description: "信号稳定度"
-            )
-            dimensionCard(
-                "紧张度",
-                value: stamina?.tension ?? 0,
-                icon: "arrow.up.right",
-                tint: .orange,
-                description: "肌肉张力"
-            )
-            dimensionCard(
-                "疲劳度",
-                value: stamina?.fatigue ?? 0,
-                icon: "flame",
-                tint: .red,
-                description: "频谱衰减"
-            )
-        }
-    }
-
-    private func dimensionCard(_ title: String, value: Double, icon: String,
-                               tint: Color, description: String) -> some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .stroke(tint.opacity(0.15), lineWidth: 4)
-                    .frame(width: 44, height: 44)
-                Circle()
-                    .trim(from: 0, to: max(0.02, value))
-                    .stroke(tint.gradient, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: 44, height: 44)
-                    .animation(.easeOut(duration: 0.3), value: value)
-
-                Text("\(Int(value * 100))")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .contentTransition(.numericText(value: value))
-            }
-
-            Text(title)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            Text(description)
-                .font(.system(size: 8))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity)
-        .background(.regularMaterial, in: .rect(cornerRadius: 16))
-    }
-
-    // MARK: - Stats
-
-    private var statsRow: some View {
-        HStack(spacing: 0) {
-            compactStat(
-                formatMin(decision?.continuousWorkMin ?? 0),
-                "本次", "timer"
-            )
-            Divider().frame(height: 32)
-            compactStat(
-                formatMin(decision?.totalWorkMin ?? 0),
-                "累计", "clock.fill"
-            )
-            Divider().frame(height: 32)
-            compactStat(
-                formatMin(staminaState == .recovering
-                    ? (stamina?.suggestedBreakMin ?? 0)
-                    : (stamina?.suggestedWorkMin ?? 0)),
-                staminaState == .recovering ? "休息" : "专注",
-                staminaState == .recovering ? "moon.fill" : "bolt.fill"
-            )
-        }
-        .padding(.vertical, 10)
-        .background(.regularMaterial, in: .rect(cornerRadius: 16))
-    }
-
-    private func compactStat(_ value: String, _ label: String, _ icon: String) -> some View {
-        VStack(spacing: 3) {
-            Image(systemName: icon).font(.caption2).foregroundStyle(.secondary)
-            Text(value).font(.title3.weight(.bold).monospacedDigit())
-            Text(label).font(.system(size: 9)).foregroundStyle(.secondary).tracking(0.5)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
     // MARK: - EMG
 
     @ViewBuilder
@@ -214,8 +150,9 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 8) {
                 FluxSectionLabel(title: "EMG", icon: "waveform")
                 FluxEMGBars(rms: rms, height: 50)
+                    .drawingGroup()
                     .padding(12)
-                    .background(.regularMaterial, in: .rect(cornerRadius: 16))
+                    .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
             }
         }
     }
@@ -295,11 +232,156 @@ struct DashboardView: View {
         .padding(12)
         .background(.red.opacity(0.06), in: .rect(cornerRadius: 16))
     }
+}
 
-    // MARK: - Helpers
+// MARK: - Dimensions Row (独立 struct，只在 value 变化时重绘)
 
-    private func formatMin(_ m: Double) -> String {
-        m < 1 ? "<1" : "\(Int(m))"
+private struct DimensionsRow: View, Equatable {
+    let consistency: Double
+    let tension: Double
+    let fatigue: Double
+
+    var body: some View {
+        HStack(spacing: 12) {
+            dimensionGauge("一致性", value: consistency, icon: "waveform.path", tint: .blue)
+            dimensionGauge("紧张度", value: tension, icon: "arrow.up.right", tint: .orange)
+            dimensionGauge("疲劳度", value: fatigue, icon: "flame", tint: .red)
+        }
+    }
+
+    private func dimensionGauge(_ title: String, value: Double, icon: String, tint: Color) -> some View {
+        VStack(spacing: 10) {
+            Gauge(value: value) {
+                Image(systemName: icon)
+                    .font(.caption2)
+            } currentValueLabel: {
+                Text("\(Int(value * 100))")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+            }
+            .gaugeStyle(.accessoryCircular)
+            .tint(Gradient(colors: [tint.opacity(0.5), tint]))
+            .scaleEffect(1.15)
+
+            Text(title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+    }
+}
+
+// MARK: - Today Summary Card (独立 struct，只在 sessions 变化时重绘)
+
+private struct TodaySummaryCard: View {
+    let sessions: [Session]
+    let decision: DecisionData?
+    let staminaState: StaminaState
+    let suggestedBreakMin: Double
+    let suggestedWorkMin: Double
+
+    private var totalMinutes: Int {
+        Int(sessions.reduce(0) { $0 + $1.duration } / 60)
+    }
+
+    private var avgStamina: Double {
+        let vals = sessions.compactMap(\.avgStamina)
+        guard !vals.isEmpty else { return 0 }
+        return vals.reduce(0, +) / Double(vals.count)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("今日概览", systemImage: "chart.bar.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            HStack(spacing: 0) {
+                statCell(
+                    value: "\(sessions.count)",
+                    label: "场次",
+                    icon: "flame.fill",
+                    tint: .orange
+                )
+                statCell(
+                    value: totalMinutes > 0 ? "\(totalMinutes)m" : "—",
+                    label: "总时长",
+                    icon: "clock.fill",
+                    tint: .blue
+                )
+                statCell(
+                    value: avgStamina > 0 ? "\(Int(avgStamina))" : "—",
+                    label: "平均续航",
+                    icon: "heart.fill",
+                    tint: .red
+                )
+            }
+
+            if let d = decision {
+                HStack(spacing: 16) {
+                    progressBar(
+                        current: d.continuousWorkMin,
+                        label: "本次专注",
+                        icon: "timer",
+                        tint: .green
+                    )
+                    progressBar(
+                        current: d.totalWorkMin,
+                        label: "今日累计",
+                        icon: "hourglass",
+                        tint: .blue
+                    )
+                }
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+    }
+
+    private func statCell(value: String, label: String, icon: String, tint: Color) -> some View {
+        VStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.1))
+                    .frame(width: 32, height: 32)
+                Image(systemName: icon)
+                    .font(.system(size: 13))
+                    .foregroundStyle(tint)
+            }
+
+            Text(value)
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func progressBar(current: Double, label: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(tint)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(label)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(current < 1 ? "<1 min" : "\(Int(current)) min")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                }
+
+                ProgressView(value: min(current / 60, 1))
+                    .tint(tint)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 

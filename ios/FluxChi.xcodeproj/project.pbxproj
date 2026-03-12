@@ -32,6 +32,7 @@
 		A9EBB5B316A867AB2285ABE3 /* FluxComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E24A0B2A711EEB09198CB250 /* FluxComponents.swift */; };
 		AA000001ASSETS000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA000002ASSETS000000000002 /* Assets.xcassets */; };
 		AA704822512F0A9E50C8DE25 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A322440B9C6FD9D20D692178 /* SessionManager.swift */; };
+		98715CFCB06548609E6CC8B4 /* PerformanceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFD3DAA5383747EB87C2DD20 /* PerformanceMonitor.swift */; };
 		BE91CA074125C5C5DF3E6233 /* RecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1E2E60D7D16A91E3045405 /* RecorderView.swift */; };
 		C88E9A5407EC978105B036F9 /* StaminaRingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E528776B3F3519BE71383DDE /* StaminaRingView.swift */; };
 		CF1C870298895E3CC7746B39 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFE9F1742177A39AF876CD42 /* CalendarView.swift */; };
@@ -90,6 +91,7 @@
 		9992B47B1D2369E9BB080354 /* SessionChartsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionChartsView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F6A7B8C9D0E1F2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A322440B9C6FD9D20D692178 /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
+		DFD3DAA5383747EB87C2DD20 /* PerformanceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceMonitor.swift; sourceTree = "<group>"; };
 		AA000002ASSETS000000000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AFE9F1742177A39AF876CD42 /* CalendarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
 		B304D5891CBDFF2564CBBE02 /* FeedbackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackView.swift; sourceTree = "<group>"; };
@@ -217,6 +219,7 @@
 				74753401A3431315E6EED0CE /* OnDeviceStaminaEngine.swift */,
 				5B14342F8A691567B25C488F /* PersonalizationManager.swift */,
 				A322440B9C6FD9D20D692178 /* SessionManager.swift */,
+				DFD3DAA5383747EB87C2DD20 /* PerformanceMonitor.swift */,
 				CF9F63942587BE4E4AB46CDE /* SummaryEngine.swift */,
 				7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */,
 				DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */,
@@ -378,6 +381,7 @@
 				353B5A96BB85286952CF2A1A /* Session.swift in Sources */,
 				701071DF158BF888B11A340A /* SessionDetailView.swift in Sources */,
 				AA704822512F0A9E50C8DE25 /* SessionManager.swift in Sources */,
+				98715CFCB06548609E6CC8B4 /* PerformanceMonitor.swift in Sources */,
 				32C85255E54CE8BBA79891B9 /* SettingsView.swift in Sources */,
 				C88E9A5407EC978105B036F9 /* StaminaRingView.swift in Sources */,
 				20258A5445FFADF89345BB8C /* SummaryEngine.swift in Sources */,

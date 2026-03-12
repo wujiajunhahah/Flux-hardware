@@ -10,19 +10,13 @@ struct FluxChiApp: App {
     @StateObject private var alertManager = AlertManager()
     @StateObject private var liveActivityManager = LiveActivityManager()
 
+    init() {
+        PerformanceMonitor.shared.markAppInit()
+    }
+
     var body: some Scene {
         WindowGroup {
-            TabView {
-                DashboardView()
-                    .tabItem { Image(systemName: "waveform") }
-
-                HistoryView()
-                    .tabItem { Image(systemName: "clock.arrow.circlepath") }
-
-                SettingsView()
-                    .tabItem { Image(systemName: "gearshape") }
-            }
-            .tint(.red)
+            mainTabView
             .environmentObject(service)
             .environmentObject(bleManager)
             .environmentObject(sessionManager)
@@ -30,6 +24,7 @@ struct FluxChiApp: App {
             .environmentObject(alertManager)
             .environmentObject(liveActivityManager)
             .onAppear {
+                PerformanceMonitor.shared.markFirstFrame()
                 service.startPolling()
                 alertManager.requestPermission()
 
@@ -71,5 +66,48 @@ struct FluxChiApp: App {
         .modelContainer(for: [
             Session.self, Segment.self, FluxSnapshot.self, UserFeedback.self
         ])
+    }
+
+    // MARK: - Tab View (iOS 18+ Tab API + iOS 26 minimize)
+
+    @ViewBuilder
+    private var mainTabView: some View {
+        if #available(iOS 18.0, *) {
+            TabView {
+                Tab("仪表盘", systemImage: "waveform") {
+                    DashboardView()
+                }
+                Tab("历史", systemImage: "clock.arrow.circlepath") {
+                    HistoryView()
+                }
+                Tab("设置", systemImage: "gearshape") {
+                    SettingsView()
+                }
+            }
+            .tint(.red)
+            .modifier(TabBarMinimizeModifier())
+        } else {
+            TabView {
+                DashboardView()
+                    .tabItem { Label("仪表盘", systemImage: "waveform") }
+                HistoryView()
+                    .tabItem { Label("历史", systemImage: "clock.arrow.circlepath") }
+                SettingsView()
+                    .tabItem { Label("设置", systemImage: "gearshape") }
+            }
+            .tint(.red)
+        }
+    }
+}
+
+// MARK: - iOS 26+ TabBar Minimize Modifier
+
+private struct TabBarMinimizeModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            content
+        }
     }
 }

@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject var service: FluxService
     @EnvironmentObject var bleManager: BLEManager
     @EnvironmentObject var personalization: PersonalizationManager
+    @ObservedObject private var perfMonitor = PerformanceMonitor.shared
 
     @State private var editHost: String = ""
     @State private var editPort: String = ""
@@ -20,6 +21,7 @@ struct SettingsView: View {
                 statusSection
                 personalizationSection
                 controlSection
+                performanceSection
                 aboutSection
             }
             .navigationTitle("设置")
@@ -268,6 +270,82 @@ struct SettingsView: View {
             } label: {
                 Label("保存状态", systemImage: "square.and.arrow.down")
             }
+        }
+    }
+
+    // MARK: - Performance
+
+    private var performanceSection: some View {
+        Section {
+            let pm = perfMonitor
+
+            // 启动耗时
+            HStack {
+                Image(systemName: "bolt.fill")
+                    .foregroundStyle(.green)
+                    .frame(width: 20)
+                Text("启动耗时")
+                Spacer()
+                Text(pm.launchDurationMs > 0 ? "\(pm.launchDurationMs) ms" : "—")
+                    .font(Flux.Typography.mono)
+                    .foregroundStyle(.secondary)
+            }
+
+            // 实时帧率
+            HStack {
+                Image(systemName: "gauge.with.dots.needle.67percent")
+                    .foregroundStyle(pm.fps >= 50 ? .green : pm.fps >= 30 ? .orange : .red)
+                    .frame(width: 20)
+                Text("帧率")
+                Spacer()
+                Text(pm.isMonitoring ? "\(pm.fps) FPS" : "未启动")
+                    .font(Flux.Typography.mono)
+                    .foregroundStyle(.secondary)
+            }
+
+            // 掉帧
+            if pm.isMonitoring {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(pm.droppedFrames > 10 ? .red : .secondary)
+                        .frame(width: 20)
+                    Text("掉帧")
+                    Spacer()
+                    Text("\(pm.droppedFrames)")
+                        .font(Flux.Typography.mono)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // 内存
+            HStack {
+                Image(systemName: "memorychip")
+                    .foregroundStyle(.blue)
+                    .frame(width: 20)
+                Text("内存")
+                Spacer()
+                Text(pm.memoryMB > 0 ? String(format: "%.1f MB", pm.memoryMB) : "—")
+                    .font(Flux.Typography.mono)
+                    .foregroundStyle(.secondary)
+            }
+
+            // 开关
+            Button {
+                if pm.isMonitoring {
+                    pm.stopMonitoring()
+                } else {
+                    pm.startMonitoring()
+                }
+            } label: {
+                Label(
+                    pm.isMonitoring ? "停止监测" : "开始监测",
+                    systemImage: pm.isMonitoring ? "stop.circle" : "play.circle"
+                )
+            }
+        } header: {
+            Text("性能监测")
+        } footer: {
+            Text("启动耗时 = 进程创建到首帧渲染；帧率监测使用 CADisplayLink")
         }
     }
 
