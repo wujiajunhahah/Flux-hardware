@@ -178,6 +178,13 @@ private struct SessionRow: View {
 
             Spacer()
 
+            // 待反馈红点
+            if session.feedback == nil {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 8, height: 8)
+            }
+
             // Source icon
             Image(systemName: session.source.icon)
                 .font(.caption)

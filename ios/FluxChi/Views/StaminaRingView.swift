@@ -3,8 +3,13 @@ import SwiftUI
 struct StaminaRingView: View {
     let value: Double
     let state: StaminaState
+    var size: CGFloat = 200
 
     private var progress: Double { min(max(value / 100, 0), 1) }
+    private var ringWidth: CGFloat { size * 0.05 }
+    private var ringDiameter: CGFloat { size * 0.85 }
+    private var bgDiameter: CGFloat { size * 0.95 }
+    private var numberSize: CGFloat { size * 0.26 }
 
     private var ringColor: Color {
         switch state {
@@ -18,12 +23,12 @@ struct StaminaRingView: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(.ultraThinMaterial)
-                .frame(width: 190, height: 190)
+                .fill(Color(.systemBackground).opacity(0.6))
+                .frame(width: bgDiameter, height: bgDiameter)
 
             Circle()
-                .stroke(Color.primary.opacity(0.06), lineWidth: 10)
-                .frame(width: 170, height: 170)
+                .stroke(Color.primary.opacity(0.06), lineWidth: ringWidth)
+                .frame(width: ringDiameter, height: ringDiameter)
 
             Circle()
                 .trim(from: 0, to: progress)
@@ -34,36 +39,36 @@ struct StaminaRingView: View {
                         startAngle: .degrees(-90),
                         endAngle: .degrees(-90 + 360 * progress)
                     ),
-                    style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                    style: StrokeStyle(lineWidth: ringWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .frame(width: 170, height: 170)
+                .frame(width: ringDiameter, height: ringDiameter)
                 .shadow(color: ringColor.opacity(0.35), radius: 10, y: 2)
                 .animation(.spring(duration: 0.8), value: progress)
 
             VStack(spacing: 2) {
                 Text("\(Int(value))")
-                    .font(.system(size: 52, weight: .bold, design: .rounded))
+                    .font(.system(size: numberSize, weight: .bold, design: .rounded))
                     .foregroundStyle(.primary)
                     .contentTransition(.numericText(value: value))
                     .animation(.easeInOut, value: Int(value))
 
                 Text("STAMINA")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.system(size: size * 0.045, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .tracking(3)
 
                 HStack(spacing: 4) {
                     Image(systemName: state.systemImage)
-                        .font(.system(size: 11))
+                        .font(.system(size: size * 0.055))
                     Text(state.displayName)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: size * 0.06, weight: .semibold))
                 }
                 .foregroundStyle(ringColor)
                 .padding(.top, 4)
             }
         }
-        .frame(width: 200, height: 200)
+        .frame(width: size, height: size)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("续航值 \(Int(value))%，状态 \(state.displayName)")
     }

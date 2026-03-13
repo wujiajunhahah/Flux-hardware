@@ -9,6 +9,15 @@ final class FluxService: ObservableObject {
     @Published var isConnected = false
     @Published var connectionError: String?
 
+    /// 个性化管理器引用，由 App 层注入
+    weak var personalization: PersonalizationManager?
+
+    /// 经过个性化校准的 stamina 值
+    var personalizedStaminaValue: Double {
+        guard let raw = state?.stamina?.value else { return 0 }
+        return personalization?.personalizedStamina(raw) ?? raw
+    }
+
     var baseURL: URL {
         URL(string: "http://\(host):\(port)")!
     }

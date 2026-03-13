@@ -20,6 +20,7 @@ struct SettingsView: View {
                 serverSection
                 statusSection
                 personalizationSection
+                geekDataSection
                 controlSection
                 performanceSection
                 aboutSection
@@ -244,6 +245,33 @@ struct SettingsView: View {
             Text("个性化")
         } footer: {
             Text("每次记录反馈后，模型会自动学习你的个人特征")
+        }
+    }
+
+    // MARK: - Geek Data
+
+    private var geekDataSection: some View {
+        Section {
+            NavigationLink {
+                GeekDataPanel()
+                    .environmentObject(service)
+                    .environmentObject(bleManager)
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("极客数据面板")
+                            .fontWeight(.medium)
+                        Text("EMG 原始信号、RMS 可视化")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "waveform.path.ecg.rectangle")
+                        .foregroundStyle(Color(.systemIndigo))
+                }
+            }
+        } header: {
+            Text("数据")
         }
     }
 

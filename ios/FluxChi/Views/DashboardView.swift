@@ -9,11 +9,13 @@ struct DashboardView: View {
     @EnvironmentObject var liveActivityManager: LiveActivityManager
     @Environment(\.modelContext) private var modelContext
 
-    // 只查今日已完成的 session，避免加载全部历史
     @Query private var todaySessions: [Session]
 
     @State private var showSegmentPicker = false
     @State private var showFeedback = false
+    @State private var showSummary = false
+    @State private var showActiveSession = false
+    @State private var showCalibrationAlert = false
     @State private var finishedSession: Session?
 
     init() {
@@ -26,11 +28,21 @@ struct DashboardView: View {
 
     private var stamina: StaminaData? { service.state?.stamina }
     private var decision: DecisionData? { service.state?.decision }
-    private var staminaValue: Double { stamina?.value ?? 0 }
+    private var staminaValue: Double { service.personalizedStaminaValue }
     private var staminaState: StaminaState {
         StaminaState(rawValue: stamina?.state ?? "focused") ?? .focused
     }
     private var isLive: Bool { service.isConnected || bleManager.isConnected }
+
+    private var isCalibratedToday: Bool {
+        let last = UserDefaults.standard.double(forKey: "flux_last_calibration")
+        guard last > 0 else { return false }
+        return Calendar.current.isDateInToday(Date(timeIntervalSince1970: last))
+    }
+
+    @State private var isCalibrating = false
+    @State private var calibrationProgress: CGFloat = 0
+    @State private var calibrationTimer: Timer?
 
     // MARK: - Body
 
@@ -40,11 +52,19 @@ struct DashboardView: View {
                 VStack(spacing: 20) {
                     if !isLive { connectionBanner }
 
+                    if isLive && !isCalibratedToday {
+                        calibrationBanner
+                    }
+
                     StaminaRingView(value: staminaValue, state: staminaState)
                         .drawingGroup() // GPU 离屏渲染，避免 AngularGradient 每帧重算
                         .padding(.vertical, 4)
 
-                    if sessionManager.isRecording { recordingBar }
+                    if sessionManager.isRecording {
+                        recordingBar
+                    } else {
+                        startFocusButton
+                    }
 
                     recommendationCard
 
@@ -55,15 +75,9 @@ struct DashboardView: View {
                         fatigue: stamina?.fatigue ?? 0
                     )
 
-                    TodaySummaryCard(
-                        sessions: todaySessions,
-                        decision: decision,
-                        staminaState: staminaState,
-                        suggestedBreakMin: stamina?.suggestedBreakMin ?? 0,
-                        suggestedWorkMin: stamina?.suggestedWorkMin ?? 0
-                    )
-
-                    emgSection
+                    if !todaySessions.isEmpty {
+                        todaySummaryCard
+                    }
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 80)
@@ -82,8 +96,114 @@ struct DashboardView: View {
                     stateProvider: { [weak service] in service?.state }
                 )
             }
+            .onReceive(NotificationCenter.default.publisher(for: FluxChiApp.showActiveSessionNotification)) { _ in
+                if sessionManager.isRecording && !showActiveSession {
+                    showActiveSession = true
+                }
+            }
             .sheet(isPresented: $showFeedback) {
                 if let s = finishedSession { FeedbackView(session: s) }
+            }
+            .sheet(isPresented: $showSummary) {
+                if let s = finishedSession { SessionSummarySheet(session: s) }
+            }
+            .fullScreenCover(isPresented: $showActiveSession) {
+                ActiveSessionView { completedSession in
+                    finishedSession = completedSession
+                }
+            }
+            .onChange(of: showActiveSession) { _, isShowing in
+                // ActiveSessionView dismiss 后，弹出 SessionSummarySheet
+                if !isShowing, finishedSession != nil {
+                    // 短延迟确保 fullScreenCover 完全消失后再弹 sheet
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        showSummary = true
+                    }
+                }
+            }
+            .alert("今日未校准", isPresented: $showCalibrationAlert) {
+                Button("先去校准") {
+                    startDailyCalibration()
+                }
+                Button("跳过，直接开始") {
+                    beginFocusSession()
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("校准可提高续航值的准确度。建议每天首次专注前完成校准。")
+            }
+        }
+    }
+
+    // MARK: - Calibration Banner
+
+    @ViewBuilder
+    private var calibrationBanner: some View {
+        if isCalibrating {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.green.opacity(0.2), lineWidth: 3)
+                        .frame(width: 32, height: 32)
+                    Circle()
+                        .trim(from: 0, to: calibrationProgress)
+                        .stroke(Color.green, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 32, height: 32)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("校准中…请放松手臂")
+                        .font(.subheadline.weight(.medium))
+                    Text("保持自然姿势 10 秒")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(12)
+            .background(Color.green.opacity(0.08), in: .rect(cornerRadius: 16))
+        } else {
+            HStack(spacing: 10) {
+                Image(systemName: "tuningfork")
+                    .foregroundStyle(Color(.systemTeal))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("今日未校准")
+                        .font(.subheadline.weight(.medium))
+                    Text("校准可提高续航值准确度")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("去校准") {
+                    startDailyCalibration()
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color(.systemTeal), in: Capsule())
+            }
+            .padding(12)
+            .background(Color(.systemTeal).opacity(0.08), in: .rect(cornerRadius: 16))
+        }
+    }
+
+    private func startDailyCalibration() {
+        isCalibrating = true
+        calibrationProgress = 0
+
+        calibrationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
+            Task { @MainActor in
+                calibrationProgress += 0.01
+                if calibrationProgress >= 1.0 {
+                    timer.invalidate()
+                    calibrationTimer = nil
+                    isCalibrating = false
+                    UserDefaults.standard.set(
+                        Date().timeIntervalSince1970,
+                        forKey: "flux_last_calibration"
+                    )
+                }
             }
         }
     }
@@ -142,21 +262,6 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - EMG
-
-    @ViewBuilder
-    private var emgSection: some View {
-        if let rms = service.state?.rms, !rms.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                FluxSectionLabel(title: "EMG", icon: "waveform")
-                FluxEMGBars(rms: rms, height: 50)
-                    .drawingGroup()
-                    .padding(12)
-                    .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
-            }
-        }
-    }
-
     // MARK: - Recording
 
     private var recordButton: some View {
@@ -168,7 +273,7 @@ struct DashboardView: View {
                     SummaryEngine.apply(summary, to: session)
                     try? modelContext.save()
                     finishedSession = session
-                    showFeedback = true
+                    showSummary = true
                 }
             } else {
                 let source: SessionSource = bleManager.isConnected ? .ble : .wifi
@@ -187,6 +292,114 @@ struct DashboardView: View {
                 .symbolEffect(.pulse, isActive: sessionManager.isRecording)
         }
         .disabled(!isLive && !sessionManager.isRecording)
+    }
+
+    // MARK: - Start Focus
+
+    private func beginFocusSession() {
+        let source: SessionSource = bleManager.isConnected ? .ble : .wifi
+        sessionManager.startSession(source: source)
+
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.dateFormat = "HH:mm"
+        liveActivityManager.startActivity(title: "专注中 · \(fmt.string(from: Date()))")
+
+        showActiveSession = true
+    }
+
+    private var startFocusButton: some View {
+        Button {
+            // 校准二次检查
+            if !isCalibratedToday {
+                showCalibrationAlert = true
+            } else {
+                beginFocusSession()
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "brain.head.profile")
+                    .font(.title2)
+                Text("开始专注")
+                    .font(.headline)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Flux.Colors.accent.gradient, in: RoundedRectangle(cornerRadius: Flux.Radius.large))
+            .foregroundStyle(.white)
+        }
+        .disabled(!isLive)
+        .opacity(isLive ? 1.0 : 0.5)
+    }
+
+    // MARK: - Today Summary (重设计：紧凑横排 + 进度条)
+
+    private var todaySummaryCard: some View {
+        let totalMin = Int(todaySessions.reduce(0) { $0 + $1.duration } / 60)
+        let avgVals = todaySessions.compactMap(\.avgStamina)
+        let avgStamina = avgVals.isEmpty ? 0.0 : avgVals.reduce(0, +) / Double(avgVals.count)
+        let unfeedbackCount = todaySessions.filter { $0.feedback == nil }.count
+
+        return VStack(alignment: .leading, spacing: 12) {
+            // 标题行
+            HStack {
+                Label("今日", systemImage: "chart.bar.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if unfeedbackCount > 0 {
+                    Text("\(unfeedbackCount) 条待反馈")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            // 指标行：三个紧凑数据
+            HStack(spacing: 0) {
+                summaryMetric("\(todaySessions.count)", "场次", Color(.systemOrange))
+                dividerLine
+                summaryMetric(totalMin > 0 ? "\(totalMin)m" : "—", "时长", Color(.systemTeal))
+                dividerLine
+                summaryMetric(avgStamina > 0 ? "\(Int(avgStamina))" : "—", "续航", Color(.systemPink))
+            }
+
+            // 今日累计进度条（目标 4 小时）
+            if totalMin > 0 {
+                VStack(spacing: 4) {
+                    ProgressView(value: min(Double(totalMin) / 240.0, 1.0))
+                        .tint(Color(.systemTeal))
+                    HStack {
+                        Text("今日累计")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                        Spacer()
+                        Text("\(totalMin) / 240 min")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
+    }
+
+    private func summaryMetric(_ value: String, _ label: String, _ tint: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundStyle(tint)
+            Text(label)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var dividerLine: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.06))
+            .frame(width: 1, height: 28)
     }
 
     @ViewBuilder
@@ -243,9 +456,9 @@ private struct DimensionsRow: View, Equatable {
 
     var body: some View {
         HStack(spacing: 12) {
-            dimensionGauge("一致性", value: consistency, icon: "waveform.path", tint: .blue)
-            dimensionGauge("紧张度", value: tension, icon: "arrow.up.right", tint: .orange)
-            dimensionGauge("疲劳度", value: fatigue, icon: "flame", tint: .red)
+            dimensionGauge("一致性", value: consistency, icon: "waveform.path", tint: Color(.systemTeal))
+            dimensionGauge("紧张度", value: tension, icon: "arrow.up.right", tint: Color(.systemOrange).opacity(0.75))
+            dimensionGauge("疲劳度", value: fatigue, icon: "flame", tint: Color(.systemPink).opacity(0.75))
         }
     }
 
@@ -259,7 +472,7 @@ private struct DimensionsRow: View, Equatable {
                     .font(.system(size: 14, weight: .bold, design: .rounded))
             }
             .gaugeStyle(.accessoryCircular)
-            .tint(Gradient(colors: [tint.opacity(0.5), tint]))
+            .tint(Gradient(colors: [tint.opacity(0.35), tint]))
             .scaleEffect(1.15)
 
             Text(title)
@@ -269,119 +482,6 @@ private struct DimensionsRow: View, Equatable {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
         .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
-    }
-}
-
-// MARK: - Today Summary Card (独立 struct，只在 sessions 变化时重绘)
-
-private struct TodaySummaryCard: View {
-    let sessions: [Session]
-    let decision: DecisionData?
-    let staminaState: StaminaState
-    let suggestedBreakMin: Double
-    let suggestedWorkMin: Double
-
-    private var totalMinutes: Int {
-        Int(sessions.reduce(0) { $0 + $1.duration } / 60)
-    }
-
-    private var avgStamina: Double {
-        let vals = sessions.compactMap(\.avgStamina)
-        guard !vals.isEmpty else { return 0 }
-        return vals.reduce(0, +) / Double(vals.count)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label("今日概览", systemImage: "chart.bar.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-
-            HStack(spacing: 0) {
-                statCell(
-                    value: "\(sessions.count)",
-                    label: "场次",
-                    icon: "flame.fill",
-                    tint: .orange
-                )
-                statCell(
-                    value: totalMinutes > 0 ? "\(totalMinutes)m" : "—",
-                    label: "总时长",
-                    icon: "clock.fill",
-                    tint: .blue
-                )
-                statCell(
-                    value: avgStamina > 0 ? "\(Int(avgStamina))" : "—",
-                    label: "平均续航",
-                    icon: "heart.fill",
-                    tint: .red
-                )
-            }
-
-            if let d = decision {
-                HStack(spacing: 16) {
-                    progressBar(
-                        current: d.continuousWorkMin,
-                        label: "本次专注",
-                        icon: "timer",
-                        tint: .green
-                    )
-                    progressBar(
-                        current: d.totalWorkMin,
-                        label: "今日累计",
-                        icon: "hourglass",
-                        tint: .blue
-                    )
-                }
-            }
-        }
-        .padding(16)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
-    }
-
-    private func statCell(value: String, label: String, icon: String, tint: Color) -> some View {
-        VStack(spacing: 6) {
-            ZStack {
-                Circle()
-                    .fill(tint.opacity(0.1))
-                    .frame(width: 32, height: 32)
-                Image(systemName: icon)
-                    .font(.system(size: 13))
-                    .foregroundStyle(tint)
-            }
-
-            Text(value)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func progressBar(current: Double, label: String, icon: String, tint: Color) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(tint)
-                .frame(width: 20)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(label)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(current < 1 ? "<1 min" : "\(Int(current)) min")
-                        .font(.caption.weight(.semibold).monospacedDigit())
-                }
-
-                ProgressView(value: min(current / 60, 1))
-                    .tint(tint)
-            }
-        }
-        .frame(maxWidth: .infinity)
     }
 }
 

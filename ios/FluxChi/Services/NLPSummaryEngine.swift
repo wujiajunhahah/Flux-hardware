@@ -1,11 +1,27 @@
 import Foundation
 import SwiftUI
 
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
 @available(iOS 26.0, *)
 final class NLPSummaryEngine {
 
     static let shared = NLPSummaryEngine()
 
+    /// 检查端侧模型是否可用
+    var isAvailable: Bool {
+        #if canImport(FoundationModels)
+        return SystemLanguageModel.default.isAvailable
+        #else
+        return false
+        #endif
+    }
+
+    // MARK: - Public API
+
+    /// 为 session 生成 AI 摘要（优先端侧 LLM，降级为模板）
     func generateSummary(for session: Session) async -> String {
         let stats = extractStats(session)
         let prompt = buildPrompt(stats)
@@ -16,24 +32,45 @@ final class NLPSummaryEngine {
         return fallbackSummary(stats)
     }
 
+    /// 为 session 生成 AI 建议（单独调用，用于 SessionSummarySheet）
+    func generateAdvice(for session: Session) async -> String? {
+        let stats = extractStats(session)
+        let prompt = buildAdvicePrompt(stats)
+        return await tryFoundationModels(prompt: prompt)
+    }
+
     // MARK: - Foundation Models (on-device LLM)
 
     private func tryFoundationModels(prompt: String) async -> String? {
         #if canImport(FoundationModels)
+        guard SystemLanguageModel.default.isAvailable else {
+            print("[NLP] Foundation Models not available on this device")
+            return nil
+        }
         do {
-            return try await invokeFoundationModel(prompt: prompt)
+            let instructions = """
+            你是 FocuX 的专注力教练 —— 一个基于 EMG 生物信号的智能健康伴侣。
+            你的角色是温暖、专业、有洞察力的伙伴，像一个了解身体数据的好朋友。
+
+            风格要求：
+            - 用中文回复，语气温和但直接，像朋友聊天
+            - 3-5 句话，不要 bullet point，直接写段落
+            - 基于 EMG 数据给出有洞察力的观察，而不是泛泛而谈
+            - 适当使用鼓励，但要真诚，不要过度夸张
+            - 如果数据显示疲劳，要坦诚指出并给具体建议
+            - 不要提到"EMG"这个术语，用"身体信号"或"肌肉数据"代替
+            """
+            let session = LanguageModelSession(instructions: instructions)
+            let response = try await session.respond(to: prompt)
+            let text = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : text
         } catch {
-            print("[NLP] Foundation Models unavailable: \(error)")
+            print("[NLP] Foundation Models error: \(error)")
             return nil
         }
         #else
         return nil
         #endif
-    }
-
-    private func invokeFoundationModel(prompt: String) async throws -> String? {
-        guard NSClassFromString("FMLanguageModelSession") != nil else { return nil }
-        return nil
     }
 
     // MARK: - Stats Extraction
@@ -57,7 +94,7 @@ final class NLPSummaryEngine {
         let fatigueAvg: Double
     }
 
-    private func extractStats(_ session: Session) -> SessionStats {
+    func extractStats(_ session: Session) -> SessionStats {
         let allSnapshots = session.segments
             .flatMap { $0.snapshots }
             .sorted { $0.timestamp < $1.timestamp }
@@ -137,29 +174,38 @@ final class NLPSummaryEngine {
 
     private func buildPrompt(_ s: SessionStats) -> String {
         """
-        你是一个专注力教练，请根据以下 EMG 生物信号数据为用户写一段 3-5 句话的个性化总结。
-        用温和但直接的语气，像朋友聊天一样。不要用 bullet point，直接写段落。
+        请根据以下专注数据为我写一段个性化总结：
 
-        数据：
-        - 时段: \(s.timeOfDay)
-        - 总时长: \(s.totalMinutes) 分钟
-        - 工作: \(s.workMinutes) 分钟，休息: \(s.restMinutes) 分钟
-        - Stamina 均值: \(Int(s.avgStamina))，最低: \(Int(s.minStamina))，最高: \(Int(s.maxStamina))
-        - Stamina 变化: \(s.staminaDelta > 0 ? "+" : "")\(Int(s.staminaDelta))
-        - 最长连续高效: \(Int(s.peakFocusMinutes)) 分钟
-        - 一致性: \(String(format: "%.0f%%", s.consistencyAvg * 100))
-        - 肌肉紧张度: \(String(format: "%.0f%%", s.tensionAvg * 100))
-        - 疲劳度: \(String(format: "%.0f%%", s.fatigueAvg * 100))
-        - 分段数: \(s.segmentCount)
-        \(s.declinePointMinutes.map { "- 约 \($0) 分钟后专注度开始下降" } ?? "- 未出现明显下降")
+        时段: \(s.timeOfDay)
+        总时长: \(s.totalMinutes) 分钟（工作 \(s.workMinutes) 分钟，休息 \(s.restMinutes) 分钟）
+        续航值: 均值 \(Int(s.avgStamina))，最低 \(Int(s.minStamina))，最高 \(Int(s.maxStamina))，变化 \(s.staminaDelta > 0 ? "+" : "")\(Int(s.staminaDelta))
+        最长连续高效: \(Int(s.peakFocusMinutes)) 分钟
+        肌肉一致性: \(String(format: "%.0f%%", s.consistencyAvg * 100))
+        紧张度: \(String(format: "%.0f%%", s.tensionAvg * 100))
+        疲劳度: \(String(format: "%.0f%%", s.fatigueAvg * 100))
+        分段数: \(s.segmentCount)
+        \(s.declinePointMinutes.map { "约第 \($0) 分钟后开始下降" } ?? "未出现明显下降")
 
-        请给出总结和一个具体建议。
+        请给出总结和一个具体的、可操作的建议。
+        """
+    }
+
+    private func buildAdvicePrompt(_ s: SessionStats) -> String {
+        """
+        基于这次专注数据，给我一条简短的建议（1-2 句话）：
+
+        续航均值: \(Int(s.avgStamina))，疲劳度: \(String(format: "%.0f%%", s.fatigueAvg * 100))，\
+        紧张度: \(String(format: "%.0f%%", s.tensionAvg * 100))，\
+        最长高效: \(Int(s.peakFocusMinutes)) 分钟，总时长: \(s.totalMinutes) 分钟。
+        \(s.declinePointMinutes.map { "第 \($0) 分钟后开始下降。" } ?? "")
+
+        请给一条具体、可执行的身体建议（比如拉伸、喝水、休息时长等）。
         """
     }
 
     // MARK: - Fallback (Template)
 
-    private func fallbackSummary(_ s: SessionStats) -> String {
+    func fallbackSummary(_ s: SessionStats) -> String {
         var parts: [String] = []
 
         let emoji: String
@@ -175,7 +221,7 @@ final class NLPSummaryEngine {
         } else if s.avgStamina >= 45 {
             parts.append("平均专注度 \(Int(s.avgStamina))，有波动但整体可控。")
         } else {
-            parts.append("专注度偏低（\(Int(s.avgStamina))），身体的 EMG 信号显示肌肉已经在反复发出疲劳信号了。")
+            parts.append("专注度偏低（\(Int(s.avgStamina))），身体信号显示肌肉已经在反复发出疲劳信号了。")
         }
 
         if s.peakFocusMinutes > 5 {

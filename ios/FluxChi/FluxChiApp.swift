@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 @main
 struct FluxChiApp: App {
@@ -10,13 +11,24 @@ struct FluxChiApp: App {
     @StateObject private var alertManager = AlertManager()
     @StateObject private var liveActivityManager = LiveActivityManager()
 
+    @AppStorage("flux_onboarding_done") private var onboardingDone = false
+
+    /// 深度链接通知名（点击灵动岛/通知 → 跳转 ActiveSessionView）
+    static let showActiveSessionNotification = Notification.Name("FluxChi.showActiveSession")
+
     init() {
         PerformanceMonitor.shared.markAppInit()
     }
 
     var body: some Scene {
         WindowGroup {
-            mainTabView
+            Group {
+                if onboardingDone {
+                    mainTabView
+                } else {
+                    OnboardingView(isCompleted: $onboardingDone)
+                }
+            }
             .environmentObject(service)
             .environmentObject(bleManager)
             .environmentObject(sessionManager)
@@ -25,6 +37,7 @@ struct FluxChiApp: App {
             .environmentObject(liveActivityManager)
             .onAppear {
                 PerformanceMonitor.shared.markFirstFrame()
+                service.personalization = personalization
                 service.startPolling()
                 alertManager.requestPermission()
 
@@ -62,10 +75,23 @@ struct FluxChiApp: App {
             } message: {
                 Text(alertManager.alertMessage)
             }
+            .onOpenURL { url in
+                handleDeepLink(url)
+            }
         }
         .modelContainer(for: [
             Session.self, Segment.self, FluxSnapshot.self, UserFeedback.self
         ])
+    }
+
+    // MARK: - Deep Link
+
+    private func handleDeepLink(_ url: URL) {
+        // fluxchi://session — 跳转到 ActiveSessionView
+        guard url.scheme == "fluxchi", url.host == "session" else { return }
+        if sessionManager.isRecording {
+            NotificationCenter.default.post(name: Self.showActiveSessionNotification, object: nil)
+        }
     }
 
     // MARK: - Tab View (iOS 18+ Tab API + iOS 26 minimize)

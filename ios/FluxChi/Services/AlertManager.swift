@@ -78,6 +78,8 @@ final class AlertManager: ObservableObject {
         content.title = title
         content.body = body
         content.sound = .default
+        content.userInfo = ["action": "showActiveSession", "showRest": true]
+        content.categoryIdentifier = "FOCUS_ALERT"
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req)
     }

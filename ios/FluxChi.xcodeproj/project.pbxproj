@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0A1B2C3D4E5F6A7B8C9D0E1F /* ActiveSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2B3C4D5E6F7A8B9C0D1E2F /* ActiveSessionView.swift */; };
+		0B1C2D3E4F5A6B7C8D9E0F1A /* SessionSummarySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2C3D4E5F6A7B8C9D0E1F2A /* SessionSummarySheet.swift */; };
+		0C1D2E3F4A5B6C7D8E9F0A1B /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2D3E4F5A6B7C8D9E0F1A2B /* OnboardingView.swift */; };
+		0D1E2F3A4B5C6D7E8F9A0B1C /* GeekDataPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2E3F4A5B6C7D8E9F0A1B2C /* GeekDataPanel.swift */; };
 		0E7705B78C0617D5054DCF05 /* OnDeviceStaminaEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74753401A3431315E6EED0CE /* OnDeviceStaminaEngine.swift */; };
 		1CE778873864D4E66D662D7F /* FluxChiLive.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7B91852213E03E125E4DD708 /* FluxChiLive.appex */; };
 		20258A5445FFADF89345BB8C /* SummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9F63942587BE4E4AB46CDE /* SummaryEngine.swift */; };
@@ -70,6 +74,10 @@
 
 /* Begin PBXFileReference section */
 		1716A2E4F26E4B7F2ADFEE42 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		0A2B3C4D5E6F7A8B9C0D1E2F /* ActiveSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSessionView.swift; sourceTree = "<group>"; };
+		0B2C3D4E5F6A7B8C9D0E1F2A /* SessionSummarySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionSummarySheet.swift; sourceTree = "<group>"; };
+		0C2D3E4F5A6B7C8D9E0F1A2B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		0D2E3F4A5B6C7D8E9F0A1B2C /* GeekDataPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeekDataPanel.swift; sourceTree = "<group>"; };
 		23BCD5428E4F4BBD013EC82A /* EMGFeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EMGFeatureExtractor.swift; sourceTree = "<group>"; };
 		2583B5DFE6B5E2D06D3907A8 /* FluxChiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxChiApp.swift; sourceTree = "<group>"; };
 		2B5C110FA9FAA6244ADABB3C /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
@@ -167,7 +175,11 @@
 		59DF8F4E20B2182E4F53621D /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				0A2B3C4D5E6F7A8B9C0D1E2F /* ActiveSessionView.swift */,
 				FEBF9348C6BE2D3C47741B9F /* BLEView.swift */,
+				0B2C3D4E5F6A7B8C9D0E1F2A /* SessionSummarySheet.swift */,
+				0C2D3E4F5A6B7C8D9E0F1A2B /* OnboardingView.swift */,
+				0D2E3F4A5B6C7D8E9F0A1B2C /* GeekDataPanel.swift */,
 				F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */,
 				B304D5891CBDFF2564CBBE02 /* FeedbackView.swift */,
 				380BBB1F3FD98322B2060455 /* HistoryView.swift */,
@@ -361,6 +373,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0A1B2C3D4E5F6A7B8C9D0E1F /* ActiveSessionView.swift in Sources */,
+				0B1C2D3E4F5A6B7C8D9E0F1A /* SessionSummarySheet.swift in Sources */,
+				0C1D2E3F4A5B6C7D8E9F0A1B /* OnboardingView.swift in Sources */,
+				0D1E2F3A4B5C6D7E8F9A0B1C /* GeekDataPanel.swift in Sources */,
 				57E11A9E5A3BD9DAF5D53D16 /* ActivityClassifier.mlpackage in Sources */,
 				2C17DEBF311E0371CC8E5D50 /* AlertManager.swift in Sources */,
 				FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */,

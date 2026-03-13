@@ -42,7 +42,10 @@ final class LiveActivityManager: ObservableObject {
             fatigue: 0
         )
 
-        let content = ActivityContent(state: initialState, staleDate: Date.now.addingTimeInterval(60))
+        let content = ActivityContent(
+            state: initialState,
+            staleDate: Date.now.addingTimeInterval(60)
+        )
 
         do {
             activity = try Activity.request(
@@ -50,6 +53,9 @@ final class LiveActivityManager: ObservableObject {
                 content: content,
                 pushType: nil
             )
+            // 设置 widgetURL 以便点击灵动岛跳转到 ActiveSessionView
+            // 注：widgetURL 需要在 Widget Extension 的 View 中设置
+            // 这里通过 URL Scheme 支持 App 端处理
             isActive = true
             print("[LiveActivity] Started: \(activity?.id ?? "nil")")
         } catch {
