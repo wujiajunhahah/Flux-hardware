@@ -11,18 +11,21 @@ struct DashboardView: View {
 
     @Query private var todaySessions: [Session]
 
+    @Binding var showActiveSession: Bool
+    @Binding var finishedSession: Session?
+
     @State private var showSegmentPicker = false
     @State private var showFeedback = false
-    @State private var showSummary = false
-    @State private var showActiveSession = false
-    @State private var showCalibrationAlert = false
-    @State private var finishedSession: Session?
+    @State private var showSummary = false   // recordButton 直接结束时用
 
     // Daily Insight
     @State private var dailyInsightText: String?
     @State private var isDailyInsightLoading = false
 
-    init() {
+    init(showActiveSession: Binding<Bool>, finishedSession: Binding<Session?>) {
+        _showActiveSession = showActiveSession
+        _finishedSession = finishedSession
+
         let startOfDay = Calendar.current.startOfDay(for: Date())
         let predicate = #Predicate<Session> { session in
             session.startedAt >= startOfDay && session.endedAt != nil
@@ -68,8 +71,6 @@ struct DashboardView: View {
 
                     if sessionManager.isRecording {
                         recordingBar
-                    } else {
-                        startFocusButton
                     }
 
                     recommendationCard
@@ -125,31 +126,6 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showSummary) {
                 if let s = finishedSession { SessionSummarySheet(session: s) }
-            }
-            .fullScreenCover(isPresented: $showActiveSession) {
-                ActiveSessionView { completedSession in
-                    finishedSession = completedSession
-                }
-            }
-            .onChange(of: showActiveSession) { _, isShowing in
-                // ActiveSessionView dismiss 后，弹出 SessionSummarySheet
-                if !isShowing, finishedSession != nil {
-                    // 短延迟确保 fullScreenCover 完全消失后再弹 sheet
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        showSummary = true
-                    }
-                }
-            }
-            .alert("今日未校准", isPresented: $showCalibrationAlert) {
-                Button("先去校准") {
-                    startDailyCalibration()
-                }
-                Button("跳过，直接开始") {
-                    beginFocusSession()
-                }
-                Button("取消", role: .cancel) {}
-            } message: {
-                Text("校准可提高续航值的准确度。建议每天首次专注前完成校准。")
             }
         }
     }
@@ -333,42 +309,6 @@ struct DashboardView: View {
     }
 
     // MARK: - Start Focus
-
-    private func beginFocusSession() {
-        let source: SessionSource = bleManager.isConnected ? .ble : .wifi
-        sessionManager.startSession(source: source)
-
-        let fmt = DateFormatter()
-        fmt.locale = Locale(identifier: "zh_CN")
-        fmt.dateFormat = "HH:mm"
-        liveActivityManager.startActivity(title: "专注中 · \(fmt.string(from: Date()))")
-
-        showActiveSession = true
-    }
-
-    private var startFocusButton: some View {
-        Button {
-            // 校准二次检查
-            if !isCalibratedToday {
-                showCalibrationAlert = true
-            } else {
-                beginFocusSession()
-            }
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "brain.head.profile")
-                    .font(.title2)
-                Text("开始专注")
-                    .font(.headline)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(Flux.Colors.accent.gradient, in: RoundedRectangle(cornerRadius: Flux.Radius.large))
-            .foregroundStyle(.white)
-        }
-        .disabled(!isLive)
-        .opacity(isLive ? 1.0 : 0.5)
-    }
 
     // MARK: - Today Summary (重设计：紧凑横排 + 进度条)
 
@@ -605,7 +545,7 @@ private struct DimensionsRow: View, Equatable {
 }
 
 #Preview {
-    DashboardView()
+    DashboardView(showActiveSession: .constant(false), finishedSession: .constant(nil))
         .environmentObject(FluxService())
         .environmentObject(BLEManager())
         .environmentObject(SessionManager())

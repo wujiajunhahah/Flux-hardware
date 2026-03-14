@@ -104,7 +104,13 @@ struct ActiveSessionView: View {
         }
         .preferredColorScheme(.dark)
         .statusBarHidden()
-        .onAppear { startBreathingAnimation() }
+        .onAppear {
+            startBreathingAnimation()
+            UIApplication.shared.isIdleTimerDisabled = true
+        }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
         .onChange(of: sessionManager.isPaused) { _, paused in
             isPausedLocal = paused
             if paused {

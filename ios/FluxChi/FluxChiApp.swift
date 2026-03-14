@@ -112,47 +112,143 @@ struct FluxChiApp: App {
         }
     }
 
-    // MARK: - Tab View (iOS 18+ Tab API + iOS 26 minimize)
+    // MARK: - Custom Tab View with Center Focus Button
+
+    enum AppTab: Int { case dashboard, history, settings }
+
+    @State private var selectedTab: AppTab = .dashboard
+    @State private var showActiveSession = false
+    @State private var showCalibrationAlert = false
+    @State private var finishedSession: Session?
+    @State private var showSummary = false
+
+    private var isLive: Bool { service.isConnected || bleManager.isConnected }
+
+    private var isCalibratedToday: Bool {
+        let last = UserDefaults.standard.double(forKey: "flux_last_calibration")
+        guard last > 0 else { return false }
+        return Calendar.current.isDateInToday(Date(timeIntervalSince1970: last))
+    }
 
     @ViewBuilder
     private var mainTabView: some View {
-        if #available(iOS 18.0, *) {
-            TabView {
-                Tab("仪表盘", systemImage: "waveform") {
-                    DashboardView()
-                }
-                Tab("历史", systemImage: "clock.arrow.circlepath") {
-                    HistoryView()
-                }
-                Tab("设置", systemImage: "gearshape") {
-                    SettingsView()
+        ZStack(alignment: .bottom) {
+            // 内容区
+            Group {
+                switch selectedTab {
+                case .dashboard: DashboardView(showActiveSession: $showActiveSession, finishedSession: $finishedSession)
+                case .history:   HistoryView()
+                case .settings:  SettingsView()
                 }
             }
-            .tint(.red)
-            .modifier(TabBarMinimizeModifier())
-        } else {
-            TabView {
-                DashboardView()
-                    .tabItem { Label("仪表盘", systemImage: "waveform") }
-                HistoryView()
-                    .tabItem { Label("历史", systemImage: "clock.arrow.circlepath") }
-                SettingsView()
-                    .tabItem { Label("设置", systemImage: "gearshape") }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // 自定义 TabBar
+            customTabBar
+        }
+        .fullScreenCover(isPresented: $showActiveSession) {
+            ActiveSessionView { completedSession in
+                finishedSession = completedSession
             }
-            .tint(.red)
+        }
+        .onChange(of: showActiveSession) { _, isShowing in
+            if !isShowing, finishedSession != nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    showSummary = true
+                }
+            }
+        }
+        .sheet(isPresented: $showSummary) {
+            if let s = finishedSession { SessionSummarySheet(session: s) }
+        }
+        .alert("今日未校准", isPresented: $showCalibrationAlert) {
+            Button("跳过，直接开始") { beginFocusSession() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("校准可提高续航值的准确度。建议每天首次专注前完成校准。")
         }
     }
-}
 
-// MARK: - iOS 26+ TabBar Minimize Modifier
+    private var customTabBar: some View {
+        HStack(spacing: 0) {
+            // 左：仪表盘
+            tabBarItem(icon: "waveform", label: "仪表盘", tab: .dashboard)
+                .frame(maxWidth: .infinity)
 
-private struct TabBarMinimizeModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.tabBarMinimizeBehavior(.onScrollDown)
-        } else {
-            content
+            // 左中：历史
+            tabBarItem(icon: "clock.arrow.circlepath", label: "历史", tab: .history)
+                .frame(maxWidth: .infinity)
+
+            // 中心：圆形专注按钮
+            focusButton
+                .offset(y: -22)
+                .frame(maxWidth: .infinity)
+
+            // 右中：设置
+            tabBarItem(icon: "gearshape", label: "设置", tab: .settings)
+                .frame(maxWidth: .infinity)
         }
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .bottom)
+                .shadow(color: .black.opacity(0.06), radius: 8, y: -2)
+        )
+    }
+
+    private func tabBarItem(icon: String, label: String, tab: AppTab) -> some View {
+        Button {
+            withAnimation(.spring(duration: 0.25)) { selectedTab = tab }
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 20))
+                Text(label)
+                    .font(.system(size: 10))
+            }
+            .foregroundStyle(selectedTab == tab ? Flux.Colors.accent : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var focusButton: some View {
+        Button {
+            if sessionManager.isRecording {
+                showActiveSession = true
+            } else if !isCalibratedToday {
+                showCalibrationAlert = true
+            } else {
+                beginFocusSession()
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(Flux.Colors.accent.gradient)
+                    .frame(width: 60, height: 60)
+                    .shadow(color: Flux.Colors.accent.opacity(0.4), radius: 10, y: 4)
+
+                Image(systemName: sessionManager.isRecording ? "brain.head.profile.fill" : "brain.head.profile")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.white)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isLive && !sessionManager.isRecording)
+        .opacity(isLive || sessionManager.isRecording ? 1.0 : 0.5)
+    }
+
+    private func beginFocusSession() {
+        let source: SessionSource = bleManager.isConnected ? .ble : .wifi
+        sessionManager.startSession(source: source)
+
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.dateFormat = "HH:mm"
+        liveActivityManager.startActivity(title: "专注中 · \(fmt.string(from: Date()))")
+
+        showActiveSession = true
     }
 }
 
