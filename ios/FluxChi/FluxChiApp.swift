@@ -112,11 +112,8 @@ struct FluxChiApp: App {
         }
     }
 
-    // MARK: - Custom Tab View with Center Focus Button
+    // MARK: - Tab View + Focus Button
 
-    enum AppTab: Int { case dashboard, history, settings }
-
-    @State private var selectedTab: AppTab = .dashboard
     @State private var showActiveSession = false
     @State private var showCalibrationAlert = false
     @State private var finishedSession: Session?
@@ -132,19 +129,13 @@ struct FluxChiApp: App {
 
     @ViewBuilder
     private var mainTabView: some View {
-        ZStack(alignment: .bottom) {
-            // 内容区
-            Group {
-                switch selectedTab {
-                case .dashboard: DashboardView(showActiveSession: $showActiveSession, finishedSession: $finishedSession)
-                case .history:   HistoryView()
-                case .settings:  SettingsView()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ZStack(alignment: .bottomTrailing) {
+            nativeTabView
 
-            // 自定义 TabBar
-            customTabBar
+            // 右下角圆形专注按钮，与 TabBar 垂直居中对齐
+            focusButton
+                .padding(.trailing, 20)
+                .padding(.bottom, 36)
         }
         .fullScreenCover(isPresented: $showActiveSession) {
             ActiveSessionView { completedSession in
@@ -169,48 +160,32 @@ struct FluxChiApp: App {
         }
     }
 
-    private var customTabBar: some View {
-        HStack(spacing: 0) {
-            // 左：仪表盘
-            tabBarItem(icon: "waveform", label: "仪表盘", tab: .dashboard)
-                .frame(maxWidth: .infinity)
-
-            // 左中：历史
-            tabBarItem(icon: "clock.arrow.circlepath", label: "历史", tab: .history)
-                .frame(maxWidth: .infinity)
-
-            // 中心：圆形专注按钮
-            focusButton
-                .offset(y: -22)
-                .frame(maxWidth: .infinity)
-
-            // 右中：设置
-            tabBarItem(icon: "gearshape", label: "设置", tab: .settings)
-                .frame(maxWidth: .infinity)
-        }
-        .padding(.top, 10)
-        .padding(.bottom, 6)
-        .background(
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .ignoresSafeArea(edges: .bottom)
-                .shadow(color: .black.opacity(0.06), radius: 8, y: -2)
-        )
-    }
-
-    private func tabBarItem(icon: String, label: String, tab: AppTab) -> some View {
-        Button {
-            withAnimation(.spring(duration: 0.25)) { selectedTab = tab }
-        } label: {
-            VStack(spacing: 3) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                Text(label)
-                    .font(.system(size: 10))
+    @ViewBuilder
+    private var nativeTabView: some View {
+        if #available(iOS 18.0, *) {
+            TabView {
+                Tab("仪表盘", systemImage: "waveform") {
+                    DashboardView(showActiveSession: $showActiveSession, finishedSession: $finishedSession)
+                }
+                Tab("历史", systemImage: "clock.arrow.circlepath") {
+                    HistoryView()
+                }
+                Tab("设置", systemImage: "gearshape") {
+                    SettingsView()
+                }
             }
-            .foregroundStyle(selectedTab == tab ? Flux.Colors.accent : .secondary)
+            .tint(Flux.Colors.accent)
+        } else {
+            TabView {
+                DashboardView(showActiveSession: $showActiveSession, finishedSession: $finishedSession)
+                    .tabItem { Label("仪表盘", systemImage: "waveform") }
+                HistoryView()
+                    .tabItem { Label("历史", systemImage: "clock.arrow.circlepath") }
+                SettingsView()
+                    .tabItem { Label("设置", systemImage: "gearshape") }
+            }
+            .tint(Flux.Colors.accent)
         }
-        .buttonStyle(.plain)
     }
 
     private var focusButton: some View {
@@ -226,11 +201,11 @@ struct FluxChiApp: App {
             ZStack {
                 Circle()
                     .fill(Flux.Colors.accent.gradient)
-                    .frame(width: 60, height: 60)
+                    .frame(width: 52, height: 52)
                     .shadow(color: Flux.Colors.accent.opacity(0.4), radius: 10, y: 4)
 
                 Image(systemName: sessionManager.isRecording ? "brain.head.profile.fill" : "brain.head.profile")
-                    .font(.system(size: 24))
+                    .font(.system(size: 22))
                     .foregroundStyle(.white)
             }
         }
