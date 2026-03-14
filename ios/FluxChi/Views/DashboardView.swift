@@ -18,6 +18,10 @@ struct DashboardView: View {
     @State private var showCalibrationAlert = false
     @State private var finishedSession: Session?
 
+    // Daily Insight
+    @State private var dailyInsightText: String?
+    @State private var isDailyInsightLoading = false
+
     init() {
         let startOfDay = Calendar.current.startOfDay(for: Date())
         let predicate = #Predicate<Session> { session in
@@ -40,9 +44,11 @@ struct DashboardView: View {
         return Calendar.current.isDateInToday(Date(timeIntervalSince1970: last))
     }
 
-    @State private var isCalibrating = false
+    enum DashCalPhase { case idle, baseline, mvc }
+    @State private var calPhase: DashCalPhase = .idle
     @State private var calibrationProgress: CGFloat = 0
     @State private var calibrationTimer: Timer?
+    private var isCalibrating: Bool { calPhase != .idle }
 
     // MARK: - Body
 
@@ -77,6 +83,7 @@ struct DashboardView: View {
 
                     if !todaySessions.isEmpty {
                         todaySummaryCard
+                        dailyInsightCard
                     }
                 }
                 .padding(.horizontal)
@@ -86,7 +93,19 @@ struct DashboardView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    FluxLiveIndicator(isLive: isLive)
+                    HStack(spacing: 6) {
+                        FluxLiveIndicator(isLive: isLive)
+                        if let battery = bleManager.batteryLevel {
+                            HStack(spacing: 2) {
+                                Image(systemName: batteryIcon(battery))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(battery > 20 ? .green : .red)
+                                Text("\(battery)%")
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) { recordButton }
             }
@@ -140,28 +159,29 @@ struct DashboardView: View {
     @ViewBuilder
     private var calibrationBanner: some View {
         if isCalibrating {
+            let ringColor: Color = calPhase == .mvc ? .orange : .green
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .stroke(Color.green.opacity(0.2), lineWidth: 3)
+                        .stroke(ringColor.opacity(0.2), lineWidth: 3)
                         .frame(width: 32, height: 32)
                     Circle()
                         .trim(from: 0, to: calibrationProgress)
-                        .stroke(Color.green, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .stroke(ringColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .frame(width: 32, height: 32)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("校准中…请放松手臂")
+                    Text(calPhase == .mvc ? "最大握拳！" : "校准中…请放松手臂")
                         .font(.subheadline.weight(.medium))
-                    Text("保持自然姿势 10 秒")
+                    Text(calPhase == .mvc ? "尽全力握拳保持 5 秒" : "保持自然姿势 10 秒")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
             }
             .padding(12)
-            .background(Color.green.opacity(0.08), in: .rect(cornerRadius: 16))
+            .background(ringColor.opacity(0.08), in: .rect(cornerRadius: 16))
         } else {
             HStack(spacing: 10) {
                 Image(systemName: "tuningfork")
@@ -189,16 +209,34 @@ struct DashboardView: View {
     }
 
     private func startDailyCalibration() {
-        isCalibrating = true
+        calPhase = .baseline
         calibrationProgress = 0
 
+        // Phase 1: 静息基线 10 秒
         calibrationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
             Task { @MainActor in
                 calibrationProgress += 0.01
                 if calibrationProgress >= 1.0 {
                     timer.invalidate()
                     calibrationTimer = nil
-                    isCalibrating = false
+                    startDailyMVC()
+                }
+            }
+        }
+    }
+
+    private func startDailyMVC() {
+        calPhase = .mvc
+        calibrationProgress = 0
+
+        // Phase 2: 最大握拳 5 秒
+        calibrationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
+            Task { @MainActor in
+                calibrationProgress += 0.02  // 5 秒完成
+                if calibrationProgress >= 1.0 {
+                    timer.invalidate()
+                    calibrationTimer = nil
+                    calPhase = .idle
                     UserDefaults.standard.set(
                         Date().timeIntervalSince1970,
                         forKey: "flux_last_calibration"
@@ -444,6 +482,87 @@ struct DashboardView: View {
         }
         .padding(12)
         .background(.red.opacity(0.06), in: .rect(cornerRadius: 16))
+    }
+
+    // MARK: - Daily Insight Card
+
+    @ViewBuilder
+    private var dailyInsightCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "brain.head.profile.fill")
+                    .font(.caption)
+                    .foregroundStyle(Flux.Colors.accent)
+                Text("教练说")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if isDailyInsightLoading {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+            }
+
+            if let text = dailyInsightText {
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !isDailyInsightLoading {
+                Text("加载中…")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
+        .onAppear { loadDailyInsight() }
+        .onChange(of: todaySessions.count) { _, _ in
+            // session 数量变化时刷新
+            loadDailyInsight()
+        }
+    }
+
+    private func loadDailyInsight() {
+        guard !isDailyInsightLoading else { return }
+        isDailyInsightLoading = true
+
+        Task {
+            let text: String
+            if #available(iOS 26.0, *) {
+                text = await NLPSummaryEngine.shared.generateDailyInsight(sessions: todaySessions)
+            } else {
+                text = generateFallbackDailyInsight()
+            }
+            await MainActor.run {
+                dailyInsightText = text
+                isDailyInsightLoading = false
+            }
+        }
+    }
+
+    /// iOS 26 以下的 fallback（不依赖 NLPSummaryEngine）
+    private func generateFallbackDailyInsight() -> String {
+        let count = todaySessions.count
+        let totalMin = Int(todaySessions.reduce(0) { $0 + $1.duration } / 60)
+        let avgVals = todaySessions.compactMap(\.avgStamina)
+        let avg = avgVals.isEmpty ? 0.0 : avgVals.reduce(0, +) / Double(avgVals.count)
+
+        if avg >= 75 {
+            return "今天状态不错，\(count) 段专注累计 \(totalMin) 分钟，续航稳定在 \(Int(avg))。保持这个节奏。"
+        } else if avg >= 50 {
+            return "今天 \(count) 段专注共 \(totalMin) 分钟，续航 \(Int(avg))，中规中矩。试试在疲劳前主动休息 5 分钟。"
+        } else {
+            return "今天身体信号偏弱，续航只有 \(Int(avg))，记得早点休息，明天会更好。"
+        }
+    }
+
+    private func batteryIcon(_ level: Int) -> String {
+        if level > 75 { return "battery.100" }
+        if level > 50 { return "battery.75" }
+        if level > 25 { return "battery.50" }
+        return "battery.25"
     }
 }
 

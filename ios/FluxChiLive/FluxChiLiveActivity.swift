@@ -6,6 +6,7 @@ struct FluxChiLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: FluxChiLiveAttributes.self) { context in
             lockScreenBanner(context: context)
+                .widgetURL(URL(string: "fluxchi://session"))
         } dynamicIsland: { context in
             let color = staminaColor(context.state.state)
             let progress = clampProgress(context.state.stamina)
@@ -41,24 +42,41 @@ struct FluxChiLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(.white.opacity(0.08))
+                    VStack(spacing: 8) {
+                        // Stamina 进度条
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(.white.opacity(0.08))
 
-                            Capsule()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [color.opacity(0.6), color],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
+                                Capsule()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [color.opacity(0.6), color],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
                                     )
-                                )
-                                .frame(width: max(4, geo.size.width * progress))
-                                .shadow(color: color.opacity(0.5), radius: 6, y: 0)
+                                    .frame(width: max(4, geo.size.width * progress))
+                                    .shadow(color: color.opacity(0.5), radius: 6, y: 0)
+                            }
+                        }
+                        .frame(height: 3)
+
+                        // 一键休息按钮
+                        Link(destination: URL(string: "fluxchi://rest")!) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "cup.and.saucer.fill")
+                                    .font(.system(size: 10))
+                                Text("休息一下")
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .foregroundStyle(.white.opacity(0.8))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(.white.opacity(0.12), in: Capsule())
                         }
                     }
-                    .frame(height: 3)
                     .padding(.top, 6)
                 }
 

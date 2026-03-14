@@ -9,10 +9,22 @@ private enum BLEConstants {
     static let serviceUUID   = CBUUID(string: "974CBE30-3E83-465E-ACDE-6F92FE712134")
     static let dataCharUUID  = CBUUID(string: "974CBE31-3E83-465E-ACDE-6F92FE712134")
     static let writeCharUUID = CBUUID(string: "974CBE32-3E83-465E-ACDE-6F92FE712134")
+    static let batteryServiceUUID = CBUUID(string: "180F")
+    static let batteryCharUUID    = CBUUID(string: "2A19")
     static let devicePrefix  = "WL"
     static let emgFlag: UInt8 = 0xAA
     static let imuFlag: UInt8 = 0xBB
     static let channelCount  = 6
+    /// 脱落检测：RMS 阈值（所有通道低于此值视为极低信号）
+    static let detachRMSThreshold: Double = 0.5
+    /// 脱落检测：需持续低信号的帧数（约 30 秒，50帧/s × 30s ÷ 每50帧检测一次 = 30次）
+    static let detachConsecutiveCount = 30
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let bleDeviceDetached = Notification.Name("BLEManager.deviceDetached")
 }
 
 @MainActor
@@ -27,6 +39,7 @@ final class BLEManager: NSObject, ObservableObject {
     @Published var latestRMS: [Double] = Array(repeating: 0, count: 6)
     @Published var emgFrameCount: Int = 0
     @Published var activeChannelCount: Int = 6
+    @Published var batteryLevel: Int? // 0-100，nil = 未知
 
     var isConnected: Bool { peripheralState == .connected }
 
@@ -44,6 +57,8 @@ final class BLEManager: NSObject, ObservableObject {
     private let emgBuffer = EMGRingBuffer(capacity: 250)
     private let staminaEngine = OnDeviceStaminaEngine()
     private let classifier = EMGActivityInference()
+    private var lowSignalConsecutive = 0
+    private var detachNotified = false
 
     // MARK: - Init
 
@@ -117,6 +132,7 @@ final class BLEManager: NSObject, ObservableObject {
 
         if emgFrameCount % 50 == 0 {
             latestRMS = emgBuffer.rms()
+            checkDetachment()
             buildAndPushState()
         }
     }
@@ -172,6 +188,22 @@ final class BLEManager: NSObject, ObservableObject {
         onStateUpdate?(state)
     }
 
+    // MARK: - Detach Detection
+
+    private func checkDetachment() {
+        let maxRMS = latestRMS.max() ?? 0
+        if maxRMS < BLEConstants.detachRMSThreshold {
+            lowSignalConsecutive += 1
+            if lowSignalConsecutive >= BLEConstants.detachConsecutiveCount && !detachNotified {
+                detachNotified = true
+                NotificationCenter.default.post(name: .bleDeviceDetached, object: nil)
+            }
+        } else {
+            lowSignalConsecutive = 0
+            detachNotified = false
+        }
+    }
+
     private static func decodeSigned24(_ b1: Int, _ b2: Int, _ b3: Int) -> Double {
         var value = (b1 << 16) | (b2 << 8) | b3
         if value & 0x800000 != 0 { value -= 1 << 24 }
@@ -209,7 +241,7 @@ extension BLEManager: CBCentralManagerDelegate {
             self.peripheralState = .connected
             self.connectedDeviceName = peripheral.name ?? "WAVELETECH"
             peripheral.delegate = self
-            peripheral.discoverServices([BLEConstants.serviceUUID])
+            peripheral.discoverServices([BLEConstants.serviceUUID, BLEConstants.batteryServiceUUID])
         }
     }
 
@@ -231,8 +263,12 @@ extension BLEManager: CBPeripheralDelegate {
 
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard let services = peripheral.services else { return }
-        for service in services where service.uuid == BLEConstants.serviceUUID {
-            peripheral.discoverCharacteristics([BLEConstants.dataCharUUID, BLEConstants.writeCharUUID], for: service)
+        for service in services {
+            if service.uuid == BLEConstants.serviceUUID {
+                peripheral.discoverCharacteristics([BLEConstants.dataCharUUID, BLEConstants.writeCharUUID], for: service)
+            } else if service.uuid == BLEConstants.batteryServiceUUID {
+                peripheral.discoverCharacteristics([BLEConstants.batteryCharUUID], for: service)
+            }
         }
     }
 
@@ -242,9 +278,14 @@ extension BLEManager: CBPeripheralDelegate {
         error: Error?
     ) {
         guard let chars = service.characteristics else { return }
-        for char in chars where char.uuid == BLEConstants.dataCharUUID {
-            Task { @MainActor in self.dataChar = char }
-            peripheral.setNotifyValue(true, for: char)
+        for char in chars {
+            if char.uuid == BLEConstants.dataCharUUID {
+                Task { @MainActor in self.dataChar = char }
+                peripheral.setNotifyValue(true, for: char)
+            } else if char.uuid == BLEConstants.batteryCharUUID {
+                peripheral.readValue(for: char)
+                peripheral.setNotifyValue(true, for: char) // 电量变化时自动通知
+            }
         }
     }
 
@@ -254,7 +295,12 @@ extension BLEManager: CBPeripheralDelegate {
         error: Error?
     ) {
         guard let data = characteristic.value else { return }
-        Task { @MainActor in self.handleNotification(data) }
+        if characteristic.uuid == BLEConstants.batteryCharUUID {
+            let level = Int(data[0])
+            Task { @MainActor in self.batteryLevel = level }
+        } else {
+            Task { @MainActor in self.handleNotification(data) }
+        }
     }
 }
 

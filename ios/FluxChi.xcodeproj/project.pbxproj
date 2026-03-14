@@ -21,7 +21,6 @@
 		37D1B293D85533CBE3726A66 /* FluxChiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2583B5DFE6B5E2D06D3907A8 /* FluxChiApp.swift */; };
 		41D01B608D506EF66567135B /* FluxChiLiveBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C82F52C084FF7B4B9B98F3 /* FluxChiLiveBundle.swift */; };
 		41EB0AED9E3D37E9D144B449 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */; };
-		4C00083B10B70FBDBCFC6F1D /* BLEView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBF9348C6BE2D3C47741B9F /* BLEView.swift */; };
 		4E31F1403404087AC5CD20C6 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380BBB1F3FD98322B2060455 /* HistoryView.swift */; };
 		57E11A9E5A3BD9DAF5D53D16 /* ActivityClassifier.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = 5CF6C81769725D1F6E224ADE /* ActivityClassifier.mlpackage */; };
 		5909BF9467E24D418EE4A8F4 /* FluxTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = C32BDA8520B5BD858B560924 /* FluxTokens.swift */; };
@@ -115,7 +114,6 @@
 		E528776B3F3519BE71383DDE /* StaminaRingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaminaRingView.swift; sourceTree = "<group>"; };
 		F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		FA1E2E60D7D16A91E3045405 /* RecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderView.swift; sourceTree = "<group>"; };
-		FEBF9348C6BE2D3C47741B9F /* BLEView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -176,7 +174,6 @@
 			isa = PBXGroup;
 			children = (
 				0A2B3C4D5E6F7A8B9C0D1E2F /* ActiveSessionView.swift */,
-				FEBF9348C6BE2D3C47741B9F /* BLEView.swift */,
 				0B2C3D4E5F6A7B8C9D0E1F2A /* SessionSummarySheet.swift */,
 				0C2D3E4F5A6B7C8D9E0F1A2B /* OnboardingView.swift */,
 				0D2E3F4A5B6C7D8E9F0A1B2C /* GeekDataPanel.swift */,
@@ -380,7 +377,6 @@
 				57E11A9E5A3BD9DAF5D53D16 /* ActivityClassifier.mlpackage in Sources */,
 				2C17DEBF311E0371CC8E5D50 /* AlertManager.swift in Sources */,
 				FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */,
-				4C00083B10B70FBDBCFC6F1D /* BLEView.swift in Sources */,
 				41EB0AED9E3D37E9D144B449 /* DashboardView.swift in Sources */,
 				A29B654F2338B5CE0220D51F /* EMGFeatureExtractor.swift in Sources */,
 				614E45DDEA41D0C4FDC16C92 /* ExportManager.swift in Sources */,

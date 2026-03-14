@@ -24,6 +24,14 @@ struct ActiveSessionView: View {
     @State private var showRestBanner = false
     @State private var restBannerDismissed = false
 
+    // BLE 断连自动暂停
+    @State private var bleDisconnectedAt: Date?
+    @State private var bleReconnectTimer: Timer?
+    @State private var showDisconnectBanner = false
+
+    // 佩戴脱落
+    @State private var showDetachBanner = false
+
     // 休息模式
     @State private var isResting = false
     @State private var restDuration: TimeInterval = 5 * 60  // 默认 5 分钟
@@ -50,8 +58,22 @@ struct ActiveSessionView: View {
                 topStatusBar
                     .padding(.top, 16)
 
+                // BLE 断连 Banner
+                if showDisconnectBanner {
+                    disconnectBanner
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.top, 8)
+                }
+
+                // 佩戴脱落 Banner
+                if showDetachBanner && !showDisconnectBanner {
+                    detachBanner
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.top, 8)
+                }
+
                 // 休息提醒 Banner
-                if showRestBanner && !restBannerDismissed && !isResting {
+                if showRestBanner && !restBannerDismissed && !isResting && !showDisconnectBanner && !showDetachBanner {
                     restAlertBanner
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .padding(.top, 8)
@@ -99,6 +121,23 @@ struct ActiveSessionView: View {
             Button("结束本次工作") { exitRestMode(endSession: true) }
         } message: {
             Text("休息时间到了，你想继续专注还是结束本次工作？")
+        }
+        // BLE 断连自动暂停
+        .onChange(of: bleManager.isConnected) { _, connected in
+            handleBLEConnectionChange(connected)
+        }
+        // 佩戴脱落检测
+        .onReceive(NotificationCenter.default.publisher(for: .bleDeviceDetached)) { _ in
+            handleDeviceDetach()
+        }
+        // 通知点击触发休息 Banner
+        .onReceive(NotificationCenter.default.publisher(for: FluxChiApp.showRestFromNotification)) { _ in
+            if !isResting {
+                withAnimation(.spring(duration: 0.5)) {
+                    showRestBanner = true
+                    restBannerDismissed = false
+                }
+            }
         }
     }
 
@@ -399,6 +438,94 @@ struct ActiveSessionView: View {
                 showRestBanner = true
             }
         }
+    }
+
+    // MARK: - Disconnect Banner
+
+    private var disconnectBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                .foregroundStyle(.red)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("手环已断开")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text("已自动暂停，5 分钟内未重连将结束本次专注")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+
+            Spacer()
+        }
+        .padding(14)
+        .background(Color.red.opacity(0.2), in: .rect(cornerRadius: 14))
+    }
+
+    // MARK: - Detach Banner
+
+    private var detachBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "hand.raised.slash.fill")
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("手环可能脱落")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text("信号持续极低，请检查佩戴位置")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+
+            Spacer()
+
+            Button("知道了") {
+                withAnimation { showDetachBanner = false }
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white.opacity(0.6))
+        }
+        .padding(14)
+        .background(Color.orange.opacity(0.2), in: .rect(cornerRadius: 14))
+    }
+
+    // MARK: - BLE Disconnect Logic
+
+    private func handleBLEConnectionChange(_ connected: Bool) {
+        if !connected {
+            // 断连 → 自动暂停
+            if !sessionManager.isPaused {
+                sessionManager.pauseSession()
+            }
+            bleDisconnectedAt = Date()
+            withAnimation { showDisconnectBanner = true }
+
+            // 5 分钟超时自动结束
+            bleReconnectTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: false) { _ in
+                Task { @MainActor in
+                    finishSession()
+                }
+            }
+        } else {
+            // 重连 → 自动恢复
+            bleReconnectTimer?.invalidate()
+            bleReconnectTimer = nil
+            bleDisconnectedAt = nil
+            withAnimation { showDisconnectBanner = false }
+
+            if sessionManager.isPaused {
+                sessionManager.resumeSession()
+            }
+        }
+    }
+
+    // MARK: - Device Detach Logic
+
+    private func handleDeviceDetach() {
+        guard !sessionManager.isPaused else { return }
+        sessionManager.pauseSession()
+        withAnimation { showDetachBanner = true }
     }
 
     // MARK: - Rest Mode

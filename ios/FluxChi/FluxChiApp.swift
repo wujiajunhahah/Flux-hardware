@@ -4,6 +4,8 @@ import UserNotifications
 
 @main
 struct FluxChiApp: App {
+    @UIApplicationDelegateAdaptor(FluxChiAppDelegate.self) var appDelegate
+
     @StateObject private var service = FluxService()
     @StateObject private var bleManager = BLEManager()
     @StateObject private var sessionManager = SessionManager()
@@ -15,6 +17,8 @@ struct FluxChiApp: App {
 
     /// 深度链接通知名（点击灵动岛/通知 → 跳转 ActiveSessionView）
     static let showActiveSessionNotification = Notification.Name("FluxChi.showActiveSession")
+    /// 通知点击触发休息 Banner
+    static let showRestFromNotification = Notification.Name("FluxChi.showRestFromNotification")
 
     init() {
         PerformanceMonitor.shared.markAppInit()
@@ -87,10 +91,24 @@ struct FluxChiApp: App {
     // MARK: - Deep Link
 
     private func handleDeepLink(_ url: URL) {
-        // fluxchi://session — 跳转到 ActiveSessionView
-        guard url.scheme == "fluxchi", url.host == "session" else { return }
-        if sessionManager.isRecording {
-            NotificationCenter.default.post(name: Self.showActiveSessionNotification, object: nil)
+        guard url.scheme == "fluxchi" else { return }
+
+        switch url.host {
+        case "session":
+            // fluxchi://session — 跳转到 ActiveSessionView
+            if sessionManager.isRecording {
+                NotificationCenter.default.post(name: Self.showActiveSessionNotification, object: nil)
+            }
+        case "rest":
+            // fluxchi://rest — 灵动岛「一键休息」→ 跳转 + 触发休息 Banner
+            if sessionManager.isRecording {
+                NotificationCenter.default.post(name: Self.showActiveSessionNotification, object: nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    NotificationCenter.default.post(name: Self.showRestFromNotification, object: nil)
+                }
+            }
+        default:
+            break
         }
     }
 
@@ -134,6 +152,54 @@ private struct TabBarMinimizeModifier: ViewModifier {
             content.tabBarMinimizeBehavior(.onScrollDown)
         } else {
             content
+        }
+    }
+}
+
+// MARK: - App Delegate (UNUserNotificationCenterDelegate)
+
+final class FluxChiAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    /// 前台收到通知 → 仍然显示 banner
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
+    /// 用户点击通知 → 跳转 ActiveSessionView + 触发休息 Banner
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let userInfo = response.notification.request.content.userInfo
+
+        if let action = userInfo["action"] as? String, action == "showActiveSession" {
+            await MainActor.run {
+                // 先跳转到 ActiveSessionView
+                NotificationCenter.default.post(
+                    name: FluxChiApp.showActiveSessionNotification,
+                    object: nil
+                )
+                // 如果携带 showRest 标记，触发休息 Banner
+                if let showRest = userInfo["showRest"] as? Bool, showRest {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        NotificationCenter.default.post(
+                            name: FluxChiApp.showRestFromNotification,
+                            object: nil
+                        )
+                    }
+                }
+            }
         }
     }
 }

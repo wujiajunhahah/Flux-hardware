@@ -25,6 +25,11 @@ struct HistoryView: View {
         sessions.filter { !$0.isActive }
     }
 
+    private var todaySessions: [Session] {
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        return completedSessions.filter { $0.startedAt >= startOfDay }
+    }
+
     private var filtered: [Session] {
         guard !searchText.isEmpty else { return completedSessions }
         return completedSessions.filter {
@@ -98,6 +103,14 @@ struct HistoryView: View {
 
     private var sessionList: some View {
         List {
+            if !todaySessions.isEmpty {
+                Section {
+                    historyTodayOverview
+                } header: {
+                    Text("今日")
+                }
+            }
+
             ForEach(grouped, id: \.0) { dateStr, daySessions in
                 Section {
                     ForEach(daySessions) { session in
@@ -126,6 +139,37 @@ struct HistoryView: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    // MARK: - History Today Overview
+
+    private var historyTodayOverview: some View {
+        let totalMin = Int(todaySessions.reduce(0) { $0 + $1.duration } / 60)
+        let avgVals = todaySessions.compactMap(\.avgStamina)
+        let avgStamina = avgVals.isEmpty ? 0.0 : avgVals.reduce(0, +) / Double(avgVals.count)
+        let pending = todaySessions.filter { $0.feedback == nil }.count
+
+        return HStack(spacing: 16) {
+            miniStat("\(todaySessions.count)", "场次")
+            miniStat(totalMin > 0 ? "\(totalMin)m" : "—", "时长")
+            miniStat(avgStamina > 0 ? "\(Int(avgStamina))" : "—", "续航")
+            if pending > 0 {
+                Spacer()
+                Text("\(pending) 待反馈")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private func miniStat(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 1) {
+            Text(value)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+            Text(label)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func exportSession(_ session: Session) {
