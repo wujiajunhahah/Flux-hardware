@@ -85,8 +85,8 @@ struct FocusClockView: View {
     }
 
     private var slices: [SliceData] {
-        guard !snapshots.isEmpty else { return [] }
-        let totalSec = snapshots.last!.timestamp.timeIntervalSince(sessionStart)
+        guard let last = snapshots.last else { return [] }
+        let totalSec = last.timestamp.timeIntervalSince(sessionStart)
         let bucketCount = max(12, min(24, Int(totalSec / 60) * 2))
         let bucketSec = max(1, totalSec / Double(bucketCount))
 
@@ -147,8 +147,9 @@ struct FocusClockView: View {
                     }
 
                     VStack(spacing: 2) {
-                        let totalMin = snapshots.isEmpty ? 0 :
-                            Int(snapshots.last!.timestamp.timeIntervalSince(sessionStart) / 60)
+                        let totalMin = snapshots.last.map {
+                            Int($0.timestamp.timeIntervalSince(sessionStart) / 60)
+                        } ?? 0
                         Text("\(totalMin)")
                             .font(.system(size: 22, weight: .bold, design: .rounded))
                         Text("分钟")
@@ -162,7 +163,10 @@ struct FocusClockView: View {
                         let labelDist = radius + 16
                         let lx = center.x + labelDist * CGFloat(cos(angle.radians))
                         let ly = center.y + labelDist * CGFloat(sin(angle.radians))
-                        Text(mark == 0 ? "开始" : "+\(mark * Int(max(1, snapshots.last.map { $0.timestamp.timeIntervalSince(sessionStart) / 60 / 12 } ?? 1)))m")
+                        let perMark = snapshots.last.map {
+                            max(1, Int($0.timestamp.timeIntervalSince(sessionStart) / 60 / 12))
+                        } ?? 1
+                        Text(mark == 0 ? "开始" : "+\(mark * perMark)m")
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .foregroundStyle(.tertiary)
                             .position(x: lx, y: ly)

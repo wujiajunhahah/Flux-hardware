@@ -9,7 +9,7 @@ struct DashboardView: View {
     @EnvironmentObject var liveActivityManager: LiveActivityManager
     @Environment(\.modelContext) private var modelContext
 
-    @Query private var todaySessions: [Session]
+    @Query(sort: \Session.startedAt, order: .reverse) private var allSessions: [Session]
 
     @Binding var showActiveSession: Bool
     @Binding var finishedSession: Session?
@@ -17,20 +17,16 @@ struct DashboardView: View {
     @State private var showSegmentPicker = false
     @State private var showFeedback = false
     @State private var showSummary = false   // recordButton 直接结束时用
+    @State private var showConnectionSheet = false
 
     // Daily Insight
     @State private var dailyInsightText: String?
     @State private var isDailyInsightLoading = false
 
-    init(showActiveSession: Binding<Bool>, finishedSession: Binding<Session?>) {
-        _showActiveSession = showActiveSession
-        _finishedSession = finishedSession
-
+    /// 今日已完成的 Session（计算属性过滤，避免 init 中初始化 @Query 导致崩溃）
+    private var todaySessions: [Session] {
         let startOfDay = Calendar.current.startOfDay(for: Date())
-        let predicate = #Predicate<Session> { session in
-            session.startedAt >= startOfDay && session.endedAt != nil
-        }
-        _todaySessions = Query(filter: predicate, sort: \Session.startedAt, order: .reverse)
+        return allSessions.filter { $0.startedAt >= startOfDay && $0.endedAt != nil }
     }
 
     private var stamina: StaminaData? { service.state?.stamina }
@@ -65,9 +61,14 @@ struct DashboardView: View {
                         calibrationBanner
                     }
 
-                    StaminaRingView(value: staminaValue, state: staminaState)
-                        .drawingGroup() // GPU 离屏渲染，避免 AngularGradient 每帧重算
-                        .padding(.vertical, 4)
+                    if isLive {
+                        StaminaRingView(value: staminaValue, state: staminaState)
+                            .drawingGroup()
+                            .padding(.vertical, 4)
+                    } else {
+                        // 未连接：干净的占位
+                        disconnectedPlaceholder
+                    }
 
                     if sessionManager.isRecording {
                         recordingBar
@@ -126,6 +127,9 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showSummary) {
                 if let s = finishedSession { SessionSummarySheet(session: s) }
+            }
+            .sheet(isPresented: $showConnectionSheet) {
+                ConnectionGuideSheet()
             }
         }
     }
@@ -222,22 +226,55 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Connection
+    // MARK: - Connection Banner (原生风格)
 
     @ViewBuilder
     private var connectionBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text("未连接")
+        Button {
+            showConnectionSheet = true
+        } label: {
+            Label("未连接设备 — 点击连接", systemImage: "antenna.radiowaves.left.and.right.slash")
                 .font(.subheadline.weight(.medium))
-            Spacer()
-            if let err = service.connectionError {
-                Text(err).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-            }
+                .foregroundStyle(.orange)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(.orange.opacity(0.08), in: .rect(cornerRadius: 12))
         }
-        .padding(12)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Disconnected Placeholder
+
+    private var disconnectedPlaceholder: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .stroke(Color(.separator).opacity(0.3), lineWidth: 10)
+                    .frame(width: 200, height: 200)
+
+                VStack(spacing: 6) {
+                    Image(systemName: "sensor.tag.radiowaves.forward")
+                        .font(.system(size: 36))
+                        .foregroundStyle(.quaternary)
+                    Text("--")
+                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .foregroundStyle(.quaternary)
+                }
+            }
+            .padding(.vertical, 4)
+
+            Button {
+                showConnectionSheet = true
+            } label: {
+                Text("连接设备")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(Flux.Colors.accent, in: Capsule())
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     // MARK: - Recommendation
@@ -551,4 +588,5 @@ private struct DimensionsRow: View, Equatable {
         .environmentObject(SessionManager())
         .environmentObject(AlertManager())
         .environmentObject(LiveActivityManager())
+        .modelContainer(for: [Session.self, Segment.self, FluxSnapshot.self, UserFeedback.self], inMemory: true)
 }

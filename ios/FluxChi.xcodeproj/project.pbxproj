@@ -45,7 +45,8 @@
 		FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C4C08A362F4D9CE7712D17 /* BLEManager.swift */; };
 		FDBD1A530498FCADA98A80E7 /* NLPSummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */; };
 		FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371B9343B23F955F6F6A51BF /* FluxModels.swift */; };
-/* End PBXBuildFile section */
+		C0C0C0C0C0C0C0C0C0C0C002 /* ConnectionGuideSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */; };
+		/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		2EA3DC8AD3A0DCF3D30FCEFD /* PBXContainerItemProxy */ = {
@@ -114,7 +115,8 @@
 		E528776B3F3519BE71383DDE /* StaminaRingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaminaRingView.swift; sourceTree = "<group>"; };
 		F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		FA1E2E60D7D16A91E3045405 /* RecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderView.swift; sourceTree = "<group>"; };
-/* End PBXFileReference section */
+		C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionGuideSheet.swift; sourceTree = "<group>"; };
+		/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		7C8E4DD977CD670F3BC22CEE /* Frameworks */ = {
@@ -178,6 +180,7 @@
 				0C2D3E4F5A6B7C8D9E0F1A2B /* OnboardingView.swift */,
 				0D2E3F4A5B6C7D8E9F0A1B2C /* GeekDataPanel.swift */,
 				F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */,
+				C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */,
 				B304D5891CBDFF2564CBBE02 /* FeedbackView.swift */,
 				380BBB1F3FD98322B2060455 /* HistoryView.swift */,
 				FA1E2E60D7D16A91E3045405 /* RecorderView.swift */,
@@ -378,6 +381,7 @@
 				2C17DEBF311E0371CC8E5D50 /* AlertManager.swift in Sources */,
 				FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */,
 				41EB0AED9E3D37E9D144B449 /* DashboardView.swift in Sources */,
+				C0C0C0C0C0C0C0C0C0C0C002 /* ConnectionGuideSheet.swift in Sources */,
 				A29B654F2338B5CE0220D51F /* EMGFeatureExtractor.swift in Sources */,
 				614E45DDEA41D0C4FDC16C92 /* ExportManager.swift in Sources */,
 				6EFF16B400DC0E33C06A07B8 /* FeedbackView.swift in Sources */,

@@ -18,8 +18,10 @@ final class PersonalizationManager: ObservableObject {
     private var compiledModelURL: URL?
 
     private var modelsDir: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("FluxModels", isDirectory: true)
+        guard let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            fatalError("Documents directory unavailable")
+        }
+        return base.appendingPathComponent("FluxModels", isDirectory: true)
     }
 
     private var feedbackDataURL: URL {

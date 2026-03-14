@@ -118,6 +118,8 @@ struct FluxChiApp: App {
     @State private var showCalibrationAlert = false
     @State private var finishedSession: Session?
     @State private var showSummary = false
+    @State private var selectedTab = "dashboard"
+    @State private var showConnectionSheet = false
 
     private var isLive: Bool { service.isConnected || bleManager.isConnected }
 
@@ -129,75 +131,91 @@ struct FluxChiApp: App {
 
     @ViewBuilder
     private var mainTabView: some View {
-        ZStack(alignment: .bottomTrailing) {
-            nativeTabView
-
-            // 右下角圆形专注按钮，与 TabBar 垂直居中对齐
-            focusButton
-                .padding(.trailing, 20)
-                .padding(.bottom, 36)
-        }
-        .fullScreenCover(isPresented: $showActiveSession) {
-            ActiveSessionView { completedSession in
-                finishedSession = completedSession
-            }
-        }
-        .onChange(of: showActiveSession) { _, isShowing in
-            if !isShowing, finishedSession != nil {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    showSummary = true
+        nativeTabView
+            .fullScreenCover(isPresented: $showActiveSession) {
+                ActiveSessionView { completedSession in
+                    finishedSession = completedSession
                 }
             }
-        }
-        .sheet(isPresented: $showSummary) {
-            if let s = finishedSession { SessionSummarySheet(session: s) }
-        }
-        .alert("今日未校准", isPresented: $showCalibrationAlert) {
-            Button("跳过，直接开始") { beginFocusSession() }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("校准可提高续航值的准确度。建议每天首次专注前完成校准。")
-        }
+            .onChange(of: showActiveSession) { _, isShowing in
+                if !isShowing, finishedSession != nil {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        showSummary = true
+                    }
+                }
+            }
+            .sheet(isPresented: $showSummary) {
+                if let s = finishedSession { SessionSummarySheet(session: s) }
+            }
+            .alert("今日未校准", isPresented: $showCalibrationAlert) {
+                Button("跳过，直接开始") { beginFocusSession() }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("校准可提高续航值的准确度。建议每天首次专注前完成校准。")
+            }
+            .sheet(isPresented: $showConnectionSheet) {
+                ConnectionGuideSheet()
+            }
     }
+
+    // MARK: - Native TabView + Tab(role: .search) 原生圆形按钮
 
     @ViewBuilder
     private var nativeTabView: some View {
         if #available(iOS 18.0, *) {
-            TabView {
-                Tab("仪表盘", systemImage: "waveform") {
+            TabView(selection: $selectedTab) {
+                Tab("仪表盘", systemImage: "waveform", value: "dashboard") {
                     DashboardView(showActiveSession: $showActiveSession, finishedSession: $finishedSession)
                 }
-                Tab("历史", systemImage: "clock.arrow.circlepath") {
+                Tab("历史", systemImage: "clock.arrow.circlepath", value: "history") {
                     HistoryView()
                 }
-                Tab("设置", systemImage: "gearshape") {
+                Tab("设置", systemImage: "gearshape", value: "settings") {
                     SettingsView()
+                }
+                Tab(
+                    "专注",
+                    systemImage: sessionManager.isRecording
+                        ? "brain.head.profile.fill"
+                        : "brain.head.profile",
+                    value: "focus",
+                    role: .search
+                ) {
+                    Color.clear
                 }
             }
             .tint(Flux.Colors.accent)
-        } else {
-            TabView {
-                DashboardView(showActiveSession: $showActiveSession, finishedSession: $finishedSession)
-                    .tabItem { Label("仪表盘", systemImage: "waveform") }
-                HistoryView()
-                    .tabItem { Label("历史", systemImage: "clock.arrow.circlepath") }
-                SettingsView()
-                    .tabItem { Label("设置", systemImage: "gearshape") }
+            .modifier(TabBarMinimizeModifier())
+            .onChange(of: selectedTab) { _, newValue in
+                guard newValue == "focus" else { return }
+                // 立即切回，禁用动画防闪烁
+                var t = Transaction()
+                t.disablesAnimations = true
+                withTransaction(t) { selectedTab = "dashboard" }
+                handleFocusTap()
             }
-            .tint(Flux.Colors.accent)
+        } else {
+            ZStack(alignment: .bottomTrailing) {
+                TabView {
+                    DashboardView(showActiveSession: $showActiveSession, finishedSession: $finishedSession)
+                        .tabItem { Label("仪表盘", systemImage: "waveform") }
+                    HistoryView()
+                        .tabItem { Label("历史", systemImage: "clock.arrow.circlepath") }
+                    SettingsView()
+                        .tabItem { Label("设置", systemImage: "gearshape") }
+                }
+                .tint(Flux.Colors.accent)
+
+                focusButton
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 36)
+            }
         }
     }
 
+    /// iOS 17 fallback 用的 overlay 按钮
     private var focusButton: some View {
-        Button {
-            if sessionManager.isRecording {
-                showActiveSession = true
-            } else if !isCalibratedToday {
-                showCalibrationAlert = true
-            } else {
-                beginFocusSession()
-            }
-        } label: {
+        Button { handleFocusTap() } label: {
             ZStack {
                 Circle()
                     .fill(Flux.Colors.accent.gradient)
@@ -210,8 +228,20 @@ struct FluxChiApp: App {
             }
         }
         .buttonStyle(.plain)
-        .disabled(!isLive && !sessionManager.isRecording)
-        .opacity(isLive || sessionManager.isRecording ? 1.0 : 0.5)
+    }
+
+    /// 统一处理专注按钮点击逻辑
+    private func handleFocusTap() {
+        if sessionManager.isRecording {
+            showActiveSession = true
+        } else if !isLive {
+            // 未连接 → 弹出连接页
+            showConnectionSheet = true
+        } else if !isCalibratedToday {
+            showCalibrationAlert = true
+        } else {
+            beginFocusSession()
+        }
     }
 
     private func beginFocusSession() {
@@ -271,6 +301,18 @@ final class FluxChiAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
                     }
                 }
             }
+        }
+    }
+}
+
+// MARK: - TabBar Minimize (iOS 26+)
+
+private struct TabBarMinimizeModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            content
         }
     }
 }

@@ -510,7 +510,7 @@ private struct ConfettiCanvas: View {
                 speed: Double.random(in: 30...70),
                 wobble: Double.random(in: 1.5...4.0),
                 size: Double.random(in: 4...8),
-                color: colors.randomElement()!,
+                color: colors.randomElement() ?? Color(.systemOrange),
                 delay: Double.random(in: 0...0.6),
                 lifetime: Double.random(in: 1.5...2.5)
             )

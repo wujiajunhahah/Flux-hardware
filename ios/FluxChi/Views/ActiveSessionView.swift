@@ -110,6 +110,13 @@ struct ActiveSessionView: View {
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
+            // 清理所有 Timer，防止内存泄漏
+            holdTimer?.invalidate()
+            holdTimer = nil
+            restTimer?.invalidate()
+            restTimer = nil
+            bleReconnectTimer?.invalidate()
+            bleReconnectTimer = nil
         }
         .onChange(of: sessionManager.isPaused) { _, paused in
             isPausedLocal = paused
