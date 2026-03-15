@@ -57,6 +57,7 @@ struct ConnectionGuideSheet: View {
                 .foregroundStyle(bleManager.isConnected ? .green : Flux.Colors.accent)
                 .symbolEffect(.variableColor.iterative,
                               isActive: bleManager.isScanning && !bleManager.isConnected)
+                .symbolEffect(.bounce, value: bleManager.isConnected)
                 .contentTransition(.symbolEffect(.replace))
 
             Text(statusText)
@@ -101,6 +102,17 @@ struct ConnectionGuideSheet: View {
                                 .foregroundStyle(.primary)
 
                             Spacer()
+
+                            if let rssi = bleManager.deviceRSSI[device.identifier] {
+                                HStack(spacing: 3) {
+                                    Image(systemName: rssiIcon(rssi))
+                                        .font(.caption2)
+                                        .foregroundStyle(rssiColor(rssi))
+                                    Text("\(rssi) dBm")
+                                        .font(.caption2.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
 
                             Text("连接")
                                 .font(.subheadline.weight(.medium))
@@ -179,5 +191,19 @@ struct ConnectionGuideSheet: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+    }
+
+    // MARK: - RSSI Helpers
+
+    private func rssiIcon(_ rssi: Int) -> String {
+        if rssi > -50 { return "wifi" }
+        if rssi > -70 { return "wifi" }
+        return "wifi.exclamationmark"
+    }
+
+    private func rssiColor(_ rssi: Int) -> Color {
+        if rssi > -50 { return .green }
+        if rssi > -70 { return .orange }
+        return .red
     }
 }

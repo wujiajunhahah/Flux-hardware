@@ -99,7 +99,7 @@ struct OnboardingView: View {
 
             stepIndicator(current: 1, total: 4)
 
-            nextButton("允许权限") {
+            nextButton("继续") {
                 alertManager.requestPermission()
                 currentStep = 2
             }

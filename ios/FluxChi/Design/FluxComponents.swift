@@ -23,8 +23,17 @@ struct FluxMetricCard: View {
     let icon: String
     var tint: Color = .primary
     var progress: Double?
+    var compact: Bool = false
 
     var body: some View {
+        if compact {
+            compactLayout
+        } else {
+            standardLayout
+        }
+    }
+
+    private var standardLayout: some View {
         VStack(spacing: Flux.Spacing.inner) {
             Image(systemName: icon)
                 .font(.title3)
@@ -47,6 +56,19 @@ struct FluxMetricCard: View {
         .padding(Flux.Spacing.item)
         .frame(maxWidth: .infinity)
         .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.medium))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title) \(value)")
+    }
+
+    private var compactLayout: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(tint)
+            Text(title)
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title) \(value)")
     }
@@ -128,13 +150,64 @@ struct FluxLiveIndicator: View {
 
 // MARK: - Card Container
 
+enum FluxCardStyle {
+    case standard    // ultraThinMaterial
+    case elevated    // secondarySystemGroupedBackground
+    case glass       // thinMaterial + 更强模糊
+}
+
 struct FluxCard<Content: View>: View {
+    var style: FluxCardStyle = .standard
     @ViewBuilder let content: Content
 
     var body: some View {
         content
             .padding()
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
+            .background {
+                RoundedRectangle(cornerRadius: Flux.Radius.large)
+                    .fill(backgroundForStyle)
+            }
+    }
+
+    private var backgroundForStyle: AnyShapeStyle {
+        switch style {
+        case .standard:
+            AnyShapeStyle(.ultraThinMaterial)
+        case .elevated:
+            AnyShapeStyle(Color(.secondarySystemGroupedBackground))
+        case .glass:
+            AnyShapeStyle(.thinMaterial)
+        }
+    }
+}
+
+// MARK: - Empty State
+
+struct FluxEmptyState: View {
+    let title: String
+    let message: String
+    let icon: String
+    var action: (() -> Void)?
+    var actionLabel: String?
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(title, systemImage: icon)
+        } description: {
+            Text(message)
+        } actions: {
+            if let action, let label = actionLabel {
+                Button(action: action) {
+                    Text(label)
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 10)
+                        .background(Flux.Colors.accent, in: Capsule())
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }
 

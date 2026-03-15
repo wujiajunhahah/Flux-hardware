@@ -12,12 +12,7 @@ struct StaminaRingView: View {
     private var numberSize: CGFloat { size * 0.26 }
 
     private var ringColor: Color {
-        switch state {
-        case .focused:    return .green
-        case .fading:     return .orange
-        case .depleted:   return .red
-        case .recovering: return .blue
-        }
+        Flux.Colors.forStaminaState(state)
     }
 
     var body: some View {

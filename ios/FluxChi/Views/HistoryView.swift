@@ -150,25 +150,15 @@ struct HistoryView: View {
         let pending = todaySessions.filter { $0.feedback == nil }.count
 
         return HStack(spacing: 16) {
-            miniStat("\(todaySessions.count)", "场次")
-            miniStat(totalMin > 0 ? "\(totalMin)m" : "—", "时长")
-            miniStat(avgStamina > 0 ? "\(Int(avgStamina))" : "—", "续航")
+            FluxMetricCard(title: "场次", value: "\(todaySessions.count)", icon: "number", compact: true)
+            FluxMetricCard(title: "时长", value: totalMin > 0 ? "\(totalMin)m" : "—", icon: "clock", compact: true)
+            FluxMetricCard(title: "续航", value: avgStamina > 0 ? "\(Int(avgStamina))" : "—", icon: "bolt.fill", tint: Flux.Colors.forStaminaValue(avgStamina), compact: true)
             if pending > 0 {
                 Spacer()
                 Text("\(pending) 待反馈")
                     .font(.caption2)
                     .foregroundStyle(.orange)
             }
-        }
-    }
-
-    private func miniStat(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 1) {
-            Text(value)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-            Text(label)
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -238,7 +228,7 @@ private struct SessionRow: View {
     }
 
     private func staminaIndicator(_ avg: Double) -> some View {
-        let color: Color = avg > 60 ? .green : avg > 30 ? .orange : .red
+        let color = Flux.Colors.forStaminaValue(avg)
 
         return ZStack {
             Circle()

@@ -13,13 +13,51 @@ enum Flux {
             switch state {
             case .focused:    return .red
             case .fading:     return .orange
-            case .depleted:   return .red.opacity(0.6)
+            case .depleted:   return .purple
             case .recovering: return .green
             }
         }
 
+        /// 根据续航值返回对应颜色（用于 HistoryView SessionRow 等）
+        static func forStaminaValue(_ value: Double) -> Color {
+            if value > 60 { return forStaminaState(.focused) }
+            if value > 30 { return forStaminaState(.fading) }
+            return forStaminaState(.depleted)
+        }
+
         static func forUrgency(_ value: Double) -> Color {
             value >= 0.7 ? .red : value >= 0.5 ? .orange : .primary
+        }
+    }
+
+    // MARK: - Materials (Liquid Glass 风格统一材质)
+
+    enum Materials {
+        static let card: Material = .ultraThinMaterial
+        static let sheet: Material = .regularMaterial
+        static let overlay: Material = .thinMaterial
+
+        /// iOS 26+ glass 材质，低版本 fallback ultraThinMaterial
+        @ViewBuilder
+        static func glass<S: Shape>(in shape: S) -> some View {
+            if #available(iOS 26.0, *) {
+                Rectangle().fill(.ultraThinMaterial).clipShape(shape)
+            } else {
+                Rectangle().fill(.ultraThinMaterial).clipShape(shape)
+            }
+        }
+    }
+
+    // MARK: - Shapes
+
+    enum Shapes {
+        static func capsule() -> Capsule { Capsule() }
+        static func card() -> RoundedRectangle { RoundedRectangle(cornerRadius: Radius.large, style: .continuous) }
+        static func smallCard() -> RoundedRectangle { RoundedRectangle(cornerRadius: Radius.medium, style: .continuous) }
+
+        /// 同心圆形状（用于 Ring 等）
+        static func concentric(outer: CGFloat, inner: CGFloat) -> some Shape {
+            Circle().stroke(lineWidth: (outer - inner) / 2)
         }
     }
 

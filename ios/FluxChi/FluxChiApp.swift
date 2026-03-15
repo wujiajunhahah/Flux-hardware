@@ -45,6 +45,13 @@ struct FluxChiApp: App {
                 service.startPolling()
                 alertManager.requestPermission()
 
+                // 预热 Foundation Models（提前加载端侧 LLM 资源）
+                if #available(iOS 26.0, *) {
+                    let engine = NLPSummaryEngine.shared
+                    engine.prewarm()
+                    print("[App] NLP 诊断: \(engine.diagnosticInfo)")
+                }
+
                 bleManager.onStateUpdate = { [weak service, weak alertManager, weak liveActivityManager] state in
                     Task { @MainActor in
                         service?.state = state

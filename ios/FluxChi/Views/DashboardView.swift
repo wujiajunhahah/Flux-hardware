@@ -23,10 +23,28 @@ struct DashboardView: View {
     @State private var dailyInsightText: String?
     @State private var isDailyInsightLoading = false
 
+    // Coach Chat (B3/B4)
+    @State private var showCoachChat = false
+    @State private var coachMessages: [(question: String, answer: String)] = []
+    @State private var isCoachLoading = false
+    @State private var customQuestion = ""
+
+    private let coachPresetQuestions: [String] = [
+        "为什么我下午续航总是下降？",
+        "怎样延长高效时间？",
+        "我的紧张度正常吗？"
+    ]
+
     /// 今日已完成的 Session（计算属性过滤，避免 init 中初始化 @Query 导致崩溃）
     private var todaySessions: [Session] {
         let startOfDay = Calendar.current.startOfDay(for: Date())
         return allSessions.filter { $0.startedAt >= startOfDay && $0.endedAt != nil }
+    }
+
+    /// 最近 7 天的 Session（用于趋势分析）
+    private var recentSessions: [Session] {
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        return allSessions.filter { $0.startedAt >= weekAgo && $0.endedAt != nil }
     }
 
     private var stamina: StaminaData? { service.state?.stamina }
@@ -85,8 +103,9 @@ struct DashboardView: View {
 
                     if !todaySessions.isEmpty {
                         todaySummaryCard
-                        dailyInsightCard
                     }
+
+                    dailyInsightCard
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 80)
@@ -226,54 +245,66 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Connection Banner (原生风格)
+    // MARK: - Connection Banner (紧凑 Capsule 风格)
 
     @ViewBuilder
     private var connectionBanner: some View {
         Button {
             showConnectionSheet = true
         } label: {
-            Label("未连接设备 — 点击连接", systemImage: "antenna.radiowaves.left.and.right.slash")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.orange)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(.orange.opacity(0.08), in: .rect(cornerRadius: 12))
+            HStack(spacing: 8) {
+                Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                    .font(.caption)
+                    .symbolEffect(.pulse, options: .repeating)
+                Text("未连接 · 点击连接")
+                    .font(.caption.weight(.medium))
+            }
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.orange.opacity(0.1), in: Capsule())
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     // MARK: - Disconnected Placeholder
 
     private var disconnectedPlaceholder: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             ZStack {
                 Circle()
-                    .stroke(Color(.separator).opacity(0.3), lineWidth: 10)
+                    .stroke(Color(.separator).opacity(0.2), lineWidth: 10)
                     .frame(width: 200, height: 200)
 
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
                     Image(systemName: "sensor.tag.radiowaves.forward")
-                        .font(.system(size: 36))
+                        .font(.system(size: 32))
                         .foregroundStyle(.quaternary)
+                        .symbolEffect(.variableColor.iterative, options: .repeating)
                     Text("--")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
                         .foregroundStyle(.quaternary)
                 }
             }
             .padding(.vertical, 4)
 
-            Button {
-                showConnectionSheet = true
-            } label: {
-                Text("连接设备")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 10)
-                    .background(Flux.Colors.accent, in: Capsule())
-                    .foregroundStyle(.white)
+            VStack(spacing: 8) {
+                Text("等待设备连接")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Button {
+                    showConnectionSheet = true
+                } label: {
+                    Text("连接设备")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 10)
+                        .background(Flux.Colors.accent, in: Capsule())
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -309,7 +340,7 @@ struct DashboardView: View {
                 Spacer()
             }
             .padding(14)
-            .background(.regularMaterial, in: .rect(cornerRadius: 16))
+            .background(.thinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
         }
     }
 
@@ -369,13 +400,28 @@ struct DashboardView: View {
                 }
             }
 
-            // 指标行：三个紧凑数据
+            // Gauge 指标行
             HStack(spacing: 0) {
-                summaryMetric("\(todaySessions.count)", "场次", Color(.systemOrange))
+                summaryGauge(
+                    value: Double(todaySessions.count) / 10.0,
+                    label: "场次",
+                    display: "\(todaySessions.count)",
+                    tint: Color(.systemOrange)
+                )
                 dividerLine
-                summaryMetric(totalMin > 0 ? "\(totalMin)m" : "—", "时长", Color(.systemTeal))
+                summaryGauge(
+                    value: min(Double(totalMin) / 240.0, 1.0),
+                    label: "时长",
+                    display: totalMin > 0 ? "\(totalMin)m" : "—",
+                    tint: Color(.systemTeal)
+                )
                 dividerLine
-                summaryMetric(avgStamina > 0 ? "\(Int(avgStamina))" : "—", "续航", Color(.systemPink))
+                summaryGauge(
+                    value: avgStamina / 100.0,
+                    label: "续航",
+                    display: avgStamina > 0 ? "\(Int(avgStamina))" : "—",
+                    tint: Flux.Colors.forStaminaValue(avgStamina)
+                )
             }
 
             // 今日累计进度条（目标 4 小时）
@@ -396,14 +442,21 @@ struct DashboardView: View {
             }
         }
         .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
     }
 
-    private func summaryMetric(_ value: String, _ label: String, _ tint: Color) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-                .foregroundStyle(tint)
+    private func summaryGauge(value: Double, label: String, display: String, tint: Color) -> some View {
+        VStack(spacing: 6) {
+            Gauge(value: min(max(value, 0), 1)) {
+                EmptyView()
+            } currentValueLabel: {
+                Text(display)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+            }
+            .gaugeStyle(.accessoryCircular)
+            .tint(Gradient(colors: [tint.opacity(0.3), tint]))
+            .scaleEffect(0.9)
+
             Text(label)
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
@@ -465,14 +518,62 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var dailyInsightCard: some View {
+        let hasAnomalies: Bool = {
+            if #available(iOS 26.0, *) {
+                return !NLPSummaryEngine.shared.detectDailyAnomalies(sessions: todaySessions).isEmpty
+            }
+            return false
+        }()
+        let hasCriticalAnomaly: Bool = {
+            if #available(iOS 26.0, *) {
+                return NLPSummaryEngine.shared.detectDailyAnomalies(sessions: todaySessions).contains { $0.severity == .critical }
+            }
+            return false
+        }()
+        let anomalyCount: Int = {
+            if #available(iOS 26.0, *) {
+                return NLPSummaryEngine.shared.detectDailyAnomalies(sessions: todaySessions).count
+            }
+            return 0
+        }()
+
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "brain.head.profile.fill")
-                    .font(.caption)
-                    .foregroundStyle(Flux.Colors.accent)
-                Text("教练说")
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(Flux.Colors.accent.opacity(0.12))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "brain.head.profile.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Flux.Colors.accent)
+                }
+                Text("AI 教练")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+
+                // NLP 引擎状态指示（长按可看详情）
+                if #available(iOS 26.0, *) {
+                    let nlpAvailable = NLPSummaryEngine.shared.isAvailable
+                    Image(systemName: nlpAvailable ? "cpu.fill" : "cpu")
+                        .font(.system(size: 9))
+                        .foregroundStyle(nlpAvailable ? .green : .orange)
+                        .help(NLPSummaryEngine.shared.diagnosticInfo)
+                }
+
+                // 异常 badge
+                if hasAnomalies {
+                    HStack(spacing: 3) {
+                        Image(systemName: hasCriticalAnomaly ? "exclamationmark.triangle.fill" : "info.circle.fill")
+                            .font(.system(size: 9))
+                        Text("\(anomalyCount) 项异常")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundStyle(hasCriticalAnomaly ? .red : .orange)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background((hasCriticalAnomaly ? Color.red : Color.orange).opacity(0.1), in: Capsule())
+                }
+
                 Spacer()
                 if isDailyInsightLoading {
                     ProgressView()
@@ -491,13 +592,39 @@ struct DashboardView: View {
                     .font(.subheadline)
                     .foregroundStyle(.tertiary)
             }
+
+            // 追问按钮行
+            if dailyInsightText != nil {
+                Divider()
+                Button {
+                    showCoachChat = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bubble.left.and.text.bubble.right")
+                            .font(.caption2)
+                        Text("问教练")
+                            .font(.caption.weight(.medium))
+                    }
+                    .foregroundStyle(Flux.Colors.accent)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
+        .background(
+            LinearGradient(
+                colors: [Flux.Colors.accent.opacity(0.06), Color(.secondarySystemGroupedBackground)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: .rect(cornerRadius: Flux.Radius.large)
+        )
         .onAppear { loadDailyInsight() }
         .onChange(of: todaySessions.count) { _, _ in
-            // session 数量变化时刷新
             loadDailyInsight()
+        }
+        .sheet(isPresented: $showCoachChat) {
+            coachChatSheet
         }
     }
 
@@ -508,7 +635,11 @@ struct DashboardView: View {
         Task {
             let text: String
             if #available(iOS 26.0, *) {
-                text = await NLPSummaryEngine.shared.generateDailyInsight(sessions: todaySessions)
+                if todaySessions.isEmpty {
+                    text = NLPSummaryEngine.shared.generateEmptyDayInsight(recentSessions: recentSessions)
+                } else {
+                    text = await NLPSummaryEngine.shared.generateDailyInsight(sessions: todaySessions, allRecentSessions: recentSessions)
+                }
             } else {
                 text = generateFallbackDailyInsight()
             }
@@ -519,19 +650,192 @@ struct DashboardView: View {
         }
     }
 
+    // MARK: - Coach Chat Sheet (B3/B4)
+
+    private var coachChatSheet: some View {
+        NavigationStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // 预设问题
+                        if coachMessages.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("常见问题")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+
+                                ForEach(coachPresetQuestions, id: \.self) { q in
+                                    Button {
+                                        askCoach(question: q)
+                                    } label: {
+                                        Text(q)
+                                            .font(.subheadline)
+                                            .foregroundStyle(Flux.Colors.accent)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(Flux.Colors.accent.opacity(0.08), in: Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(isCoachLoading)
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+
+                        // 消息列表
+                        ForEach(Array(coachMessages.enumerated()), id: \.offset) { idx, msg in
+                            VStack(alignment: .leading, spacing: 8) {
+                                // 用户问题
+                                HStack {
+                                    Spacer()
+                                    Text(msg.question)
+                                        .font(.subheadline)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Flux.Colors.accent.opacity(0.12), in: .rect(cornerRadius: 12))
+                                }
+
+                                // 教练回答
+                                HStack(alignment: .top, spacing: 8) {
+                                    Image(systemName: "brain.head.profile.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(Flux.Colors.accent)
+                                        .padding(.top, 4)
+                                    Text(msg.answer)
+                                        .font(.subheadline)
+                                        .lineSpacing(3)
+                                }
+                            }
+                            .padding(.horizontal)
+                            .id(idx)
+                        }
+
+                        if isCoachLoading {
+                            HStack(spacing: 8) {
+                                Image(systemName: "brain.head.profile.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(Flux.Colors.accent)
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("思考中…")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                    .padding(.vertical)
+                }
+                .onChange(of: coachMessages.count) { _, _ in
+                    withAnimation {
+                        proxy.scrollTo(coachMessages.count - 1, anchor: .bottom)
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 8) {
+                    TextField("输入你的问题…", text: $customQuestion)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.subheadline)
+                        .submitLabel(.send)
+                        .onSubmit { sendCustomQuestion() }
+
+                    Button {
+                        sendCustomQuestion()
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(customQuestion.isEmpty ? .gray : Flux.Colors.accent)
+                    }
+                    .disabled(customQuestion.isEmpty || isCoachLoading)
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.bar)
+            }
+            .navigationTitle("问教练")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { showCoachChat = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func sendCustomQuestion() {
+        let q = customQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        customQuestion = ""
+        askCoach(question: q)
+    }
+
+    private func askCoach(question: String) {
+        guard !isCoachLoading else { return }
+        isCoachLoading = true
+
+        Task {
+            let answer: String
+            if #available(iOS 26.0, *) {
+                let anomalies = NLPSummaryEngine.shared.detectDailyAnomalies(sessions: todaySessions)
+                let weeklyTrend = recentSessions.count >= 2
+                    ? NLPSummaryEngine.shared.generateWeeklyTrend(sessions: recentSessions)
+                    : nil
+
+                let context = NLPSummaryEngine.CoachContext(
+                    todaySessions: todaySessions,
+                    dailyInsight: dailyInsightText,
+                    anomalies: anomalies,
+                    weeklyTrend: weeklyTrend
+                )
+
+                answer = await NLPSummaryEngine.shared.askFollowUp(context: context, question: question)
+            } else {
+                answer = "AI 教练需要 iOS 26.0 或更高版本。建议每 25 分钟主动休息 5 分钟，保持良好的专注节奏。"
+            }
+
+            await MainActor.run {
+                coachMessages.append((question: question, answer: answer))
+                isCoachLoading = false
+            }
+        }
+    }
+
     /// iOS 26 以下的 fallback（不依赖 NLPSummaryEngine）
     private func generateFallbackDailyInsight() -> String {
+        guard !todaySessions.isEmpty else {
+            let hour = Calendar.current.component(.hour, from: Date())
+            if hour < 12 {
+                return "早上好！连上设备开始今天的第一段专注吧。"
+            } else if hour < 18 {
+                return "下午好，今天还没有专注记录。找个时间段开始一段吧。"
+            } else {
+                return "今天还没有记录，没关系，适当休息也是提升的一部分。"
+            }
+        }
+
         let count = todaySessions.count
         let totalMin = Int(todaySessions.reduce(0) { $0 + $1.duration } / 60)
         let avgVals = todaySessions.compactMap(\.avgStamina)
         let avg = avgVals.isEmpty ? 0.0 : avgVals.reduce(0, +) / Double(avgVals.count)
 
         if avg >= 75 {
-            return "今天状态不错，\(count) 段专注累计 \(totalMin) 分钟，续航稳定在 \(Int(avg))。保持这个节奏。"
+            return [
+                "今天 \(count) 段专注累计 \(totalMin) 分钟，续航 \(Int(avg))，状态很好。",
+                "身体信号稳定，\(totalMin) 分钟专注、续航 \(Int(avg))，保持这个节奏。"
+            ].randomElement()!
         } else if avg >= 50 {
-            return "今天 \(count) 段专注共 \(totalMin) 分钟，续航 \(Int(avg))，中规中矩。试试在疲劳前主动休息 5 分钟。"
+            return [
+                "今天 \(count) 段专注共 \(totalMin) 分钟，续航 \(Int(avg))，试试在疲劳前主动休息 5 分钟。",
+                "\(totalMin) 分钟专注，续航 \(Int(avg))，有提升空间——关键在休息节奏。"
+            ].randomElement()!
         } else {
-            return "今天身体信号偏弱，续航只有 \(Int(avg))，记得早点休息，明天会更好。"
+            return [
+                "今天身体信号偏弱，续航 \(Int(avg))，早点休息明天会更好。",
+                "续航 \(Int(avg)) 偏低，身体需要恢复，不要勉强自己。"
+            ].randomElement()!
         }
     }
 
@@ -577,7 +881,7 @@ private struct DimensionsRow: View, Equatable {
         }
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
     }
 }
 

@@ -34,6 +34,7 @@ final class BLEManager: NSObject, ObservableObject {
 
     @Published var peripheralState: CBPeripheralState = .disconnected
     @Published var discoveredDevices: [CBPeripheral] = []
+    @Published var deviceRSSI: [UUID: Int] = [:]
     @Published var connectedDeviceName: String?
     @Published var isScanning = false
     @Published var latestRMS: [Double] = Array(repeating: 0, count: 6)
@@ -230,6 +231,7 @@ extension BLEManager: CBCentralManagerDelegate {
             ?? ""
         guard name.uppercased().hasPrefix(BLEConstants.devicePrefix) else { return }
         Task { @MainActor in
+            self.deviceRSSI[peripheral.identifier] = RSSI.intValue
             if !self.discoveredDevices.contains(where: { $0.identifier == peripheral.identifier }) {
                 self.discoveredDevices.append(peripheral)
             }
