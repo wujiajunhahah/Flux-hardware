@@ -1,5 +1,6 @@
 .venv/
 data/
+!*.mlpackage/Data/
 model/
 __pycache__/
 .DS_Store
