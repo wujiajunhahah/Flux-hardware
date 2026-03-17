@@ -43,6 +43,7 @@
 		D866EFFE47F922A1A563C184 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */; };
 		EADBB984082147C681789360 /* model_meta.json in Resources */ = {isa = PBXBuildFile; fileRef = 3CB0F83592C8DF2E36A992D2 /* model_meta.json */; };
 		FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C4C08A362F4D9CE7712D17 /* BLEManager.swift */; };
+		067D0CDED0224EDAB98D812F /* BodyInsightEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 329C9D3D967840AD9E96D156 /* BodyInsightEngine.swift */; };
 		FDBD1A530498FCADA98A80E7 /* NLPSummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */; };
 		FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371B9343B23F955F6F6A51BF /* FluxModels.swift */; };
 		C0C0C0C0C0C0C0C0C0C0C002 /* ConnectionGuideSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */; };
@@ -94,6 +95,7 @@
 		74753401A3431315E6EED0CE /* OnDeviceStaminaEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceStaminaEngine.swift; sourceTree = "<group>"; };
 		74C82F52C084FF7B4B9B98F3 /* FluxChiLiveBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FluxChiLiveBundle.swift; sourceTree = "<group>"; };
 		7B91852213E03E125E4DD708 /* FluxChiLive.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FluxChiLive.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		329C9D3D967840AD9E96D156 /* BodyInsightEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BodyInsightEngine.swift; sourceTree = "<group>"; };
 		7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NLPSummaryEngine.swift; sourceTree = "<group>"; };
 		858AEC23E1FB855621B1C591 /* FluxChi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FluxChi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9992B47B1D2369E9BB080354 /* SessionChartsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionChartsView.swift; sourceTree = "<group>"; };
@@ -233,6 +235,7 @@
 				A322440B9C6FD9D20D692178 /* SessionManager.swift */,
 				DFD3DAA5383747EB87C2DD20 /* PerformanceMonitor.swift */,
 				CF9F63942587BE4E4AB46CDE /* SummaryEngine.swift */,
+				329C9D3D967840AD9E96D156 /* BodyInsightEngine.swift */,
 				7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */,
 				DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */,
 			);
@@ -403,6 +406,7 @@
 				20258A5445FFADF89345BB8C /* SummaryEngine.swift in Sources */,
 				CF1C870298895E3CC7746B39 /* CalendarView.swift in Sources */,
 				7491661A48102D7610F8F1B3 /* SessionChartsView.swift in Sources */,
+				067D0CDED0224EDAB98D812F /* BodyInsightEngine.swift in Sources */,
 				FDBD1A530498FCADA98A80E7 /* NLPSummaryEngine.swift in Sources */,
 				9838B0DD287D1F821E2BC65D /* LiveActivityManager.swift in Sources */,
 			);

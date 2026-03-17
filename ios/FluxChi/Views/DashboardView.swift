@@ -541,23 +541,23 @@ struct DashboardView: View {
             HStack(spacing: 8) {
                 ZStack {
                     Circle()
-                        .fill(Flux.Colors.accent.opacity(0.12))
+                        .fill(Color.cyan.opacity(0.12))
                         .frame(width: 28, height: 28)
-                    Image(systemName: "brain.head.profile.fill")
+                    Image(systemName: "waveform.path")
                         .font(.system(size: 13))
-                        .foregroundStyle(Flux.Colors.accent)
+                        .foregroundStyle(.cyan)
                 }
-                Text("AI 教练")
+                Text("体能洞察")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                // NLP 引擎状态指示（长按可看详情）
+                // 引擎状态指示
                 if #available(iOS 26.0, *) {
-                    let nlpAvailable = NLPSummaryEngine.shared.isAvailable
-                    Image(systemName: nlpAvailable ? "cpu.fill" : "cpu")
+                    let engineAvailable = BodyInsightEngine.shared.isAvailable
+                    Image(systemName: engineAvailable ? "cpu.fill" : "cpu")
                         .font(.system(size: 9))
-                        .foregroundStyle(nlpAvailable ? .green : .orange)
-                        .help(NLPSummaryEngine.shared.diagnosticInfo)
+                        .foregroundStyle(engineAvailable ? .green : .orange)
+                        .help(BodyInsightEngine.shared.diagnosticInfo)
                 }
 
                 // 异常 badge
@@ -593,19 +593,19 @@ struct DashboardView: View {
                     .foregroundStyle(.tertiary)
             }
 
-            // 追问按钮行
+            // 追问按钮行（可选：了解自己的状态数据）
             if dailyInsightText != nil {
                 Divider()
                 Button {
                     showCoachChat = true
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "bubble.left.and.text.bubble.right")
+                        Image(systemName: "info.circle")
                             .font(.caption2)
-                        Text("问教练")
+                        Text("了解数据含义")
                             .font(.caption.weight(.medium))
                     }
-                    .foregroundStyle(Flux.Colors.accent)
+                    .foregroundStyle(.cyan)
                 }
                 .buttonStyle(.plain)
             }
@@ -636,9 +636,9 @@ struct DashboardView: View {
             let text: String
             if #available(iOS 26.0, *) {
                 if todaySessions.isEmpty {
-                    text = NLPSummaryEngine.shared.generateEmptyDayInsight(recentSessions: recentSessions)
+                    text = "今天还没有记录。连上设备开始专注，让身体数据帮你了解自己的状态。"
                 } else {
-                    text = await NLPSummaryEngine.shared.generateDailyInsight(sessions: todaySessions, allRecentSessions: recentSessions)
+                    text = await BodyInsightEngine.shared.generateDailySummary(sessions: todaySessions)
                 }
             } else {
                 text = generateFallbackDailyInsight()
@@ -660,7 +660,7 @@ struct DashboardView: View {
                         // 预设问题
                         if coachMessages.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("常见问题")
+                                Text("想知道数据背后的含义？")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
 
@@ -670,10 +670,10 @@ struct DashboardView: View {
                                     } label: {
                                         Text(q)
                                             .font(.subheadline)
-                                            .foregroundStyle(Flux.Colors.accent)
+                                            .foregroundStyle(.cyan)
                                             .padding(.horizontal, 12)
                                             .padding(.vertical, 8)
-                                            .background(Flux.Colors.accent.opacity(0.08), in: Capsule())
+                                            .background(Color.cyan.opacity(0.08), in: Capsule())
                                     }
                                     .buttonStyle(.plain)
                                     .disabled(isCoachLoading)
@@ -754,7 +754,7 @@ struct DashboardView: View {
                 .padding(.vertical, 8)
                 .background(.bar)
             }
-            .navigationTitle("问教练")
+            .navigationTitle("了解数据")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

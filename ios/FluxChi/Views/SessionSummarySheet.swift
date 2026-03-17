@@ -7,8 +7,8 @@ struct SessionSummarySheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var personalization: PersonalizationManager
 
-    @State private var aiSummary: String?
-    @State private var isLoadingAI = false
+    @State private var insight: String?
+    @State private var isLoadingInsight = false
     @State private var selectedMood: Mood?
     @State private var showCorrection = false
     @State private var accuracyRating: Int = 3
@@ -41,7 +41,7 @@ struct SessionSummarySheet: View {
         .onAppear {
             guard !appeared else { return }
             appeared = true
-            loadAISummary()
+            loadInsight()
         }
     }
 
@@ -71,33 +71,33 @@ struct SessionSummarySheet: View {
             }
             .padding(.vertical, 8)
 
-            aiSummaryCard
+            insightCard
         }
     }
 
-    private var aiSummaryCard: some View {
+    private var insightCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Image(systemName: "sparkles")
+                Image(systemName: "waveform.path")
                     .font(.caption)
-                    .foregroundStyle(.purple)
-                Text("智能总结")
+                    .foregroundStyle(.cyan)
+                Text("体能洞察")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(.cyan)
 
-                if isLoadingAI {
+                if isLoadingInsight {
                     ProgressView()
                         .scaleEffect(0.6)
                 }
             }
 
-            if let summary = aiSummary {
-                Text(summary)
+            if let bodyInsight = insight {
+                Text(bodyInsight)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
-            } else if !isLoadingAI {
+            } else if !isLoadingInsight {
                 Text(session.summaryText ?? fallbackText)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
@@ -107,7 +107,7 @@ struct SessionSummarySheet: View {
                 HStack(spacing: 8) {
                     ProgressView()
                         .scaleEffect(0.7)
-                    Text("正在生成…")
+                    Text("正在分析…")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -381,14 +381,14 @@ struct SessionSummarySheet: View {
 
     // MARK: - Actions
 
-    private func loadAISummary() {
+    private func loadInsight() {
         guard #available(iOS 26.0, *) else { return }
-        isLoadingAI = true
+        isLoadingInsight = true
         Task {
-            let summary = await NLPSummaryEngine.shared.generateSummary(for: session)
+            let bodyInsight = await BodyInsightEngine.shared.generateInsight(for: session)
             withAnimation {
-                aiSummary = summary
-                isLoadingAI = false
+                insight = bodyInsight
+                isLoadingInsight = false
             }
         }
     }
