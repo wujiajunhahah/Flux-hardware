@@ -172,7 +172,7 @@ struct FluxChiApp: App {
         if #available(iOS 18.0, *) {
             TabView(selection: $selectedTab) {
                 Tab("仪表盘", systemImage: "waveform", value: "dashboard") {
-                    ResearchDashboardView()
+                    DashboardView(showActiveSession: $showActiveSession, finishedSession: $finishedSession)
                 }
                 Tab("历史", systemImage: "clock.arrow.circlepath", value: "history") {
                     HistoryView()

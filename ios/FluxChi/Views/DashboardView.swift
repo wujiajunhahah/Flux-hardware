@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 struct DashboardView: View {
     @EnvironmentObject var service: FluxService
@@ -18,6 +19,11 @@ struct DashboardView: View {
     @State private var showFeedback = false
     @State private var showSummary = false   // recordButton 直接结束时用
     @State private var showConnectionSheet = false
+
+    // Chart interaction
+    @State private var selectedSessionDate: Date?
+    @State private var selectedDayDate: Date?
+    @State private var selectedTimeSlot: String?
 
     // Daily Insight
     @State private var dailyInsightText: String?
@@ -103,6 +109,35 @@ struct DashboardView: View {
 
                     if !todaySessions.isEmpty {
                         todaySummaryCard
+                    }
+
+                    // 洞察图表区
+                    if todaySessions.count >= 2 {
+                        todayTrendChart
+                    } else {
+                        chartPlaceholder(
+                            icon: "chart.xyaxis.line",
+                            title: "今日续航趋势",
+                            hint: "再完成 \(max(0, 2 - todaySessions.count)) 次记录即可查看趋势"
+                        )
+                    }
+                    if recentSessions.count >= 2 {
+                        weeklyTrendChart
+                    } else {
+                        chartPlaceholder(
+                            icon: "chart.bar.fill",
+                            title: "近 7 天趋势",
+                            hint: "再完成 \(max(0, 2 - recentSessions.count)) 次记录即可查看周趋势"
+                        )
+                    }
+                    if todaySessions.count >= 2 {
+                        timeSlotChart
+                    } else {
+                        chartPlaceholder(
+                            icon: "clock.arrow.2.circlepath",
+                            title: "时段对比",
+                            hint: "完成不同时段的记录后解锁"
+                        )
                     }
 
                     dailyInsightCard
@@ -514,6 +549,53 @@ struct DashboardView: View {
         .background(.red.opacity(0.06), in: .rect(cornerRadius: 16))
     }
 
+    // MARK: - Chart Placeholder
+
+    private func chartPlaceholder(icon: String, title: String, hint: String) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 28))
+                .foregroundStyle(.quaternary)
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+            Text(hint)
+                .font(.caption2)
+                .foregroundStyle(.quaternary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
+    }
+
+    // MARK: - Today Trend Chart (拖动联动大数字)
+
+    private var todayTrendChart: some View {
+        TodayTrendChartCard(
+            sessions: todaySessions,
+            selectedDate: $selectedSessionDate
+        )
+    }
+
+    // MARK: - Weekly Trend Chart (7天拖动)
+
+    private var weeklyTrendChart: some View {
+        WeeklyTrendChartCard(
+            sessions: recentSessions,
+            selectedDate: $selectedDayDate
+        )
+    }
+
+    // MARK: - Time Slot Chart (时段分布)
+
+    private var timeSlotChart: some View {
+        TimeSlotChartCard(
+            sessions: todaySessions,
+            selectedSlot: $selectedTimeSlot
+        )
+    }
+
     // MARK: - Daily Insight Card
 
     @ViewBuilder
@@ -882,6 +964,395 @@ private struct DimensionsRow: View, Equatable {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
         .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
+    }
+}
+
+// MARK: - Today Trend Chart Card (独立 struct 降低类型检查复杂度)
+
+private struct TodayTrendChartCard: View {
+    let sessions: [Session]
+    @Binding var selectedDate: Date?
+
+    private var sortedSessions: [Session] {
+        sessions.sorted { $0.startedAt < $1.startedAt }
+    }
+
+    private var selected: Session? {
+        guard let date = selectedDate else { return nil }
+        return sortedSessions.min(by: {
+            abs($0.startedAt.timeIntervalSince(date)) < abs($1.startedAt.timeIntervalSince(date))
+        })
+    }
+
+    private var displayStamina: Double {
+        selected?.avgStamina ?? sortedSessions.last?.avgStamina ?? 0
+    }
+
+    var body: some View {
+        let color = Flux.Colors.forStaminaValue(displayStamina)
+
+        VStack(alignment: .leading, spacing: 10) {
+            headerRow(color: color)
+            chartView(color: color)
+            legendRow
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
+        .animation(.snappy, value: selectedDate)
+    }
+
+    private func headerRow(color: Color) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("今日续航趋势")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(Int(displayStamina))")
+                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .foregroundStyle(color)
+                        .contentTransition(.numericText(value: displayStamina))
+                        .animation(.snappy(duration: 0.3), value: Int(displayStamina))
+                    Text("avg")
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer()
+            if let s = selected {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(s.startedAt, format: .dateTime.hour().minute())
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    Text("\(Int(s.duration / 60))m")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private func chartView(color: Color) -> some View {
+        let selectedID = selected?.id
+
+        return Chart(sortedSessions, id: \.id) { session in
+            let avg: Double = session.avgStamina ?? 0
+            let isSelected: Bool = selectedID == session.id
+
+            LineMark(
+                x: .value("时间", session.startedAt),
+                y: .value("续航", avg)
+            )
+            .interpolationMethod(.catmullRom)
+            .foregroundStyle(Flux.Colors.accent.gradient)
+            .lineStyle(StrokeStyle(lineWidth: 2.5))
+
+            AreaMark(
+                x: .value("时间", session.startedAt),
+                yStart: .value("底", 0),
+                yEnd: .value("续航", avg)
+            )
+            .interpolationMethod(.catmullRom)
+            .foregroundStyle(
+                .linearGradient(
+                    colors: [Flux.Colors.accent.opacity(0.25), Flux.Colors.accent.opacity(0.02)],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+
+            PointMark(
+                x: .value("时间", session.startedAt),
+                y: .value("续航", avg)
+            )
+            .symbolSize(isSelected ? 80 : 30)
+            .foregroundStyle(isSelected ? color : Flux.Colors.accent)
+        }
+        .chartYScale(domain: 0...100)
+        .chartXSelection(value: $selectedDate)
+        .chartYAxis {
+            AxisMarks(values: [0, 30, 60, 100]) { _ in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3]))
+                    .foregroundStyle(.quaternary)
+                AxisValueLabel()
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                AxisValueLabel(format: .dateTime.hour().minute())
+                    .font(.system(size: 9, design: .monospaced))
+            }
+        }
+        .frame(height: 160)
+    }
+
+    private var legendRow: some View {
+        HStack(spacing: 12) {
+            chartLegendDot(color: .green.opacity(0.5), text: "60 高效线")
+            chartLegendDot(color: .orange.opacity(0.5), text: "30 警告线")
+        }
+        .font(.system(size: 9))
+    }
+}
+
+// MARK: - Weekly Trend Chart Card
+
+private struct DayData: Identifiable {
+    let id: Date
+    let date: Date
+    let avgStamina: Double
+    let sessionCount: Int
+    let totalMin: Int
+}
+
+private struct WeeklyTrendChartCard: View {
+    let sessions: [Session]
+    @Binding var selectedDate: Date?
+
+    private var days: [DayData] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: sessions) { calendar.startOfDay(for: $0.startedAt) }
+        return grouped.map { (date, daySessions) in
+            let staminas = daySessions.compactMap(\.avgStamina)
+            let avg = staminas.isEmpty ? 0 : staminas.reduce(0, +) / Double(staminas.count)
+            let totalMin = Int(daySessions.reduce(0) { $0 + $1.duration } / 60)
+            return DayData(id: date, date: date, avgStamina: avg, sessionCount: daySessions.count, totalMin: totalMin)
+        }.sorted { $0.date < $1.date }
+    }
+
+    private var selected: DayData? {
+        guard let date = selectedDate else { return nil }
+        return days.min(by: {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+        })
+    }
+
+    private var displayStamina: Double {
+        selected?.avgStamina ?? days.last?.avgStamina ?? 0
+    }
+
+    var body: some View {
+        let color = Flux.Colors.forStaminaValue(displayStamina)
+
+        VStack(alignment: .leading, spacing: 10) {
+            headerRow(color: color)
+            chartView(color: color)
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
+        .animation(.snappy, value: selectedDate)
+    }
+
+    private func headerRow(color: Color) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("近 7 天趋势")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(Int(displayStamina))")
+                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .foregroundStyle(color)
+                        .contentTransition(.numericText(value: displayStamina))
+                        .animation(.snappy(duration: 0.3), value: Int(displayStamina))
+                    Text("avg")
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer()
+            if let d = selected {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(d.date, format: .dateTime.month().day().weekday())
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text("\(d.sessionCount) 次 · \(d.totalMin)m")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private func chartView(color: Color) -> some View {
+        let selectedDay = selected?.date
+
+        return Chart(days) { day in
+            let isSelected: Bool = selectedDay == day.date
+            let barColor: AnyShapeStyle = isSelected
+                ? AnyShapeStyle(color.gradient)
+                : AnyShapeStyle(Flux.Colors.accent.opacity(0.6).gradient)
+
+            BarMark(
+                x: .value("日期", day.date, unit: .day),
+                y: .value("续航", day.avgStamina)
+            )
+            .foregroundStyle(barColor)
+            .cornerRadius(4)
+        }
+        .chartYScale(domain: 0...100)
+        .chartXSelection(value: $selectedDate)
+        .chartYAxis {
+            AxisMarks(values: [0, 50, 100]) { _ in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3]))
+                    .foregroundStyle(.quaternary)
+                AxisValueLabel()
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day)) { _ in
+                AxisValueLabel(format: .dateTime.weekday(.abbreviated))
+                    .font(.system(size: 9))
+            }
+        }
+        .frame(height: 140)
+    }
+}
+
+// MARK: - Time Slot Chart Card
+
+private struct SlotData: Identifiable {
+    var id: String { slot }
+    let slot: String
+    let avgStamina: Double
+    let count: Int
+    let order: Int
+}
+
+private struct TimeSlotChartCard: View {
+    let sessions: [Session]
+    @Binding var selectedSlot: String?
+
+    private static let slotOrder = ["上午": 0, "午间": 1, "下午": 2, "晚间": 3]
+
+    private var slots: [SlotData] {
+        var map: [String: [Double]] = [:]
+        for s in sessions {
+            guard let avg = s.avgStamina else { continue }
+            let hour = Calendar.current.component(.hour, from: s.startedAt)
+            let slot: String
+            switch hour {
+            case 6..<12:  slot = "上午"
+            case 12..<14: slot = "午间"
+            case 14..<18: slot = "下午"
+            case 18..<22: slot = "晚间"
+            default:      slot = "其他"
+            }
+            map[slot, default: []].append(avg)
+        }
+        return map.map { (slot, values) in
+            SlotData(
+                slot: slot,
+                avgStamina: values.reduce(0, +) / Double(values.count),
+                count: values.count,
+                order: Self.slotOrder[slot] ?? 4
+            )
+        }.sorted { $0.order < $1.order }
+    }
+
+    private var selectedData: SlotData? {
+        guard let name = selectedSlot else { return nil }
+        return slots.first { $0.slot == name }
+    }
+
+    private var displayStamina: Double {
+        selectedData?.avgStamina ?? slots.max(by: { $0.avgStamina < $1.avgStamina })?.avgStamina ?? 0
+    }
+
+    var body: some View {
+        let color = Flux.Colors.forStaminaValue(displayStamina)
+
+        if !slots.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                headerRow(color: color)
+                chartView(color: color)
+            }
+            .padding(14)
+            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
+            .animation(.snappy, value: selectedSlot)
+        }
+    }
+
+    private func headerRow(color: Color) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("时段对比")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(Int(displayStamina))")
+                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .foregroundStyle(color)
+                        .contentTransition(.numericText(value: displayStamina))
+                        .animation(.snappy(duration: 0.3), value: Int(displayStamina))
+                    if let s = selectedData {
+                        Text(s.slot)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("最佳")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            Spacer()
+            if let s = selectedData {
+                Text("\(s.count) 次")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func chartView(color: Color) -> some View {
+        let currentSlot = selectedSlot
+
+        return Chart(slots) { slot in
+            let isSelected: Bool = currentSlot == slot.slot
+            let barColor: AnyShapeStyle = isSelected
+                ? AnyShapeStyle(Flux.Colors.forStaminaValue(slot.avgStamina).gradient)
+                : AnyShapeStyle(Flux.Colors.accent.opacity(0.5).gradient)
+
+            BarMark(
+                x: .value("时段", slot.slot),
+                y: .value("续航", slot.avgStamina)
+            )
+            .foregroundStyle(barColor)
+            .cornerRadius(6)
+        }
+        .chartYScale(domain: 0...100)
+        .chartXSelection(value: $selectedSlot)
+        .chartYAxis {
+            AxisMarks(values: [0, 50, 100]) { _ in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3]))
+                    .foregroundStyle(.quaternary)
+                AxisValueLabel()
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .chartXAxis {
+            AxisMarks { _ in
+                AxisValueLabel()
+                    .font(.system(size: 11, weight: .medium))
+            }
+        }
+        .frame(height: 140)
+    }
+}
+
+// MARK: - Chart Legend Helper
+
+private func chartLegendDot(color: Color, text: String) -> some View {
+    HStack(spacing: 4) {
+        Circle().fill(color).frame(width: 6, height: 6)
+        Text(text).foregroundStyle(.tertiary)
     }
 }
 
