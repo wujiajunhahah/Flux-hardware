@@ -47,7 +47,10 @@
 		FDBD1A530498FCADA98A80E7 /* NLPSummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */; };
 		FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371B9343B23F955F6F6A51BF /* FluxModels.swift */; };
 		C0C0C0C0C0C0C0C0C0C0C002 /* ConnectionGuideSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */; };
-		/* End PBXBuildFile section */
+				WD00000001000000000000001 /* FluxChiWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = WD00000002000000000000001 /* FluxChiWidgets.swift */; };
+		WD00000001000000000000002 /* WidgetDataReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = WD00000002000000000000002 /* WidgetDataReader.swift */; };
+		CB49A2D72F6982F9001A70B2 /* WidgetDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB49A2D62F6982F9001A70B2 /* WidgetDataManager.swift */; };
+/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		2EA3DC8AD3A0DCF3D30FCEFD /* PBXContainerItemProxy */ = {
@@ -118,7 +121,11 @@
 		F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		FA1E2E60D7D16A91E3045405 /* RecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderView.swift; sourceTree = "<group>"; };
 		C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionGuideSheet.swift; sourceTree = "<group>"; };
-		/* End PBXFileReference section */
+				WD00000002000000000000001 /* FluxChiWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxChiWidgets.swift; sourceTree = "<group>"; };
+		WD00000002000000000000002 /* WidgetDataReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetDataReader.swift; sourceTree = "<group>"; };
+		WD00000002000000000000003 /* FluxChiLive.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FluxChiLive.entitlements; sourceTree = "<group>"; };
+		CB49A2D62F6982F9001A70B2 /* WidgetDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetDataManager.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		7C8E4DD977CD670F3BC22CEE /* Frameworks */ = {
@@ -138,6 +145,9 @@
 				A1B2C3D4E5F6A7B8C9D0E1F2 /* Info.plist */,
 				74C82F52C084FF7B4B9B98F3 /* FluxChiLiveBundle.swift */,
 				6D963C643474157682B7673F /* FluxChiLiveActivity.swift */,
+				WD00000002000000000000001 /* FluxChiWidgets.swift */,
+				WD00000002000000000000002 /* WidgetDataReader.swift */,
+				WD00000002000000000000003 /* FluxChiLive.entitlements */,
 			);
 			path = FluxChiLive;
 			sourceTree = "<group>";
@@ -238,6 +248,7 @@
 				329C9D3D967840AD9E96D156 /* BodyInsightEngine.swift */,
 				7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */,
 				DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */,
+				CB49A2D62F6982F9001A70B2 /* WidgetDataManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -369,6 +380,8 @@
 				41D01B608D506EF66567135B /* FluxChiLiveBundle.swift in Sources */,
 				2894A586BC7D4FEC4DA96468 /* FluxChiLiveActivity.swift in Sources */,
 				D866EFFE47F922A1A563C184 /* LiveActivityManager.swift in Sources */,
+				WD00000001000000000000001 /* FluxChiWidgets.swift in Sources */,
+				WD00000001000000000000002 /* WidgetDataReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -409,6 +422,7 @@
 				067D0CDED0224EDAB98D812F /* BodyInsightEngine.swift in Sources */,
 				FDBD1A530498FCADA98A80E7 /* NLPSummaryEngine.swift in Sources */,
 				9838B0DD287D1F821E2BC65D /* LiveActivityManager.swift in Sources */,
+				CB49A2D72F6982F9001A70B2 /* WidgetDataManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -428,6 +442,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = FluxChiLive/FluxChiLive.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = M4T239BM58;
@@ -638,6 +653,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = FluxChiLive/FluxChiLive.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = M4T239BM58;

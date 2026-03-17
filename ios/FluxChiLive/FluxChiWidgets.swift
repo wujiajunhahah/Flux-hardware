@@ -217,7 +217,7 @@ private struct TrendWidgetView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(data.weeklyAvgStamina > 0 ? "\(Int(data.weeklyAvgStamina))" : "--")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(data.weeklyAvgStamina > 0 ? color : .quaternary)
+                        .foregroundStyle(data.weeklyAvgStamina > 0 ? AnyShapeStyle(color) : AnyShapeStyle(.quaternary))
                     Text("avg")
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(.tertiary)
@@ -249,7 +249,7 @@ private struct TrendWidgetView: View {
         .chartYScale(domain: 0...100)
         .chartYAxis(.hidden)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day)) { _ in
+            AxisMarks(values: .stride(by: .day, count: 1)) { _ in
                 AxisValueLabel(format: .dateTime.weekday(.narrow))
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
@@ -351,7 +351,7 @@ private struct DashboardWidgetView: View {
                     .chartYScale(domain: 0...100)
                     .chartYAxis(.hidden)
                     .chartXAxis {
-                        AxisMarks(values: .stride(by: .day)) { _ in
+                        AxisMarks(values: .stride(by: .day, count: 1)) { _ in
                             AxisValueLabel(format: .dateTime.weekday(.narrow))
                                 .font(.system(size: 9))
                                 .foregroundStyle(.tertiary)
