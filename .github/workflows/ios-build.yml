@@ -34,8 +34,8 @@ jobs:
 
       - name: 🔐 Import Certificate
         env:
-          CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          CERTIFICATE_BASE64: ${{ secrets.ZHENGSHU }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MIMA }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           # 创建临时 keychain
@@ -55,7 +55,7 @@ jobs:
 
       - name: 🔐 Download Provisioning Profile
         env:
-          PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROFILE }}
         run: |
           PP_PATH=$HOME/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles/"
@@ -181,8 +181,8 @@ jobs:
 
       - name: 🔐 Import Certificate
         env:
-          CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          CERTIFICATE_BASE64: ${{ secrets.ZHENGSHU }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MIMA }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
@@ -197,7 +197,7 @@ jobs:
 
       - name: 🔐 Download Provisioning Profile
         env:
-          PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROFILE }}
         run: |
           PP_PATH=$HOME/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles/"
