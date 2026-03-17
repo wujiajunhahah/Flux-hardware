@@ -144,6 +144,10 @@ struct DashboardView: View {
                     modelContext: modelContext,
                     stateProvider: { [weak service] in service?.state }
                 )
+                updateWidgetData()
+            }
+            .onChange(of: todaySessions.count) { _, _ in
+                updateWidgetData()
             }
             .onReceive(NotificationCenter.default.publisher(for: FluxChiApp.showActiveSessionNotification)) { _ in
                 if sessionManager.isRecording && !showActiveSession {
@@ -891,6 +895,14 @@ struct DashboardView: View {
         if level > 50 { return "battery.75" }
         if level > 25 { return "battery.50" }
         return "battery.25"
+    }
+
+    /// 向 Widget Extension 写入最新数据
+    private func updateWidgetData() {
+        WidgetDataManager.updateFromSessions(
+            today: todaySessions,
+            recent: recentSessions
+        )
     }
 }
 

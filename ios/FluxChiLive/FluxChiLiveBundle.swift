@@ -5,5 +5,9 @@ import SwiftUI
 struct FluxChiLiveBundle: WidgetBundle {
     var body: some Widget {
         FluxChiLiveActivity()
+        FluxSessionCountWidget()
+        FluxStaminaWidget()
+        FluxTrendWidget()
+        FluxDashboardWidget()
     }
 }
