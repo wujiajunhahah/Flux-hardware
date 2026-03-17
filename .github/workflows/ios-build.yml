@@ -1,0 +1,259 @@
+name: iOS Build & Deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  BUNDLE_ID: com.fluxchi.app
+  XCODE_PROJECT: ios/FluxChi.xcodeproj
+  XCODE_SCHEME: FluxChi
+  XCODE_WORKSPACE: ios/FluxChi.xcworkspace # 如果使用 CocoaPods/SPM
+
+jobs:
+  # ============================================
+  # Job 1: 构建 + 上传 TestFlight (main 分支)
+  # ============================================
+  build-testflight:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: 🔐 Import Certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # 创建临时 keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # 导入证书
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          security import $CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # 设置 keychain 为默认
+          security default-keychain -s $KEYCHAIN_PATH
+
+      - name: 🔐 Download Provisioning Profile
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          PP_PATH=$HOME/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles/"
+          echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
+
+      - name: 📦 Cache SPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: 🏗️ Build Archive
+        env:
+          API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          API_KEY_ISSUER: ${{ secrets.ASC_API_KEY_ISSUER }}
+          API_KEY_CONTENT: ${{ secrets.ASC_API_KEY_CONTENT }}
+        run: |
+          cd ios
+
+          # 创建 API Key 文件
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo -n "$API_KEY_CONTENT" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
+
+          # 构建 archive
+          xcodebuild archive \
+            -project FluxChi.xcodeproj \
+            -scheme FluxChi \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/FluxChi.xcarchive \
+            -destination 'generic/platform=iOS' \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8 \
+            -authenticationKeyID $API_KEY_ID \
+            -authenticationKeyIssuerID $API_KEY_ISSUER \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=M4T239BM58 \
+            PRODUCT_BUNDLE_IDENTIFIER=com.fluxchi.app \
+            | xcpretty || exit $?
+
+      - name: 📤 Upload to TestFlight
+        env:
+          API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          API_KEY_ISSUER: ${{ secrets.ASC_API_KEY_ISSUER }}
+          API_KEY_CONTENT: ${{ secrets.ASC_API_KEY_CONTENT }}
+        run: |
+          cd ios
+
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo -n "$API_KEY_CONTENT" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath $RUNNER_TEMP/FluxChi.xcarchive \
+            -exportOptionsPth /tmp/exportOptions.plist \
+            -exportPath $RUNNER_TEMP/export \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8 \
+            -authenticationKeyID $API_KEY_ID \
+            -authenticationKeyIssuerID $API_KEY_ISSUER \
+            | xcpretty || exit $?
+
+          # 上传到 TestFlight
+          xcodebuild \
+            -uploadArchive \
+            -archivePath $RUNNER_TEMP/FluxChi.xcarchive \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8 \
+            -authenticationKeyID $API_KEY_ID \
+            -authenticationKeyIssuerID $API_KEY_ISSUER \
+            UPLOAD_TO_TESTFLIGHT=YES \
+            | xcpretty || exit $?
+
+      - name: 🧹 Cleanup
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+
+  # ============================================
+  # Job 2: 仅构建验证 (PR)
+  # ============================================
+  build-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: 🏗️ Build Only (No Archive)
+        run: |
+          cd ios
+          xcodebuild build \
+            -project FluxChi.xcodeproj \
+            -scheme FluxChi \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty || exit $?
+
+  # ============================================
+  # Job 3: App Store 发布 (tag 触发)
+  # ============================================
+  release-appstore:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: 🔐 Import Certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          security import $CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+
+      - name: 🔐 Download Provisioning Profile
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          PP_PATH=$HOME/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles/"
+          echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
+
+      - name: 🏗️ Build Archive
+        env:
+          API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          API_KEY_ISSUER: ${{ secrets.ASC_API_KEY_ISSUER }}
+          API_KEY_CONTENT: ${{ secrets.ASC_API_KEY_CONTENT }}
+        run: |
+          cd ios
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo -n "$API_KEY_CONTENT" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
+          xcodebuild archive \
+            -project FluxChi.xcodeproj \
+            -scheme FluxChi \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/FluxChi.xcarchive \
+            -destination 'generic/platform=iOS' \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8 \
+            -authenticationKeyID $API_KEY_ID \
+            -authenticationKeyIssuerID $API_KEY_ISSUER \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=M4T239BM58 \
+            PRODUCT_BUNDLE_IDENTIFIER=com.fluxchi.app \
+            | xcpretty || exit $?
+
+      - name: 📤 Upload to App Store
+        env:
+          API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          API_KEY_ISSUER: ${{ secrets.ASC_API_KEY_ISSUER }}
+          API_KEY_CONTENT: ${{ secrets.ASC_API_KEY_CONTENT }}
+        run: |
+          cd ios
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo -n "$API_KEY_CONTENT" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
+          xcodebuild \
+            -exportArchive \
+            -archivePath $RUNNER_TEMP/FluxChi.xcarchive \
+            -exportOptionsPth /tmp/exportOptions.plist \
+            -exportPath $RUNNER_TEMP/export \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8 \
+            -authenticationKeyID $API_KEY_ID \
+            -authenticationKeyIssuerID $API_KEY_ISSUER \
+            | xcpretty || exit $?
+          xcodebuild \
+            -uploadArchive \
+            -archivePath $RUNNER_TEMP/FluxChi.xcarchive \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8 \
+            -authenticationKeyID $API_KEY_ID \
+            -authenticationKeyIssuerID $API_KEY_ISSUER \
+            UPLOAD_TO_APPSTORE=YES \
+            | xcpretty || exit $?
+
+      - name: 🧹 Cleanup
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
