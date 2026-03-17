@@ -50,7 +50,7 @@
    6.1 硬件平台：WAVELETECH EMG 腕环与 BLE 协议
    6.2 iOS 原生应用设计与实现（SwiftUI + CoreBluetooth）
    6.3 Web 仪表盘与 Python 后端架构
-   6.4 端侧 AI 教练与智能 Fallback 引擎
+   6.4 端侧体能状态解读与智能 Fallback 引擎
    6.5 隐私优先架构设计
 7. 设计验证与用户反馈
    7.1 手势识别性能验证
@@ -90,7 +90,7 @@ sEMG 研究表明，肌肉疲劳在毫秒级就表现为 MDF 频谱偏移（De L
 
 并且从算法与系统设计维度，详述 StaminaEngine v3 三维度模型——Pattern Consistency（运动控制稳定性，权重 0.40）、Baseline Tension（静息肌张力，权重 0.25）、Sustained Capacity（基于 MDF 的肌肉疲劳，权重 0.35）。这一多维融合思路与近期研究趋势一致：2025 年 Journal of NeuroEngineering and Rehabilitation 的研究表明，复杂度指标在疲劳追踪中优于单一线性指标，支撑了 StaminaEngine 多维度融合的设计决策；同年 Electronics 期刊发表的无线 sEMG 实时疲劳指数研究也验证了实时计算疲劳指标的可行性。实现 84 维 EMG 特征提取（时域 MAV/RMS/WL/ZC/SSC、频域 MNF/MDF、空间相关系数，特征选择方法参考 Phinyomark 等 2012），通过 RandomForest 训练后导出 ONNX 格式，在 CoreML 端侧部署。
 
-最后完成产品设计与实现，包括 WAVELETECH 腕环 BLE 协议逆向工程、iOS 原生应用（SwiftUI + CoreBluetooth + SwiftData）、Web 仪表盘（FastAPI + Chart.js）、端侧 AI 教练（Apple Foundation Models + 规则引擎 Fallback）。整个系统采用隐私优先架构，所有数据处理均在设备本地完成。
+最后完成产品设计与实现，包括 WAVELETECH 腕环 BLE 协议逆向工程、iOS 原生应用（SwiftUI + CoreBluetooth + SwiftData）、Web 仪表盘（FastAPI + Chart.js）、端侧体能状态解读（Apple Foundation Models 用于回顾性工作周期分析，规则引擎 Fallback）。整个系统采用隐私优先架构，所有数据处理均在设备本地完成。
 
 毕业论文（设计）工作进展情况（详述）：
 
@@ -106,7 +106,7 @@ sEMG 研究表明，肌肉疲劳在毫秒级就表现为 MDF 频谱偏移（De L
 StaminaEngine v3 三维度模型已完成算法实现与权重标定（src/energy.py）。84 维 EMG 特征提取流程就绪（src/features.py），涵盖时域（MAV、RMS、WL、ZC、SSC）、频域（MNF、MDF）及空间相关系数。RandomForest 模型训练后导出 ONNX 格式（model/ninapro_classifier.onnx），并在 CoreML 端侧部署。端到端延迟实测约 215ms（手环采样至 UI 更新）。同时实现了疲劳估计（src/fatigue.py）、心理生理状态估计（src/state.py）和休息建议引擎（src/decision.py）。
 
 4. 应用层开发（已完成主体）
-iOS 原生应用（SwiftUI + CoreBluetooth + SwiftData）已完成主体开发，支持 BLE 直连腕环、实时 Stamina 双环动画显示、会话历史持久化、锁屏 Live Activity 实时状态。经历了 V1-V12 共 12 个版本的持续迭代，包括 UI/UX 对齐 Apple Human Interface Guidelines、Design Token 体系构建（FluxTokens + FluxComponents）、沉浸式 Onboarding 引导、蓝牙连接引导 Sheet、时间线历史记录等。集成了 Apple Foundation Models 框架实现端侧 AI 教练功能，并设计了智能 Fallback 引擎（Foundation Models 不可用时自动降级为规则引擎）。Web 仪表盘（FastAPI + Chart.js）支持 REST/SSE 实时状态推送。Python 后端核心引擎约 2,277 行代码（src/ 目录 18 个模块）。
+iOS 原生应用（SwiftUI + CoreBluetooth + SwiftData）已完成主体开发，支持 BLE 直连腕环、实时 Stamina 双环动画显示、会话历史持久化、锁屏 Live Activity 实时状态。经历了 V1-V12 共 12 个版本的持续迭代，包括 UI/UX 对齐 Apple Human Interface Guidelines、Design Token 体系构建（FluxTokens + FluxComponents）、沉浸式 Onboarding 引导、蓝牙连接引导 Sheet、时间线历史记录等。集成了 Apple Foundation Models 框架实现端侧体能状态解读（回顾性分析用户工作周期、状态变化模式），并设计了智能 Fallback 引擎（Foundation Models 不可用时自动降级为规则引擎）。Web 仪表盘（FastAPI + Chart.js）支持 REST/SSE 实时状态推送。Python 后端核心引擎约 2,277 行代码（src/ 目录 18 个模块）。
 
 5. 产品上架与文档（进行中）
 产品已以"FocuX"名称提交 App Store 审核（App ID: 6760378928），Build 3 已通过 Xcode Cloud 构建验证。完成了隐私政策页面、支持页面与产品官网的部署。API 文档（docs/API.md）、模型训练指南（docs/MODEL_TRAINING_GUIDE.md）已编写。GitHub 仓库包含完整的代码、模型文件与技术文档。
