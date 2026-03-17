@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FluxChi (FocuX) - Privacy Policy / 隐私政策</title>
+<style>
+  :root { --bg: #0a0a0a; --fg: #e5e5e5; --muted: #888; --accent: #34d399; --card: #1a1a1a; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; background: var(--bg); color: var(--fg); line-height: 1.7; padding: 40px 20px; }
+  .container { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  h2 { font-size: 20px; font-weight: 600; margin-top: 36px; margin-bottom: 12px; color: var(--accent); }
+  h3 { font-size: 16px; font-weight: 600; margin-top: 20px; margin-bottom: 8px; }
+  p, li { font-size: 15px; color: var(--fg); margin-bottom: 10px; }
+  ul { padding-left: 20px; }
+  .updated { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
+  .card { background: var(--card); border-radius: 12px; padding: 20px; margin: 16px 0; }
+  .badge { display: inline-block; background: #166534; color: #bbf7d0; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 100px; margin-bottom: 16px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .lang-switch { text-align: right; margin-bottom: 20px; }
+  .lang-switch a { font-size: 14px; padding: 6px 14px; border: 1px solid #333; border-radius: 8px; }
+  .section-en { display: none; }
+  hr { border: none; border-top: 1px solid #222; margin: 40px 0; }
+</style>
+<script>
+function toggleLang() {
+  document.querySelectorAll('.section-zh').forEach(e => e.style.display = e.style.display === 'none' ? '' : 'none');
+  document.querySelectorAll('.section-en').forEach(e => e.style.display = e.style.display === 'none' ? '' : 'none');
+}
+</script>
+</head>
+<body>
+<div class="container">
+
+<div class="lang-switch"><a href="javascript:toggleLang()">EN / 中文</a></div>
+
+<!-- ==================== 中文版 ==================== -->
+<div class="section-zh">
+<h1>FluxChi (FocuX) 隐私政策</h1>
+<p class="updated">最后更新：2026 年 3 月 18 日 &nbsp;|&nbsp; 生效日期：2026 年 3 月 18 日</p>
+
+<div class="card">
+<span class="badge">核心承诺</span>
+<p><strong>FluxChi 不收集、不上传、不共享任何个人数据。</strong>所有数据仅存储在您的设备本地。我们没有服务器，也没有任何第三方数据追踪。</p>
+</div>
+
+<h2>1. 我们收集什么</h2>
+<p>FluxChi 通过蓝牙连接 WAVELETECH EMG 手环，在本地采集以下数据：</p>
+<ul>
+<li><strong>肌电信号 (EMG)</strong> — 用于分析肌肉疲劳度和专注力续航</li>
+<li><strong>训练记录</strong> — 包括会话时长、续航分数、时间戳</li>
+</ul>
+<p>这些数据<strong>完全存储在您的 iPhone 本地</strong>（使用 SwiftData），不会传输到任何外部服务器。</p>
+
+<h2>2. 蓝牙权限</h2>
+<p>FluxChi 请求蓝牙权限（<code>NSBluetoothAlwaysUsageDescription</code>）仅用于连接 WAVELETECH EMG 硬件设备。我们不会扫描或连接任何其他蓝牙设备。后台蓝牙（<code>bluetooth-central</code>）用于在训练期间保持数据连接。</p>
+
+<h2>3. 本地网络权限</h2>
+<p>FluxChi 请求本地网络权限（<code>NSLocalNetworkUsageDescription</code>）仅在开发调试阶段用于连接电脑端 EMG 数据服务器。此功能在正式使用中不是必需的。</p>
+
+<h2>4. App Group 数据共享</h2>
+<p>FluxChi 使用 App Group（<code>group.com.fluxchi.app</code>）在主 App 和桌面 Widget 之间共享摘要数据（如今日训练次数、平均续航分数）。此数据共享<strong>仅发生在您设备本地</strong>的 App 与 Widget Extension 之间，不涉及任何网络传输。</p>
+
+<h2>5. 数据存储与删除</h2>
+<ul>
+<li>所有数据存储在 iPhone 本地 SwiftData 数据库中</li>
+<li>删除 App 将永久删除所有相关数据</li>
+<li>您可以在 App 内导出或删除训练记录</li>
+</ul>
+
+<h2>6. 第三方服务</h2>
+<p>FluxChi <strong>不使用</strong>任何第三方分析、广告、追踪 SDK。不集成 Firebase、Google Analytics、Facebook SDK 或任何类似服务。</p>
+
+<h2>7. 儿童隐私</h2>
+<p>FluxChi 不面向 13 岁以下儿童。我们不会故意收集儿童的个人信息。</p>
+
+<h2>8. 政策更新</h2>
+<p>如隐私政策发生变更，我们会在此页面更新。重大变更将通过 App 内通知告知用户。</p>
+
+<h2>9. 联系我们</h2>
+<p>如有隐私相关问题，请联系：<a href="mailto:epwujiajun@icloud.com">epwujiajun@icloud.com</a></p>
+</div>
+
+<!-- ==================== English ==================== -->
+<div class="section-en">
+<h1>FluxChi (FocuX) Privacy Policy</h1>
+<p class="updated">Last updated: March 18, 2026 &nbsp;|&nbsp; Effective: March 18, 2026</p>
+
+<div class="card">
+<span class="badge">Core Commitment</span>
+<p><strong>FluxChi does not collect, upload, or share any personal data.</strong> All data is stored locally on your device. We have no servers and no third-party tracking.</p>
+</div>
+
+<h2>1. What We Collect</h2>
+<p>FluxChi connects to the WAVELETECH EMG wristband via Bluetooth and processes the following data locally:</p>
+<ul>
+<li><strong>EMG signals</strong> — used to analyze muscle fatigue and focus stamina</li>
+<li><strong>Session records</strong> — including duration, stamina scores, and timestamps</li>
+</ul>
+<p>All data is <strong>stored entirely on your iPhone</strong> (using SwiftData) and is never transmitted to any external server.</p>
+
+<h2>2. Bluetooth Permission</h2>
+<p>FluxChi requests Bluetooth permission solely to connect to the WAVELETECH EMG hardware. We do not scan or connect to any other Bluetooth devices. Background Bluetooth (<code>bluetooth-central</code>) is used to maintain the data connection during active sessions.</p>
+
+<h2>3. Local Network Permission</h2>
+<p>FluxChi requests local network access for development/debugging purposes to connect to a desktop EMG data server. This is not required for normal usage.</p>
+
+<h2>4. App Group Data Sharing</h2>
+<p>FluxChi uses an App Group (<code>group.com.fluxchi.app</code>) to share summary data (e.g., session count, average stamina) between the main app and home screen widgets. This sharing occurs <strong>entirely on-device</strong> between the app and its Widget Extension, with no network transmission involved.</p>
+
+<h2>5. Data Storage &amp; Deletion</h2>
+<ul>
+<li>All data is stored in a local SwiftData database on your iPhone</li>
+<li>Deleting the app permanently removes all associated data</li>
+<li>You can export or delete session records within the app</li>
+</ul>
+
+<h2>6. Third-Party Services</h2>
+<p>FluxChi does <strong>not use</strong> any third-party analytics, advertising, or tracking SDKs. No Firebase, Google Analytics, Facebook SDK, or similar services are integrated.</p>
+
+<h2>7. Children's Privacy</h2>
+<p>FluxChi is not directed at children under 13. We do not knowingly collect personal information from children.</p>
+
+<h2>8. Policy Updates</h2>
+<p>If this privacy policy changes, updates will be posted on this page. Significant changes will be communicated via in-app notifications.</p>
+
+<h2>9. Contact Us</h2>
+<p>For privacy-related inquiries: <a href="mailto:epwujiajun@icloud.com">epwujiajun@icloud.com</a></p>
+</div>
+
+<hr>
+<p style="text-align:center;color:var(--muted);font-size:13px;">&copy; 2026 FluxChi. All rights reserved.</p>
+
+</div>
+</body>
+</html>
