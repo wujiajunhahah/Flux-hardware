@@ -111,34 +111,8 @@ struct DashboardView: View {
                         todaySummaryCard
                     }
 
-                    // 洞察图表区
-                    if todaySessions.count >= 2 {
-                        todayTrendChart
-                    } else {
-                        chartPlaceholder(
-                            icon: "chart.xyaxis.line",
-                            title: "今日续航趋势",
-                            hint: "再完成 \(max(0, 2 - todaySessions.count)) 次记录即可查看趋势"
-                        )
-                    }
-                    if recentSessions.count >= 2 {
-                        weeklyTrendChart
-                    } else {
-                        chartPlaceholder(
-                            icon: "chart.bar.fill",
-                            title: "近 7 天趋势",
-                            hint: "再完成 \(max(0, 2 - recentSessions.count)) 次记录即可查看周趋势"
-                        )
-                    }
-                    if todaySessions.count >= 2 {
-                        timeSlotChart
-                    } else {
-                        chartPlaceholder(
-                            icon: "clock.arrow.2.circlepath",
-                            title: "时段对比",
-                            hint: "完成不同时段的记录后解锁"
-                        )
-                    }
+                    // 洞察组件区 (iOS Widget 风格)
+                    insightWidgetGrid
 
                     dailyInsightCard
                 }
@@ -549,51 +523,42 @@ struct DashboardView: View {
         .background(.red.opacity(0.06), in: .rect(cornerRadius: 16))
     }
 
-    // MARK: - Chart Placeholder
+    // MARK: - Insight Widget Grid (iOS Widget 尺寸规范)
 
-    private func chartPlaceholder(icon: String, title: String, hint: String) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 28))
-                .foregroundStyle(.quaternary)
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-            Text(hint)
-                .font(.caption2)
-                .foregroundStyle(.quaternary)
-                .multilineTextAlignment(.center)
+    private var insightWidgetGrid: some View {
+        let spacing: CGFloat = 12
+
+        return VStack(spacing: spacing) {
+            // Row 1: 两个小组件 (square)
+            HStack(spacing: spacing) {
+                WidgetSessionCount(count: todaySessions.count, totalMin: Int(todaySessions.reduce(0) { $0 + $1.duration } / 60))
+                WidgetBestSlot(sessions: todaySessions)
+            }
+
+            // Row 2: 中组件 — 今日续航趋势 (medium rectangle)
+            if todaySessions.count >= 2 {
+                TodayTrendChartCard(sessions: todaySessions, selectedDate: $selectedSessionDate)
+            } else {
+                WidgetPlaceholder(icon: "chart.xyaxis.line", title: "续航趋势", hint: "再完成 \(max(0, 2 - todaySessions.count)) 次记录解锁", style: .medium)
+            }
+
+            // Row 3: 中组件 — 7 天趋势 (medium rectangle)
+            if recentSessions.count >= 2 {
+                WeeklyTrendChartCard(sessions: recentSessions, selectedDate: $selectedDayDate)
+            } else {
+                WidgetPlaceholder(icon: "chart.bar.fill", title: "周趋势", hint: "再完成 \(max(0, 2 - recentSessions.count)) 次记录解锁", style: .medium)
+            }
+
+            // Row 4: 两个小组件 — 时段对比 + 平均续航
+            HStack(spacing: spacing) {
+                if todaySessions.count >= 2 {
+                    TimeSlotChartCard(sessions: todaySessions, selectedSlot: $selectedTimeSlot)
+                } else {
+                    WidgetPlaceholder(icon: "clock.arrow.2.circlepath", title: "时段", hint: "多时段记录后解锁", style: .small)
+                }
+                WidgetAvgStamina(sessions: todaySessions)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
-    }
-
-    // MARK: - Today Trend Chart (拖动联动大数字)
-
-    private var todayTrendChart: some View {
-        TodayTrendChartCard(
-            sessions: todaySessions,
-            selectedDate: $selectedSessionDate
-        )
-    }
-
-    // MARK: - Weekly Trend Chart (7天拖动)
-
-    private var weeklyTrendChart: some View {
-        WeeklyTrendChartCard(
-            sessions: recentSessions,
-            selectedDate: $selectedDayDate
-        )
-    }
-
-    // MARK: - Time Slot Chart (时段分布)
-
-    private var timeSlotChart: some View {
-        TimeSlotChartCard(
-            sessions: todaySessions,
-            selectedSlot: $selectedTimeSlot
-        )
     }
 
     // MARK: - Daily Insight Card
@@ -967,7 +932,243 @@ private struct DimensionsRow: View, Equatable {
     }
 }
 
-// MARK: - Today Trend Chart Card (独立 struct 降低类型检查复杂度)
+// MARK: - iOS Widget Design Constants
+
+private enum WidgetStyle {
+    /// iOS Widget 标准圆角 (iPhone 15 系列)
+    static let cornerRadius: CGFloat = 22
+    /// 内边距
+    static let padding: CGFloat = 16
+    /// 小组件最小高度 (正方形，宽度由 grid 决定)
+    static let smallHeight: CGFloat = 170
+    /// 中组件高度 (宽矩形)
+    static let mediumHeight: CGFloat = 170
+}
+
+// MARK: - Widget Placeholder (占位组件)
+
+private struct WidgetPlaceholder: View {
+    let icon: String
+    let title: String
+    let hint: String
+    let style: WidgetSize
+
+    enum WidgetSize { case small, medium }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: icon)
+                .font(.system(size: style == .small ? 24 : 28))
+                .foregroundStyle(.quaternary)
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.tertiary)
+            Text(hint)
+                .font(.system(size: 11))
+                .foregroundStyle(.quaternary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            Spacer()
+        }
+        .padding(WidgetStyle.padding)
+        .frame(maxWidth: .infinity)
+        .frame(height: style == .small ? WidgetStyle.smallHeight : WidgetStyle.mediumHeight)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
+    }
+}
+
+// MARK: - Small Widget: 今日场次 (正方形)
+
+private struct WidgetSessionCount: View {
+    let count: Int
+    let totalMin: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.orange)
+                Spacer()
+            }
+
+            Spacer()
+
+            Text("\(count)")
+                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .contentTransition(.numericText())
+
+            Text("场专注")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Spacer().frame(height: 6)
+
+            Text(totalMin > 0 ? "累计 \(totalMin) 分钟" : "今日未记录")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(WidgetStyle.padding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: WidgetStyle.smallHeight)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
+    }
+}
+
+// MARK: - Small Widget: 最佳时段 (正方形)
+
+private struct WidgetBestSlot: View {
+    let sessions: [Session]
+
+    private var bestSlot: (name: String, avg: Double, icon: String)? {
+        var map: [String: [Double]] = [:]
+        for s in sessions {
+            guard let avg = s.avgStamina else { continue }
+            let hour = Calendar.current.component(.hour, from: s.startedAt)
+            let slot: String
+            switch hour {
+            case 6..<12:  slot = "上午"
+            case 12..<14: slot = "午间"
+            case 14..<18: slot = "下午"
+            case 18..<22: slot = "晚间"
+            default:      slot = "其他"
+            }
+            map[slot, default: []].append(avg)
+        }
+        guard let best = map.max(by: {
+            $0.value.reduce(0, +) / Double($0.value.count) <
+            $1.value.reduce(0, +) / Double($1.value.count)
+        }) else { return nil }
+
+        let avg = best.value.reduce(0, +) / Double(best.value.count)
+        let icon: String
+        switch best.key {
+        case "上午": icon = "sunrise.fill"
+        case "午间": icon = "sun.max.fill"
+        case "下午": icon = "sun.haze.fill"
+        case "晚间": icon = "moon.stars.fill"
+        default:     icon = "clock.fill"
+        }
+        return (best.key, avg, icon)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.cyan)
+                Spacer()
+            }
+
+            Spacer()
+
+            if let slot = bestSlot {
+                Image(systemName: slot.icon)
+                    .font(.system(size: 22))
+                    .foregroundStyle(Flux.Colors.forStaminaValue(slot.avg))
+                    .padding(.bottom, 4)
+
+                Text(slot.name)
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+
+                Text("最佳时段")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                Spacer().frame(height: 6)
+
+                Text("平均续航 \(Int(slot.avg))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text("--")
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .foregroundStyle(.quaternary)
+                Text("最佳时段")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.tertiary)
+
+                Spacer().frame(height: 6)
+
+                Text("记录后解锁")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.quaternary)
+            }
+        }
+        .padding(WidgetStyle.padding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: WidgetStyle.smallHeight)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
+    }
+}
+
+// MARK: - Small Widget: 平均续航 (正方形)
+
+private struct WidgetAvgStamina: View {
+    let sessions: [Session]
+
+    private var avgStamina: Double {
+        let vals = sessions.compactMap(\.avgStamina)
+        guard !vals.isEmpty else { return 0 }
+        return vals.reduce(0, +) / Double(vals.count)
+    }
+
+    var body: some View {
+        let color = Flux.Colors.forStaminaValue(avgStamina)
+
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(color)
+                Spacer()
+            }
+
+            Spacer()
+
+            if avgStamina > 0 {
+                Text("\(Int(avgStamina))")
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .foregroundStyle(color)
+                    .contentTransition(.numericText())
+
+                Text("平均续航")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                Spacer().frame(height: 6)
+
+                // 迷你进度条
+                ProgressView(value: avgStamina / 100)
+                    .tint(color)
+            } else {
+                Text("--")
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .foregroundStyle(.quaternary)
+
+                Text("平均续航")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.tertiary)
+
+                Spacer().frame(height: 6)
+
+                Text("开始记录后显示")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.quaternary)
+            }
+        }
+        .padding(WidgetStyle.padding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: WidgetStyle.smallHeight)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
+    }
+}
+
+// MARK: - Medium Widget: 今日续航趋势 (宽矩形)
 
 private struct TodayTrendChartCard: View {
     let sessions: [Session]
@@ -991,44 +1192,39 @@ private struct TodayTrendChartCard: View {
     var body: some View {
         let color = Flux.Colors.forStaminaValue(displayStamina)
 
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             headerRow(color: color)
             chartView(color: color)
-            legendRow
         }
-        .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
+        .padding(WidgetStyle.padding)
+        .frame(height: WidgetStyle.mediumHeight)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
         .animation(.snappy, value: selectedDate)
     }
 
     private func headerRow(color: Color) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("今日续航趋势")
-                    .font(.caption.weight(.semibold))
+                Text("续航趋势")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text("\(Int(displayStamina))")
-                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(color)
                         .contentTransition(.numericText(value: displayStamina))
                         .animation(.snappy(duration: 0.3), value: Int(displayStamina))
                     Text("avg")
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(.tertiary)
                 }
             }
             Spacer()
             if let s = selected {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(s.startedAt, format: .dateTime.hour().minute())
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                    Text("\(Int(s.duration / 60))m")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                .transition(.opacity)
+                Text(s.startedAt, format: .dateTime.hour().minute())
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
             }
         }
     }
@@ -1046,7 +1242,7 @@ private struct TodayTrendChartCard: View {
             )
             .interpolationMethod(.catmullRom)
             .foregroundStyle(Flux.Colors.accent.gradient)
-            .lineStyle(StrokeStyle(lineWidth: 2.5))
+            .lineStyle(StrokeStyle(lineWidth: 2))
 
             AreaMark(
                 x: .value("时间", session.startedAt),
@@ -1056,7 +1252,7 @@ private struct TodayTrendChartCard: View {
             .interpolationMethod(.catmullRom)
             .foregroundStyle(
                 .linearGradient(
-                    colors: [Flux.Colors.accent.opacity(0.25), Flux.Colors.accent.opacity(0.02)],
+                    colors: [Flux.Colors.accent.opacity(0.2), .clear],
                     startPoint: .top, endPoint: .bottom
                 )
             )
@@ -1065,39 +1261,17 @@ private struct TodayTrendChartCard: View {
                 x: .value("时间", session.startedAt),
                 y: .value("续航", avg)
             )
-            .symbolSize(isSelected ? 80 : 30)
+            .symbolSize(isSelected ? 60 : 20)
             .foregroundStyle(isSelected ? color : Flux.Colors.accent)
         }
         .chartYScale(domain: 0...100)
         .chartXSelection(value: $selectedDate)
-        .chartYAxis {
-            AxisMarks(values: [0, 30, 60, 100]) { _ in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3]))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel()
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                AxisValueLabel(format: .dateTime.hour().minute())
-                    .font(.system(size: 9, design: .monospaced))
-            }
-        }
-        .frame(height: 160)
-    }
-
-    private var legendRow: some View {
-        HStack(spacing: 12) {
-            chartLegendDot(color: .green.opacity(0.5), text: "60 高效线")
-            chartLegendDot(color: .orange.opacity(0.5), text: "30 警告线")
-        }
-        .font(.system(size: 9))
+        .chartYAxis(.hidden)
+        .chartXAxis(.hidden)
     }
 }
 
-// MARK: - Weekly Trend Chart Card
+// MARK: - Medium Widget: 7 天趋势 (宽矩形)
 
 private struct DayData: Identifiable {
     let id: Date
@@ -1112,8 +1286,8 @@ private struct WeeklyTrendChartCard: View {
     @Binding var selectedDate: Date?
 
     private var days: [DayData] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: sessions) { calendar.startOfDay(for: $0.startedAt) }
+        let cal = Calendar.current
+        let grouped = Dictionary(grouping: sessions) { cal.startOfDay(for: $0.startedAt) }
         return grouped.map { (date, daySessions) in
             let staminas = daySessions.compactMap(\.avgStamina)
             let avg = staminas.isEmpty ? 0 : staminas.reduce(0, +) / Double(staminas.count)
@@ -1136,40 +1310,41 @@ private struct WeeklyTrendChartCard: View {
     var body: some View {
         let color = Flux.Colors.forStaminaValue(displayStamina)
 
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             headerRow(color: color)
             chartView(color: color)
         }
-        .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
+        .padding(WidgetStyle.padding)
+        .frame(height: WidgetStyle.mediumHeight)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
         .animation(.snappy, value: selectedDate)
     }
 
     private func headerRow(color: Color) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("近 7 天趋势")
-                    .font(.caption.weight(.semibold))
+                Text("近 7 天")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text("\(Int(displayStamina))")
-                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(color)
                         .contentTransition(.numericText(value: displayStamina))
                         .animation(.snappy(duration: 0.3), value: Int(displayStamina))
                     Text("avg")
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(.tertiary)
                 }
             }
             Spacer()
             if let d = selected {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(d.date, format: .dateTime.month().day().weekday())
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(d.date, format: .dateTime.month().day())
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
-                    Text("\(d.sessionCount) 次 · \(d.totalMin)m")
-                        .font(.caption2)
+                    Text("\(d.sessionCount)次 \(d.totalMin)m")
+                        .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                 }
                 .transition(.opacity)
@@ -1184,7 +1359,7 @@ private struct WeeklyTrendChartCard: View {
             let isSelected: Bool = selectedDay == day.date
             let barColor: AnyShapeStyle = isSelected
                 ? AnyShapeStyle(color.gradient)
-                : AnyShapeStyle(Flux.Colors.accent.opacity(0.6).gradient)
+                : AnyShapeStyle(Flux.Colors.accent.opacity(0.5).gradient)
 
             BarMark(
                 x: .value("日期", day.date, unit: .day),
@@ -1195,26 +1370,18 @@ private struct WeeklyTrendChartCard: View {
         }
         .chartYScale(domain: 0...100)
         .chartXSelection(value: $selectedDate)
-        .chartYAxis {
-            AxisMarks(values: [0, 50, 100]) { _ in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3]))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel()
-                    .font(.system(size: 9, design: .monospaced))
+        .chartYAxis(.hidden)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .day)) { _ in
+                AxisValueLabel(format: .dateTime.weekday(.narrow))
+                    .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
             }
         }
-        .chartXAxis {
-            AxisMarks(values: .stride(by: .day)) { _ in
-                AxisValueLabel(format: .dateTime.weekday(.abbreviated))
-                    .font(.system(size: 9))
-            }
-        }
-        .frame(height: 140)
     }
 }
 
-// MARK: - Time Slot Chart Card
+// MARK: - Small Widget: 时段对比 (正方形 mini bar)
 
 private struct SlotData: Identifiable {
     var id: String { slot }
@@ -1267,92 +1434,62 @@ private struct TimeSlotChartCard: View {
     var body: some View {
         let color = Flux.Colors.forStaminaValue(displayStamina)
 
-        if !slots.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                headerRow(color: color)
-                chartView(color: color)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Image(systemName: "chart.bar.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.purple)
+                Spacer()
             }
-            .padding(14)
-            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
-            .animation(.snappy, value: selectedSlot)
-        }
-    }
 
-    private func headerRow(color: Color) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("时段对比")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("\(Int(displayStamina))")
-                        .font(.system(size: 36, weight: .bold, design: .rounded))
-                        .foregroundStyle(color)
-                        .contentTransition(.numericText(value: displayStamina))
-                        .animation(.snappy(duration: 0.3), value: Int(displayStamina))
-                    if let s = selectedData {
-                        Text(s.slot)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("最佳")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            }
+            Spacer().frame(height: 8)
+
+            Text("\(Int(displayStamina))")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundStyle(color)
+                .contentTransition(.numericText(value: displayStamina))
+                .animation(.snappy(duration: 0.3), value: Int(displayStamina))
+
+            Text(selectedData?.slot ?? "时段")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+
             Spacer()
-            if let s = selectedData {
-                Text("\(s.count) 次")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
+
+            chartView
         }
+        .padding(WidgetStyle.padding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: WidgetStyle.smallHeight)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
+        .animation(.snappy, value: selectedSlot)
     }
 
-    private func chartView(color: Color) -> some View {
-        let currentSlot = selectedSlot
-
-        return Chart(slots) { slot in
-            let isSelected: Bool = currentSlot == slot.slot
+    private var chartView: some View {
+        Chart(slots) { slot in
+            let isSelected: Bool = selectedSlot == slot.slot
             let barColor: AnyShapeStyle = isSelected
                 ? AnyShapeStyle(Flux.Colors.forStaminaValue(slot.avgStamina).gradient)
-                : AnyShapeStyle(Flux.Colors.accent.opacity(0.5).gradient)
+                : AnyShapeStyle(Flux.Colors.accent.opacity(0.4).gradient)
 
             BarMark(
                 x: .value("时段", slot.slot),
                 y: .value("续航", slot.avgStamina)
             )
             .foregroundStyle(barColor)
-            .cornerRadius(6)
+            .cornerRadius(3)
         }
         .chartYScale(domain: 0...100)
         .chartXSelection(value: $selectedSlot)
-        .chartYAxis {
-            AxisMarks(values: [0, 50, 100]) { _ in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3]))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel()
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-            }
-        }
+        .chartYAxis(.hidden)
         .chartXAxis {
             AxisMarks { _ in
                 AxisValueLabel()
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
             }
         }
-        .frame(height: 140)
-    }
-}
-
-// MARK: - Chart Legend Helper
-
-private func chartLegendDot(color: Color, text: String) -> some View {
-    HStack(spacing: 4) {
-        Circle().fill(color).frame(width: 6, height: 6)
-        Text(text).foregroundStyle(.tertiary)
+        .frame(height: 44)
     }
 }
 
