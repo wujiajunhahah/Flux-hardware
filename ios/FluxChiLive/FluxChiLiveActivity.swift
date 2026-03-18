@@ -34,9 +34,9 @@ struct FluxChiLiveActivity: Widget {
 
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 4) {
-                        dimensionRow("C", context.state.consistency, .cyan)
-                        dimensionRow("T", context.state.tension, .orange)
-                        dimensionRow("F", context.state.fatigue, .pink)
+                        dimensionRow("C", context.state.consistency, Color(red: 0.45, green: 0.72, blue: 0.68))
+                        dimensionRow("T", context.state.tension, Color(red: 0.85, green: 0.68, blue: 0.42))
+                        dimensionRow("F", context.state.fatigue, Color(red: 0.82, green: 0.52, blue: 0.55))
                     }
                     .padding(.top, 4)
                 }
@@ -127,9 +127,9 @@ struct FluxChiLiveActivity: Widget {
 
             // Three dimension vertical bars
             HStack(spacing: 5) {
-                dimensionPill(context.state.consistency, .cyan)
-                dimensionPill(context.state.tension, .orange)
-                dimensionPill(context.state.fatigue, .pink)
+                dimensionPill(context.state.consistency, Color(red: 0.45, green: 0.72, blue: 0.68))
+                dimensionPill(context.state.tension, Color(red: 0.85, green: 0.68, blue: 0.42))
+                dimensionPill(context.state.fatigue, Color(red: 0.82, green: 0.52, blue: 0.55))
             }
         }
         .padding(.horizontal, 20)
@@ -203,10 +203,10 @@ struct FluxChiLiveActivity: Widget {
 
     private func staminaColor(_ state: String) -> Color {
         switch state {
-        case "focused":    return Color(red: 0.30, green: 0.85, blue: 0.50)
-        case "fading":     return Color(red: 1.00, green: 0.70, blue: 0.20)
-        case "depleted":   return Color(red: 1.00, green: 0.35, blue: 0.30)
-        case "recovering": return Color(red: 0.25, green: 0.60, blue: 1.00)
+        case "focused":    return Color(red: 0.85, green: 0.50, blue: 0.38) // 暖珊瑚
+        case "fading":     return Color(red: 0.85, green: 0.68, blue: 0.42) // 暖琥珀
+        case "depleted":   return Color(red: 0.62, green: 0.50, blue: 0.64) // 薰衣草
+        case "recovering": return Color(red: 0.50, green: 0.70, blue: 0.52) // 鼠尾草
         default:           return .gray
         }
     }

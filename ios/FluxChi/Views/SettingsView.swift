@@ -65,14 +65,14 @@ struct SettingsView: View {
                     Image(systemName: bleManager.isConnected
                           ? "antenna.radiowaves.left.and.right"
                           : "antenna.radiowaves.left.and.right.slash")
-                        .foregroundStyle(bleManager.isConnected ? .green : .secondary)
+                        .foregroundStyle(bleManager.isConnected ? Flux.Colors.success : .secondary)
                         .symbolEffect(.pulse, isActive: bleManager.isConnected)
                 }
 
                 Spacer()
 
                 Circle()
-                    .fill(bleManager.isConnected ? .green : .red)
+                    .fill(bleManager.isConnected ? Flux.Colors.success : Flux.Colors.accent)
                     .frame(width: 10, height: 10)
             }
 
@@ -144,7 +144,7 @@ struct SettingsView: View {
                     Spacer()
                     if service.isConnected {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(Flux.Colors.success)
                     }
                 }
             }
@@ -164,16 +164,16 @@ struct SettingsView: View {
                 icon: "circle.fill",
                 label: "连接",
                 value: service.isConnected ? "已连接" : (bleManager.isConnected ? "BLE" : "未连接"),
-                tint: (service.isConnected || bleManager.isConnected) ? .green : .red
+                tint: (service.isConnected || bleManager.isConnected) ? Flux.Colors.success : Flux.Colors.accent
             )
 
             if let status = service.serverStatus {
                 StatusRow(icon: "brain", label: "模型",
                           value: status.modelLoaded ? "已加载" : "未加载",
-                          tint: status.modelLoaded ? .green : .orange)
+                          tint: status.modelLoaded ? Flux.Colors.success : Flux.Colors.warning)
                 StatusRow(icon: "gauge.with.dots.needle.33percent", label: "模式",
                           value: status.demoMode ? "演示" : "实时",
-                          tint: status.demoMode ? .orange : .blue)
+                          tint: status.demoMode ? Flux.Colors.warning : .blue)
                 if let uptime = status.uptimeSec {
                     StatusRow(icon: "clock", label: "运行",
                               value: formatUptime(uptime), tint: .secondary)
@@ -310,7 +310,7 @@ struct SettingsView: View {
             // 启动耗时
             HStack {
                 Image(systemName: "bolt.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Flux.Colors.success)
                     .frame(width: 20)
                 Text("启动耗时")
                 Spacer()
@@ -322,7 +322,7 @@ struct SettingsView: View {
             // 实时帧率
             HStack {
                 Image(systemName: "gauge.with.dots.needle.67percent")
-                    .foregroundStyle(pm.fps >= 50 ? .green : pm.fps >= 30 ? .orange : .red)
+                    .foregroundStyle(pm.fps >= 50 ? Flux.Colors.success : pm.fps >= 30 ? Flux.Colors.warning : Flux.Colors.accent)
                     .frame(width: 20)
                 Text("帧率")
                 Spacer()
@@ -335,7 +335,7 @@ struct SettingsView: View {
             if pm.isMonitoring {
                 HStack {
                     Image(systemName: "exclamationmark.triangle")
-                        .foregroundStyle(pm.droppedFrames > 10 ? .red : .secondary)
+                        .foregroundStyle(pm.droppedFrames > 10 ? Flux.Colors.accent : .secondary)
                         .frame(width: 20)
                     Text("掉帧")
                     Spacer()

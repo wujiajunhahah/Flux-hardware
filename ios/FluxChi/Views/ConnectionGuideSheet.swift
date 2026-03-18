@@ -128,13 +128,13 @@ struct ConnectionGuideSheet: View {
         } else if bleManager.isConnected {
             HStack(spacing: 10) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Flux.Colors.success)
                 Text(bleManager.connectedDeviceName ?? "已连接")
                     .font(.body.weight(.medium))
                 Spacer()
             }
             .padding(14)
-            .background(.green.opacity(0.08), in: .rect(cornerRadius: 12))
+            .background(Flux.Colors.success.opacity(0.08), in: .rect(cornerRadius: 12))
         }
     }
 
@@ -202,8 +202,8 @@ struct ConnectionGuideSheet: View {
     }
 
     private func rssiColor(_ rssi: Int) -> Color {
-        if rssi > -50 { return .green }
-        if rssi > -70 { return .orange }
-        return .red
+        if rssi > -50 { return Flux.Colors.success }
+        if rssi > -70 { return Flux.Colors.warning }
+        return Flux.Colors.accent
     }
 }

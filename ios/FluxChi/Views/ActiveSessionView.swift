@@ -159,7 +159,7 @@ struct ActiveSessionView: View {
     private var topStatusBar: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(isResting ? .green : (sessionManager.isPaused ? .orange : .green))
+                .fill(isResting ? Flux.Colors.success : (sessionManager.isPaused ? Flux.Colors.warning : Flux.Colors.success))
                 .frame(width: 8, height: 8)
 
             Text(isResting ? "休息中" : (sessionManager.isPaused ? "已暂停" : "专注中"))
@@ -184,7 +184,7 @@ struct ActiveSessionView: View {
     private var restAlertBanner: some View {
         HStack(spacing: 12) {
             Image(systemName: "leaf.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(Flux.Colors.success)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("身体需要休息")
@@ -206,7 +206,7 @@ struct ActiveSessionView: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(.green, in: Capsule())
+            .background(Flux.Colors.success, in: Capsule())
 
             Button {
                 withAnimation { restBannerDismissed = true }
@@ -250,13 +250,13 @@ struct ActiveSessionView: View {
         ZStack {
             // 外环（倒计时进度）
             Circle()
-                .stroke(Color.green.opacity(0.15), lineWidth: 8)
+                .stroke(Flux.Colors.success.opacity(0.15), lineWidth: 8)
                 .frame(width: 260, height: 260)
 
             Circle()
                 .trim(from: 0, to: restProgress)
                 .stroke(
-                    Color.green,
+                    Flux.Colors.success,
                     style: StrokeStyle(lineWidth: 8, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
@@ -266,7 +266,7 @@ struct ActiveSessionView: View {
             VStack(spacing: 8) {
                 Image(systemName: "leaf.fill")
                     .font(.system(size: 32))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Flux.Colors.success)
 
                 Text(formatElapsed(restRemaining))
                     .font(.system(size: 48, weight: .bold, design: .rounded))
@@ -276,7 +276,7 @@ struct ActiveSessionView: View {
 
                 Text("放松一下")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.green.opacity(0.8))
+                    .foregroundStyle(Flux.Colors.success.opacity(0.8))
             }
         }
     }
@@ -306,7 +306,7 @@ struct ActiveSessionView: View {
         VStack(spacing: 6) {
             Text("恢复中")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.green)
+                .foregroundStyle(Flux.Colors.success)
 
             Text("续航 \(Int(staminaValue))")
                 .font(.system(size: 13, design: .monospaced))
@@ -458,7 +458,7 @@ struct ActiveSessionView: View {
     private var disconnectBanner: some View {
         HStack(spacing: 12) {
             Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                .foregroundStyle(.red)
+                .foregroundStyle(Flux.Colors.accent)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("手环已断开")
@@ -472,7 +472,7 @@ struct ActiveSessionView: View {
             Spacer()
         }
         .padding(14)
-        .background(Color.red.opacity(0.2), in: .rect(cornerRadius: 14))
+        .background(Flux.Colors.accent.opacity(0.2), in: .rect(cornerRadius: 14))
     }
 
     // MARK: - Detach Banner
@@ -599,12 +599,7 @@ struct ActiveSessionView: View {
     // MARK: - Helpers
 
     private var staminaRingColor: Color {
-        switch staminaState {
-        case .focused:    return .green
-        case .fading:     return .orange
-        case .depleted:   return .red
-        case .recovering: return .blue
-        }
+        Flux.Colors.forStaminaState(staminaState)
     }
 
     private func formatElapsed(_ seconds: TimeInterval) -> String {

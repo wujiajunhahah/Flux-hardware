@@ -129,7 +129,7 @@ struct DashboardView: View {
                             HStack(spacing: 2) {
                                 Image(systemName: batteryIcon(battery))
                                     .font(.system(size: 10))
-                                    .foregroundStyle(battery > 20 ? .green : .red)
+                                    .foregroundStyle(battery > 20 ? Flux.Colors.success : Flux.Colors.accent)
                                 Text("\(battery)%")
                                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                                     .foregroundStyle(.secondary)
@@ -171,7 +171,7 @@ struct DashboardView: View {
     @ViewBuilder
     private var calibrationBanner: some View {
         if isCalibrating {
-            let ringColor: Color = calPhase == .mvc ? .orange : .green
+            let ringColor: Color = calPhase == .mvc ? Flux.Colors.warning : Flux.Colors.success
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
@@ -383,7 +383,7 @@ struct DashboardView: View {
         } label: {
             Image(systemName: sessionManager.isRecording ? "stop.circle.fill" : "record.circle")
                 .font(.title3)
-                .foregroundStyle(sessionManager.isRecording ? .red : (isLive ? .primary : .secondary))
+                .foregroundStyle(sessionManager.isRecording ? Flux.Colors.accent : (isLive ? .primary : .secondary))
                 .symbolEffect(.pulse, isActive: sessionManager.isRecording)
         }
         .disabled(!isLive && !sessionManager.isRecording)
@@ -486,7 +486,7 @@ struct DashboardView: View {
     @ViewBuilder
     private var recordingBar: some View {
         HStack(spacing: 12) {
-            Circle().fill(.red).frame(width: 8, height: 8)
+            Circle().fill(Flux.Colors.accent).frame(width: 8, height: 8)
                 .opacity(sessionManager.isPaused ? 0.3 : 1)
 
             Text(Flux.formatDuration(sessionManager.elapsed))
@@ -524,7 +524,7 @@ struct DashboardView: View {
             }
         }
         .padding(12)
-        .background(.red.opacity(0.06), in: .rect(cornerRadius: 16))
+        .background(Flux.Colors.accent.opacity(0.06), in: .rect(cornerRadius: 16))
     }
 
     // MARK: - Insight Widget Grid (iOS Widget 尺寸规范)
@@ -607,7 +607,7 @@ struct DashboardView: View {
                     let engineAvailable = BodyInsightEngine.shared.isAvailable
                     Image(systemName: engineAvailable ? "cpu.fill" : "cpu")
                         .font(.system(size: 9))
-                        .foregroundStyle(engineAvailable ? .green : .orange)
+                        .foregroundStyle(engineAvailable ? Flux.Colors.success : Flux.Colors.warning)
                         .help(BodyInsightEngine.shared.diagnosticInfo)
                 }
 
@@ -619,10 +619,10 @@ struct DashboardView: View {
                         Text("\(anomalyCount) 项异常")
                             .font(.system(size: 10, weight: .medium))
                     }
-                    .foregroundStyle(hasCriticalAnomaly ? .red : .orange)
+                    .foregroundStyle(hasCriticalAnomaly ? Flux.Colors.accent : Flux.Colors.warning)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background((hasCriticalAnomaly ? Color.red : Color.orange).opacity(0.1), in: Capsule())
+                    .background((hasCriticalAnomaly ? Flux.Colors.accent : Flux.Colors.warning).opacity(0.1), in: Capsule())
                 }
 
                 Spacer()

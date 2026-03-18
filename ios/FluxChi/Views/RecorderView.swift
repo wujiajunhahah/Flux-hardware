@@ -71,7 +71,7 @@ struct RecorderView: View {
                 FluxStatusBadge(
                     label: bleManager.isConnected ? "BLE 已连接" : "WiFi 已连接",
                     icon: bleManager.isConnected ? "antenna.radiowaves.left.and.right" : "wifi",
-                    tint: .green
+                    tint: Flux.Colors.success
                 )
             }
 
@@ -87,7 +87,7 @@ struct RecorderView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(.red)
+                        .fill(Flux.Colors.accent)
                         .frame(width: 10, height: 10)
                         .opacity(sessionManager.isPaused ? 0.3 : 1)
 
@@ -216,7 +216,7 @@ struct RecorderView: View {
                     .font(.title2)
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
-                    .background(.red, in: Circle())
+                    .background(Flux.Colors.accent, in: Circle())
             }
         }
     }

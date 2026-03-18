@@ -159,7 +159,7 @@ struct OnboardingView: View {
                 if bleManager.isConnected {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(Flux.Colors.success)
                         Text("已连接 \(bleManager.connectedDeviceName ?? "")")
                             .font(.subheadline.weight(.semibold))
                     }
@@ -205,7 +205,7 @@ struct OnboardingView: View {
     @State private var calibrationTimer: Timer?
 
     private var calibrationStep: some View {
-        let ringColor: Color = calibrationPhase == .mvc ? .orange : .green
+        let ringColor: Color = calibrationPhase == .mvc ? Flux.Colors.warning : Flux.Colors.success
 
         return VStack(spacing: 32) {
             Spacer()
@@ -226,16 +226,16 @@ struct OnboardingView: View {
                 case .done:
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 56))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Flux.Colors.success)
                 case .mvc:
                     Image(systemName: "hand.raised.fill")
                         .font(.system(size: 44))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Flux.Colors.warning)
                         .symbolEffect(.pulse, isActive: true)
                 case .baseline:
                     Image(systemName: "hand.point.down.fill")
                         .font(.system(size: 44))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Flux.Colors.success)
                         .symbolEffect(.pulse, isActive: true)
                 case .idle:
                     Image(systemName: "hand.point.down.fill")

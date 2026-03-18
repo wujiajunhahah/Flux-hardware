@@ -38,10 +38,10 @@ struct ADHDDotMap: View {
             .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.medium))
 
             HStack(spacing: 16) {
-                dotLegend(color: .red, label: "专注")
-                dotLegend(color: .orange, label: "下降")
-                dotLegend(color: .red.opacity(0.5), label: "耗尽")
-                dotLegend(color: .green, label: "恢复")
+                dotLegend(color: Flux.Colors.forStaminaState(.focused), label: "专注")
+                dotLegend(color: Flux.Colors.forStaminaState(.fading), label: "下降")
+                dotLegend(color: Flux.Colors.forStaminaState(.depleted), label: "耗尽")
+                dotLegend(color: Flux.Colors.forStaminaState(.recovering), label: "恢复")
             }
             .font(.caption2)
         }
@@ -54,13 +54,7 @@ struct ADHDDotMap: View {
     }
 
     private func stateColor(_ raw: String) -> Color {
-        switch raw {
-        case "focused":    return .red
-        case "fading":     return .orange
-        case "depleted":   return .red.opacity(0.6)
-        case "recovering": return .green
-        default:           return .gray
-        }
+        Flux.Colors.forStaminaState(StaminaState(rawValue: raw) ?? .focused)
     }
 
     private func dotLegend(color: Color, label: String) -> some View {
@@ -312,22 +306,22 @@ struct StaminaCurveChart: View {
                     }
 
                     RuleMark(y: .value("高效", 60))
-                        .foregroundStyle(.green.opacity(0.3))
+                        .foregroundStyle(Flux.Colors.success.opacity(0.3))
                         .lineStyle(StrokeStyle(dash: [4]))
                         .annotation(position: .leading) {
-                            Text("60").font(.system(size: 8)).foregroundStyle(.green.opacity(0.5))
+                            Text("60").font(.system(size: 8)).foregroundStyle(Flux.Colors.success.opacity(0.5))
                         }
 
                     RuleMark(y: .value("警告", 30))
-                        .foregroundStyle(.orange.opacity(0.3))
+                        .foregroundStyle(Flux.Colors.warning.opacity(0.3))
                         .lineStyle(StrokeStyle(dash: [4]))
                         .annotation(position: .leading) {
-                            Text("30").font(.system(size: 8)).foregroundStyle(.orange.opacity(0.5))
+                            Text("30").font(.system(size: 8)).foregroundStyle(Flux.Colors.warning.opacity(0.5))
                         }
                 }
                 .chartYScale(domain: 0...100)
                 .chartYAxis {
-                    AxisMarks(values: [0, 25, 50, 75, 100]) { val in
+                    AxisMarks(values: [0, 25, 50, 75, 100]) { _ in
                         AxisValueLabel()
                             .font(.system(size: 9, design: .monospaced))
                     }

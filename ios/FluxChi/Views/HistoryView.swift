@@ -141,7 +141,7 @@ struct HistoryView: View {
         .listStyle(.insetGrouped)
     }
 
-    // MARK: - History Today Overview
+    // MARK: - History Today Overview (BIOSORA-style metric row)
 
     private var historyTodayOverview: some View {
         let totalMin = Int(todaySessions.reduce(0) { $0 + $1.duration } / 60)
@@ -157,7 +157,7 @@ struct HistoryView: View {
                 Spacer()
                 Text("\(pending) 待反馈")
                     .font(.caption2)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Flux.Colors.warning)
             }
         }
     }
@@ -173,7 +173,7 @@ struct HistoryView: View {
     }
 }
 
-// MARK: - Session Row
+// MARK: - Session Row (BIOSORA-inspired: 圆环 + 内容 + sparkline + 状态)
 
 private struct SessionRow: View {
     let session: Session
@@ -188,61 +188,102 @@ private struct SessionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Stamina gauge
+            // 续航圆环指示器 — BIOSORA 式圆形数据呈现
             if let avg = session.avgStamina {
                 staminaIndicator(avg)
             }
 
-            // Content
+            // 内容区
             VStack(alignment: .leading, spacing: 3) {
+                // 第一层：时间范围
                 Text(timeRange)
                     .font(.subheadline.weight(.medium))
 
+                // 第二层：时长 + 分段
                 HStack(spacing: 8) {
                     Text(Flux.formatDuration(session.duration))
                         .foregroundStyle(.secondary)
-
                     if let count = session.segmentCount, count > 0 {
                         Text("\(count) 段")
                             .foregroundStyle(.secondary)
                     }
                 }
                 .font(.caption)
+
+                // 第三层：迷你 Sparkline — BIOSORA 式数据曲线
+                if let curve = session.staminaCurveData,
+                   let values = try? JSONDecoder().decode([Double].self, from: curve),
+                   values.count >= 2 {
+                    miniSparkline(values)
+                }
             }
 
             Spacer()
 
-            // 待反馈红点
-            if session.feedback == nil {
-                Circle()
-                    .fill(.red)
-                    .frame(width: 8, height: 8)
-            }
+            // 右侧状态区
+            VStack(alignment: .trailing, spacing: 4) {
+                // 待反馈指示 — 暖琥珀圆点（替代原纯红点）
+                if session.feedback == nil {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(Flux.Colors.warning)
+                            .frame(width: 6, height: 6)
+                        Text("待反馈")
+                            .font(.system(size: 9))
+                            .foregroundStyle(Flux.Colors.warning)
+                    }
+                }
 
-            // Source icon
-            Image(systemName: session.source.icon)
-                .font(.caption)
-                .foregroundStyle(.quaternary)
+                // 来源图标
+                Image(systemName: session.source.icon)
+                    .font(.caption)
+                    .foregroundStyle(.quaternary)
+            }
         }
         .padding(.vertical, 2)
     }
+
+    // MARK: - Stamina Indicator (与 CalendarSessionCard 统一风格)
 
     private func staminaIndicator(_ avg: Double) -> some View {
         let color = Flux.Colors.forStaminaValue(avg)
 
         return ZStack {
             Circle()
-                .stroke(color.opacity(0.15), lineWidth: 3)
-                .frame(width: 36, height: 36)
+                .stroke(color.opacity(0.12), lineWidth: 3)
+                .frame(width: 38, height: 38)
             Circle()
                 .trim(from: 0, to: avg / 100)
                 .stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .frame(width: 36, height: 36)
-
+                .frame(width: 38, height: 38)
             Text("\(Int(avg))")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(color)
         }
+    }
+
+    // MARK: - Mini Sparkline (BIOSORA 式迷你数据曲线)
+
+    private func miniSparkline(_ values: [Double]) -> some View {
+        let step = max(1, values.count / 30)
+        let sampled = stride(from: 0, to: values.count, by: step).map { values[$0] }
+
+        return GeometryReader { geo in
+            let maxV = sampled.max() ?? 100
+            let minV = sampled.min() ?? 0
+            let range = max(maxV - minV, 1)
+
+            Path { path in
+                for (i, v) in sampled.enumerated() {
+                    let x = geo.size.width * CGFloat(i) / CGFloat(max(sampled.count - 1, 1))
+                    let y = geo.size.height * (1 - CGFloat((v - minV) / range))
+                    if i == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                    else { path.addLine(to: CGPoint(x: x, y: y)) }
+                }
+            }
+            .stroke(Flux.Colors.accent.opacity(0.5), lineWidth: 1.5)
+        }
+        .frame(height: 14)
     }
 }

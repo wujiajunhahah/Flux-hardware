@@ -313,7 +313,7 @@ struct SessionSummarySheet: View {
             HStack(spacing: 4) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.caption2)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Flux.Colors.success)
                 Text("反馈已保存，模型会持续学习你的特征")
                     .font(.caption2)
                     .foregroundStyle(.secondary)

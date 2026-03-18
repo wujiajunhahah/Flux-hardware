@@ -30,7 +30,6 @@ struct FluxCalendarView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // 原生系统日历组件
                 DatePicker(
                     "选择日期",
                     selection: $selectedDate,
@@ -44,7 +43,6 @@ struct FluxCalendarView: View {
                 Divider()
                     .padding(.top, 4)
 
-                // 当日 session 列表
                 daySessionsList
                     .padding(.top, 12)
             }
@@ -124,7 +122,7 @@ private struct CalendarSessionCard: View {
 
     private var staminaRing: some View {
         let avg = session.avgStamina ?? 0
-        let color = staminaColor(avg)
+        let color = Flux.Colors.forStaminaValue(avg)
 
         return ZStack {
             Circle()
@@ -160,11 +158,5 @@ private struct CalendarSessionCard: View {
             .stroke(Flux.Colors.accent.opacity(0.6), lineWidth: 1.5)
         }
         .frame(height: 16)
-    }
-
-    private func staminaColor(_ avg: Double) -> Color {
-        if avg >= 70 { return .green }
-        if avg >= 45 { return .orange }
-        return .red
     }
 }

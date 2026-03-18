@@ -187,13 +187,13 @@ struct SessionDetailView: View {
                 title: "平均",
                 value: "\(Int(session.avgStamina ?? 0))",
                 icon: "gauge.with.dots.needle.67percent",
-                tint: .green
+                tint: Flux.Colors.success
             )
             FluxMetricCard(
                 title: "最低",
                 value: "\(Int(session.minStamina ?? 0))",
                 icon: "arrow.down",
-                tint: .red
+                tint: Flux.Colors.accent
             )
         }
     }

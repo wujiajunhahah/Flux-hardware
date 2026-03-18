@@ -208,9 +208,9 @@ enum SegmentLabel: String, Codable, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .work:   return .red
-        case .rest:   return .green
-        case .pause:  return .orange
+        case .work:   return Flux.Colors.accent     // 暖珊瑚
+        case .rest:   return Flux.Colors.success     // 鼠尾草绿
+        case .pause:  return Flux.Colors.warning     // 暖琥珀
         case .custom: return .blue
         }
     }
@@ -241,10 +241,10 @@ enum UserFeeling: String, Codable, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .focused:   return .green
+        case .focused:   return Flux.Colors.success   // 鼠尾草绿
         case .okay:      return .blue
-        case .tired:     return .orange
-        case .exhausted: return .red
+        case .tired:     return Flux.Colors.warning    // 暖琥珀
+        case .exhausted: return Flux.Colors.accent     // 暖珊瑚
         }
     }
 

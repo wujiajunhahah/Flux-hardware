@@ -139,9 +139,9 @@ struct FluxLiveIndicator: View {
 
     var body: some View {
         Circle()
-            .fill(isLive ? .green : Color.primary.opacity(0.2))
+            .fill(isLive ? Flux.Colors.success : Color.primary.opacity(0.2))
             .frame(width: 8, height: 8)
-            .shadow(color: isLive ? .green.opacity(0.5) : .clear, radius: 4)
+            .shadow(color: isLive ? Flux.Colors.success.opacity(0.5) : .clear, radius: 4)
             .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true),
                         value: isLive)
             .accessibilityLabel(isLive ? "已连接" : "未连接")
