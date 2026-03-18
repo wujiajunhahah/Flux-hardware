@@ -490,7 +490,7 @@ private struct DayCellView: View {
     }
 
     private var textColor: Color {
-        if !isCurrentMonth { return .quaternary }
+        if !isCurrentMonth { return Color.secondary.opacity(0.35) }
         if isSelected { return Flux.Colors.accent }
         if isToday { return .primary }
         return .primary
