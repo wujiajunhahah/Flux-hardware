@@ -183,7 +183,7 @@ private struct SessionRow: View {
                 .font(.caption)
                 .foregroundStyle(.quaternary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, Flux.Spacing.tight)
     }
 
     private func staminaIndicator(_ avg: Double) -> some View {
@@ -191,7 +191,7 @@ private struct SessionRow: View {
 
         return ZStack {
             Circle()
-                .stroke(color.opacity(0.15), lineWidth: 3)
+                .stroke(color.opacity(Flux.Opacity.semiStrong), lineWidth: Flux.Sizes.strokeThick)
                 .frame(width: 36, height: 36)
             Circle()
                 .trim(from: 0, to: avg / 100)
@@ -200,7 +200,7 @@ private struct SessionRow: View {
                 .frame(width: 36, height: 36)
 
             Text("\(Int(avg))")
-                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .font(.system(size: Flux.Sizes.textLabel + 2, weight: .bold, design: .rounded))
                 .foregroundStyle(color)
         }
     }
