@@ -60,7 +60,7 @@ struct DashboardView: View {
 
                     emgSection
                 }
-                .padding(.horizontal)
+                .padding(Flux.Spacing.section)
                 .padding(.bottom, 80)
             }
             .navigationTitle("FocuX")
@@ -97,8 +97,8 @@ struct DashboardView: View {
                 Text(err).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
         }
-        .padding(12)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+        .padding(Flux.Spacing.item)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
     }
 
     // MARK: - Stamina Ring
@@ -119,7 +119,7 @@ struct DashboardView: View {
             HStack(spacing: 14) {
                 ZStack {
                     Circle()
-                        .fill(urgencyColor.opacity(0.12))
+                        .fill(urgencyColor.opacity(Flux.Opacity.medium))
                         .frame(width: 44, height: 44)
                     Image(systemName: rec.systemImage)
                         .font(.title3)
@@ -139,8 +139,8 @@ struct DashboardView: View {
                 }
                 Spacer()
             }
-            .padding(14)
-            .background(.regularMaterial, in: .rect(cornerRadius: 16))
+            .padding(Flux.Spacing.group)
+            .background(.regularMaterial, in: .rect(cornerRadius: Flux.Radius.large))
         }
     }
 
@@ -176,7 +176,7 @@ struct DashboardView: View {
                     .font(.caption2)
             } currentValueLabel: {
                 Text("\(Int(value * 100))")
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .font(.system(size: Flux.Sizes.textBody, weight: .bold, design: .rounded))
                     .contentTransition(.numericText(value: value))
             }
             .gaugeStyle(.accessoryCircular)
@@ -188,9 +188,9 @@ struct DashboardView: View {
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, Flux.Spacing.group)
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
     }
 
     // MARK: - Today Summary
@@ -240,27 +240,27 @@ struct DashboardView: View {
                 }
             }
         }
-        .padding(16)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+        .padding(Flux.Spacing.section)
+        .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
     }
 
     private func todayStat(value: String, label: String, icon: String, tint: Color) -> some View {
         VStack(spacing: 6) {
             ZStack {
                 Circle()
-                    .fill(tint.opacity(0.1))
+                    .fill(tint.opacity(Flux.Opacity.light))
                     .frame(width: 32, height: 32)
                 Image(systemName: icon)
-                    .font(.system(size: 13))
+                    .font(.system(size: Flux.Sizes.iconMedium))
                     .foregroundStyle(tint)
             }
 
             Text(value)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(.system(size: Flux.Sizes.textHeadline, weight: .bold, design: .rounded))
                 .contentTransition(.numericText())
 
             Text(label)
-                .font(.system(size: 10))
+                .font(.system(size: Flux.Sizes.textLabel))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -287,7 +287,7 @@ struct DashboardView: View {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(tint.opacity(0.1))
+                            .fill(tint.opacity(Flux.Opacity.light))
                             .frame(height: 4)
                         Capsule()
                             .fill(tint.gradient)
@@ -365,7 +365,7 @@ struct DashboardView: View {
                     .foregroundStyle(seg.label.color)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(seg.label.color.opacity(0.12), in: Capsule())
+                    .background(seg.label.color.opacity(Flux.Opacity.medium), in: Capsule())
             }
 
             Button {
@@ -388,7 +388,7 @@ struct DashboardView: View {
             }
         }
         .padding(12)
-        .background(.red.opacity(0.06), in: .rect(cornerRadius: 16))
+        .background(.red.opacity(Flux.Opacity.light), in: .rect(cornerRadius: Flux.Radius.large))
     }
 
     // MARK: - Helpers
