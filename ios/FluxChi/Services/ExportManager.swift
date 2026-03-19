@@ -13,32 +13,33 @@ enum ExportManager {
         let keyword: String?
 
         static let `default` = LogExportOptions(
-            minimumLevel: nil,
-            categories: nil,
-            limit: nil,
-            keyword: nil
+            minimumLevel: nil as FluxLogLevel?,
+            categories: nil as Set<FluxLogCategory>?,
+            limit: nil as Int?,
+            keyword: nil as String?
         )
 
         static let errorsOnly = LogExportOptions(
             minimumLevel: .error,
-            categories: nil,
-            limit: nil,
-            keyword: nil
+            categories: nil as Set<FluxLogCategory>?,
+            limit: nil as Int?,
+            keyword: nil as String?
         )
 
         static let bleOnly = LogExportOptions(
-            minimumLevel: nil,
+            minimumLevel: nil as FluxLogLevel?,
             categories: [.ble],
-            limit: nil,
-            keyword: nil
+            limit: nil as Int?,
+            keyword: nil as String?
         )
     }
 
     /// 导出日志为 JSON 数据
-    static func exportLogs(options: LogExportOptions = .default) throws -> Data {
-        let logger = FluxLogger.shared
+    static func exportLogs(options: LogExportOptions = .default) async throws -> Data {
+        // 在 MainActor 上访问日志数据
+        let entries = await FluxLogger.shared.entries
 
-        var filtered = logger.entries
+        var filtered = entries
 
         // 按级别过滤
         if let minLevel = options.minimumLevel {
@@ -71,8 +72,8 @@ enum ExportManager {
     }
 
     /// 导出日志为纯文本
-    static func exportLogsAsText(options: LogExportOptions = .default) throws -> String {
-        let data = try exportLogs(options: options)
+    static func exportLogsAsText(options: LogExportOptions = .default) async throws -> String {
+        let data = try await exportLogs(options: options)
         let entries = try JSONDecoder().decode([FluxLogEntry].self, from: data)
 
         return entries.map { entry in
@@ -81,8 +82,8 @@ enum ExportManager {
     }
 
     /// 分享日志 JSON 文件 URL
-    static func shareLogsURL(options: LogExportOptions = .default) throws -> URL {
-        let data = try exportLogs(options: options)
+    static func shareLogsURL(options: LogExportOptions = .default) async throws -> URL {
+        let data = try await exportLogs(options: options)
 
         let dateStr = {
             let f = DateFormatter()
@@ -98,8 +99,8 @@ enum ExportManager {
     }
 
     /// 分享日志文本文件 URL
-    static func shareLogsTextURL(options: LogExportOptions = .default) throws -> URL {
-        let text = try exportLogsAsText(options: options)
+    static func shareLogsTextURL(options: LogExportOptions = .default) async throws -> URL {
+        let text = try await exportLogsAsText(options: options)
 
         let dateStr = {
             let f = DateFormatter()

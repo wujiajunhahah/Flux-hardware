@@ -264,7 +264,7 @@ struct SettingsView: View {
     // MARK: - Logs
 
     private var logsSection: some View {
-        Section("日志") {
+        Section {
             // 日志级别选择
             Picker("日志级别", selection: $logMinimumLevel) {
                 ForEach(FluxLogLevel.allCases, id: \.self) { level in
@@ -310,6 +310,8 @@ struct SettingsView: View {
                 Label("清空日志", systemImage: "trash")
                     .foregroundStyle(.red)
             }
+        } header: {
+            Text("日志")
         } footer: {
             Text("日志用于调试和分析问题")
         }
@@ -357,7 +359,7 @@ struct SettingsView: View {
     private func exportLogsAsJSON() {
         Task {
             do {
-                let url = try ExportManager.shareLogsURL()
+                let url = try await ExportManager.shareLogsURL()
                 showLogExportOptions = false
                 // TODO: 展示分享表
                 FluxLogger.shared.info("日志已导出: \(url.lastPathComponent)", category: .export)
@@ -370,7 +372,7 @@ struct SettingsView: View {
     private func exportLogsAsText() {
         Task {
             do {
-                let url = try ExportManager.shareLogsTextURL()
+                let url = try await ExportManager.shareLogsTextURL()
                 showLogExportOptions = false
                 FluxLogger.shared.info("日志已导出: \(url.lastPathComponent)", category: .export)
             } catch {
@@ -382,7 +384,7 @@ struct SettingsView: View {
     private func exportErrorLogs() {
         Task {
             do {
-                let url = try ExportManager.shareLogsURL(options: .errorsOnly)
+                let url = try await ExportManager.shareLogsURL(options: .errorsOnly)
                 showLogExportOptions = false
                 FluxLogger.shared.info("错误日志已导出: \(url.lastPathComponent)", category: .export)
             } catch {
@@ -394,7 +396,7 @@ struct SettingsView: View {
     private func exportBLELogs() {
         Task {
             do {
-                let url = try ExportManager.shareLogsURL(options: .bleOnly)
+                let url = try await ExportManager.shareLogsURL(options: .bleOnly)
                 showLogExportOptions = false
                 FluxLogger.shared.info("BLE 日志已导出: \(url.lastPathComponent)", category: .export)
             } catch {
@@ -406,7 +408,7 @@ struct SettingsView: View {
     private func exportAllLogs() {
         Task {
             do {
-                let url = try ExportManager.shareLogsURL(options: .default)
+                let url = try await ExportManager.shareLogsURL(options: .default)
                 showLogExportOptions = false
                 FluxLogger.shared.info("全部日志已导出: \(url.lastPathComponent)", category: .export)
             } catch {

@@ -10,8 +10,8 @@
 		0E7705B78C0617D5054DCF05 /* OnDeviceStaminaEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74753401A3431315E6EED0CE /* OnDeviceStaminaEngine.swift */; };
 		1CE778873864D4E66D662D7F /* FluxChiLive.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7B91852213E03E125E4DD708 /* FluxChiLive.appex */; };
 		20258A5445FFADF89345BB8C /* SummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9F63942587BE4E4AB46CDE /* SummaryEngine.swift */; };
-		A1B2C3D4LOGVIEWERINSSOURCES /* LogViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F3 /* LogViewerView.swift */; };
-		A1B2C3D4LOGGERINSSOURCES /* FluxLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E2F3 /* FluxLogger.swift */; };
+		A1B2C3D4LOGVIEWERINSSOURCES /* LogViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4LOGVIEWERRREF /* LogViewerView.swift */; };
+		A1B2C3D4LOGGERINSSOURCES /* FluxLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4LOGGERRREF /* FluxLogger.swift */; };
 		2894A586BC7D4FEC4DA96468 /* FluxChiLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D963C643474157682B7673F /* FluxChiLiveActivity.swift */; };
 		2C17DEBF311E0371CC8E5D50 /* AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC8E7B9F0363CDCC7D003AE /* AlertManager.swift */; };
 		32C85255E54CE8BBA79891B9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE36952EACC328036003CF02 /* SettingsView.swift */; };

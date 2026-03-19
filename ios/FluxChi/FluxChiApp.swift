@@ -25,7 +25,7 @@ struct FluxChiApp: App {
 
         Task { @MainActor in
             FluxLogger.shared.updateConfig(config)
-            FluxLogger.app.info("FluxChi 启动 - v\(Flux.App.version)", category: .app)
+            FluxLogger.shared.info("FluxChi 启动 - v\(Flux.App.version)", category: .app)
         }
     }
 
