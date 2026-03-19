@@ -2,66 +2,26 @@ import SwiftUI
 
 enum Flux {
 
-    // MARK: - Colors (BIOSORA-inspired warm palette)
+    // MARK: - Colors
 
     enum Colors {
-        /// 主强调色 — 暖珊瑚（替代原纯红，更有机、温暖）
-        static let accent = Color(red: 0.85, green: 0.50, blue: 0.38) // #D98061
+        static let accent = Color.red
+        static let success = Color.green
+        static let warning = Color.orange
 
-        /// 语义色
-        static let success = Color(red: 0.50, green: 0.70, blue: 0.52) // 鼠尾草绿
-        static let warning = Color(red: 0.85, green: 0.68, blue: 0.42) // 暖琥珀
-
-        /// 续航状态色 — 暖色系四阶
-        static func forStaminaState(_ state: StaminaState) -> Color {
-            switch state {
-            case .focused:    return accent                                        // 珊瑚 — 专注
-            case .fading:     return warning                                       // 琥珀 — 衰退
-            case .depleted:   return Color(red: 0.62, green: 0.50, blue: 0.64)     // 薰衣草 — 耗尽
-            case .recovering: return success                                       // 鼠尾草 — 恢复
+        /// 根据状态字符串返回对应颜色 - 与 StaminaState.rawValues 保持一致
+        static func forStaminaState(_ state: String) -> Color {
+            switch state.lowercased() {
+            case "focused":    return .red
+            case "fading":     return .orange
+            case "depleted":   return .red.opacity(0.6)
+            case "recovering": return .green
+            default:           return .gray
             }
-        }
-
-        /// 根据续航数值返回颜色（HistoryView SessionRow 等）
-        static func forStaminaValue(_ value: Double) -> Color {
-            if value > 60 { return forStaminaState(.focused) }
-            if value > 30 { return forStaminaState(.fading) }
-            return forStaminaState(.depleted)
         }
 
         static func forUrgency(_ value: Double) -> Color {
-            value >= 0.7 ? accent : value >= 0.5 ? warning : .primary
-        }
-    }
-
-    // MARK: - Materials (Liquid Glass 风格统一材质)
-
-    enum Materials {
-        static let card: Material = .ultraThinMaterial
-        static let sheet: Material = .regularMaterial
-        static let overlay: Material = .thinMaterial
-
-        /// iOS 26+ glass 材质，低版本 fallback ultraThinMaterial
-        @ViewBuilder
-        static func glass<S: Shape>(in shape: S) -> some View {
-            if #available(iOS 26.0, *) {
-                Rectangle().fill(.ultraThinMaterial).clipShape(shape)
-            } else {
-                Rectangle().fill(.ultraThinMaterial).clipShape(shape)
-            }
-        }
-    }
-
-    // MARK: - Shapes
-
-    enum Shapes {
-        static func capsule() -> Capsule { Capsule() }
-        static func card() -> RoundedRectangle { RoundedRectangle(cornerRadius: Radius.large, style: .continuous) }
-        static func smallCard() -> RoundedRectangle { RoundedRectangle(cornerRadius: Radius.medium, style: .continuous) }
-
-        /// 同心圆形状（用于 Ring 等）
-        static func concentric(outer: CGFloat, inner: CGFloat) -> some Shape {
-            Circle().stroke(lineWidth: (outer - inner) / 2)
+            value >= 0.7 ? .red : value >= 0.5 ? .orange : .primary
         }
     }
 
@@ -125,5 +85,147 @@ enum Flux {
         let m = (Int(seconds) % 3600) / 60
         if h > 0 { return "\(h) 小时 \(m) 分钟" }
         return "\(m) 分钟"
+    }
+
+    // MARK: - Text (文字层次)
+
+    enum Text {
+        /// 主要文字 - 标准可读性
+        static let primary = Color.primary
+        /// 次要文字 - 辅助信息
+        static let secondary = Color.secondary
+        /// 第三级文字 - 占位符等
+        static let tertiary = Color(UIColor.tertiaryLabel)
+
+        /// 暗化文字 - Widget 中使用
+        static let dim = Color(white: 0.45)
+        /// 静音文字 - 更暗
+        static let muted = Color(white: 0.55)
+
+        /// 强调色文字
+        static let accent = Colors.accent
+        /// 成功色文字
+        static let success = Colors.success
+        /// 警告色文字
+        static let warning = Colors.warning
+    }
+
+    // MARK: - Backgrounds (背景层次)
+
+    enum Backgrounds {
+        /// 主背景 - 系统背景色
+        static let primary = Color(UIColor.systemBackground)
+        /// 次要背景 - 分组背景
+        static let secondary = Color(UIColor.secondarySystemBackground)
+        /// 第三级背景 - 用于更深层次
+        static let tertiary = Color(UIColor.tertiarySystemBackground)
+
+        /// 抬升背景 - 浮层效果
+        static let elevated = Color(white: 0.05, opacity: 1)
+        /// 遮罩背景 - 半透明黑色
+        static let overlay = Color.black.opacity(0.6)
+
+        /// 休息模式专用背景 - 深绿色调
+        static let rest = Color(red: 0.04, green: 0.12, blue: 0.08)
+    }
+
+    // MARK: - Sizes (尺寸系统)
+
+    enum Sizes {
+        // MARK: Icon Sizes
+
+        static let iconSmall: CGFloat = 12
+        static let iconMedium: CGFloat = 16
+        static let iconLarge: CGFloat = 24
+        static let iconXLarge: CGFloat = 32
+
+        // MARK: Ring Sizes
+
+        static let ringSmall: CGFloat = 72
+        static let ringMedium: CGFloat = 88
+        static let ringLarge: CGFloat = 120
+        static let ringXLarge: CGFloat = 200
+
+        // MARK: Text Sizes
+
+        static let textLabel: CGFloat = 9
+        static let textBody: CGFloat = 14
+        static let textHeadline: CGFloat = 22
+        static let textDisplay: CGFloat = 44
+
+        // MARK: Stroke Widths
+
+        static let strokeThin: CGFloat = 0.5
+        static let strokeNormal: CGFloat = 1
+        static let strokeThick: CGFloat = 2
+        static let strokeBold: CGFloat = 4
+    }
+
+    // MARK: - Opacity (不透明度)
+
+    enum Opacity {
+        /// 极淡 - 几乎透明
+        static let xLight: Double = 0.01
+        /// 淡 - 轻微可见
+        static let light: Double = 0.06
+        /// 中等 - 标准半透明
+        static let medium: Double = 0.12
+        /// 半强 - 明显半透明
+        static let semiStrong: Double = 0.18
+        /// 强 - 高可见度
+        static let strong: Double = 0.3
+        /// 极强 - 接近不透明
+        static let xStrong: Double = 0.5
+    }
+
+    // MARK: - Animation (动画)
+
+    enum Animation {
+        /// 快速动画 - 轻微反馈
+        static let fastDuration: Double = 0.15
+        /// 中速动画 - 标准过渡
+        static let mediumDuration: Double = 0.6
+        /// 慢速动画 - 大场景过渡
+        static let slowDuration: Double = 0.8
+
+        /// 缓出动画
+        static let easeOut = SwiftUI.Animation.easeOut(duration: 0.15)
+
+        /// 弹簧动画
+        static let spring = SwiftUI.Animation.spring(response: 0.6, dampingFraction: 0.7)
+
+        /// 创建缓出动画（自定义时长）
+        static func easeOut(duration: Double) -> SwiftUI.Animation {
+            .easeOut(duration: duration)
+        }
+
+        /// 创建弹簧动画（自定义参数）
+        static func spring(response: Double, dampingFraction: Double) -> SwiftUI.Animation {
+            .spring(response: response, dampingFraction: dampingFraction)
+        }
+    }
+
+    // MARK: - Shadows (阴影)
+
+    enum Shadows {
+        /// 阴影配置 - 小阴影
+        static func small(color: Color = .black.opacity(0.1)) -> [Color: CGFloat] {
+            [color: 1]  // 简化表示，实际使用 .shadow()
+        }
+
+        /// 阴影配置 - 中阴影
+        static func medium(color: Color = .black.opacity(0.15)) -> [Color: CGFloat] {
+            [color: 1]
+        }
+
+        /// 阴影配置 - 大阴影
+        static func large(color: Color = .black.opacity(0.2)) -> [Color: CGFloat] {
+            [color: 1]
+        }
+
+        /// 发光颜色
+        static func glowColor(base: Color = Colors.accent) -> Color {
+            base.opacity(0.3)
+        }
     }
 }

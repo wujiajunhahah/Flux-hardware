@@ -151,7 +151,7 @@ struct FeedbackView: View {
                         FluxStatusBadge(
                             label: predicted.displayName,
                             icon: predicted.systemImage,
-                            tint: Flux.Colors.forStaminaState(predicted),
+                            tint: Flux.Colors.forStaminaState(predicted.rawValue),
                             isActive: false
                         )
                     }

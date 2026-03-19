@@ -174,7 +174,7 @@ struct FocusClockView: View {
     }
 
     private func stateColor(_ raw: String) -> Color {
-        Flux.Colors.forStaminaState(StaminaState(rawValue: raw) ?? .focused)
+        Flux.Colors.forStaminaState(raw)
     }
 }
 

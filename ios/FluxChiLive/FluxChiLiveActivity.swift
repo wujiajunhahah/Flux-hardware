@@ -6,7 +6,6 @@ struct FluxChiLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: FluxChiLiveAttributes.self) { context in
             lockScreenBanner(context: context)
-                .widgetURL(URL(string: "fluxchi://session"))
         } dynamicIsland: { context in
             let color = staminaColor(context.state.state)
             let progress = clampProgress(context.state.stamina)
@@ -34,49 +33,32 @@ struct FluxChiLiveActivity: Widget {
 
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 4) {
-                        dimensionRow("C", context.state.consistency, Color(red: 0.45, green: 0.72, blue: 0.68))
-                        dimensionRow("T", context.state.tension, Color(red: 0.85, green: 0.68, blue: 0.42))
-                        dimensionRow("F", context.state.fatigue, Color(red: 0.82, green: 0.52, blue: 0.55))
+                        dimensionRow("C", context.state.consistency, .cyan)
+                        dimensionRow("T", context.state.tension, .orange)
+                        dimensionRow("F", context.state.fatigue, .pink)
                     }
                     .padding(.top, 4)
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 8) {
-                        // Stamina 进度条
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule()
-                                    .fill(.white.opacity(0.08))
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(.white.opacity(0.08))
 
-                                Capsule()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [color.opacity(0.6), color],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [color.opacity(0.6), color],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
                                     )
-                                    .frame(width: max(4, geo.size.width * progress))
-                                    .shadow(color: color.opacity(0.5), radius: 6, y: 0)
-                            }
-                        }
-                        .frame(height: 3)
-
-                        // 一键休息按钮
-                        Link(destination: URL(string: "fluxchi://rest")!) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "cup.and.saucer.fill")
-                                    .font(.system(size: 10))
-                                Text("休息一下")
-                                    .font(.system(size: 11, weight: .medium))
-                            }
-                            .foregroundStyle(.white.opacity(0.8))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 5)
-                            .background(.white.opacity(0.12), in: Capsule())
+                                )
+                                .frame(width: max(4, geo.size.width * progress))
+                                .shadow(color: color.opacity(0.5), radius: 6, y: 0)
                         }
                     }
+                    .frame(height: 3)
                     .padding(.top, 6)
                 }
 
@@ -127,9 +109,9 @@ struct FluxChiLiveActivity: Widget {
 
             // Three dimension vertical bars
             HStack(spacing: 5) {
-                dimensionPill(context.state.consistency, Color(red: 0.45, green: 0.72, blue: 0.68))
-                dimensionPill(context.state.tension, Color(red: 0.85, green: 0.68, blue: 0.42))
-                dimensionPill(context.state.fatigue, Color(red: 0.82, green: 0.52, blue: 0.55))
+                dimensionPill(context.state.consistency, .cyan)
+                dimensionPill(context.state.tension, .orange)
+                dimensionPill(context.state.fatigue, .pink)
             }
         }
         .padding(.horizontal, 20)
@@ -201,12 +183,14 @@ struct FluxChiLiveActivity: Widget {
         min(max(stamina / 100, 0), 1)
     }
 
+    /// 返回状态对应颜色 - 与 Flux.Colors.forStaminaState 保持一致
+    /// 注意：由于 Widget Extension 无法直接访问主 app 代码，此处颜色值需手动同步
     private func staminaColor(_ state: String) -> Color {
         switch state {
-        case "focused":    return Color(red: 0.85, green: 0.50, blue: 0.38) // 暖珊瑚
-        case "fading":     return Color(red: 0.85, green: 0.68, blue: 0.42) // 暖琥珀
-        case "depleted":   return Color(red: 0.62, green: 0.50, blue: 0.64) // 薰衣草
-        case "recovering": return Color(red: 0.50, green: 0.70, blue: 0.52) // 鼠尾草
+        case "focused":    return .green           // Flux.Colors.forStaminaState(.focused)
+        case "fading":     return .orange          // Flux.Colors.forStaminaState(.fading)
+        case "depleted":   return .red.opacity(0.6) // Flux.Colors.forStaminaState(.depleted)
+        case "recovering": return .green           // Flux.Colors.forStaminaState(.recovering)
         default:           return .gray
         }
     }

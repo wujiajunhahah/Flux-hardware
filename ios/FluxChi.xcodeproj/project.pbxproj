@@ -14,6 +14,8 @@
 		0E7705B78C0617D5054DCF05 /* OnDeviceStaminaEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74753401A3431315E6EED0CE /* OnDeviceStaminaEngine.swift */; };
 		1CE778873864D4E66D662D7F /* FluxChiLive.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7B91852213E03E125E4DD708 /* FluxChiLive.appex */; };
 		20258A5445FFADF89345BB8C /* SummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9F63942587BE4E4AB46CDE /* SummaryEngine.swift */; };
+		A1B2C3D4LOGVIEWERINSSOURCES /* LogViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4LOGVIEWERRREF /* LogViewerView.swift */; };
+		A1B2C3D4LOGGERINSSOURCES /* FluxLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4LOGGERRREF /* FluxLogger.swift */; };
 		2894A586BC7D4FEC4DA96468 /* FluxChiLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D963C643474157682B7673F /* FluxChiLiveActivity.swift */; };
 		2C17DEBF311E0371CC8E5D50 /* AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC8E7B9F0363CDCC7D003AE /* AlertManager.swift */; };
 		32C85255E54CE8BBA79891B9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE36952EACC328036003CF02 /* SettingsView.swift */; };
@@ -84,6 +86,8 @@
 		0C2D3E4F5A6B7C8D9E0F1A2B /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		0D2E3F4A5B6C7D8E9F0A1B2C /* GeekDataPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeekDataPanel.swift; sourceTree = "<group>"; };
 		23BCD5428E4F4BBD013EC82A /* EMGFeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EMGFeatureExtractor.swift; sourceTree = "<group>"; };
+		A1B2C3D4LOGVIEWERRREF /* LogViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerView.swift; sourceTree = "<group>"; };
+		A1B2C3D4LOGGERRREF /* FluxLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxLogger.swift; sourceTree = "<group>"; };
 		2583B5DFE6B5E2D06D3907A8 /* FluxChiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxChiApp.swift; sourceTree = "<group>"; };
 		2B5C110FA9FAA6244ADABB3C /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
 		2EC8E7B9F0363CDCC7D003AE /* AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertManager.swift; sourceTree = "<group>"; };
@@ -197,6 +201,7 @@
 				C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */,
 				B304D5891CBDFF2564CBBE02 /* FeedbackView.swift */,
 				380BBB1F3FD98322B2060455 /* HistoryView.swift */,
+				A1B2C3D4LOGVIEWERRREF /* LogViewerView.swift */,
 				FA1E2E60D7D16A91E3045405 /* RecorderView.swift */,
 				CFE6963DF0F6852BB158A0DB /* SessionDetailView.swift */,
 				CE36952EACC328036003CF02 /* SettingsView.swift */,
@@ -242,6 +247,7 @@
 				34C4C08A362F4D9CE7712D17 /* BLEManager.swift */,
 				23BCD5428E4F4BBD013EC82A /* EMGFeatureExtractor.swift */,
 				2B5C110FA9FAA6244ADABB3C /* ExportManager.swift */,
+				A1B2C3D4LOGGERRREF /* FluxLogger.swift */,
 				E2107ECD8E4CA0465E062E56 /* FluxService.swift */,
 				74753401A3431315E6EED0CE /* OnDeviceStaminaEngine.swift */,
 				5B14342F8A691567B25C488F /* PersonalizationManager.swift */,
@@ -410,6 +416,7 @@
 				FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */,
 				66E6A5ADCD0E5DFFDB401A86 /* FluxService.swift in Sources */,
 				5909BF9467E24D418EE4A8F4 /* FluxTokens.swift in Sources */,
+				A1B2C3D4LOGGERINSSOURCES /* FluxLogger.swift in Sources */,
 				4E31F1403404087AC5CD20C6 /* HistoryView.swift in Sources */,
 				0E7705B78C0617D5054DCF05 /* OnDeviceStaminaEngine.swift in Sources */,
 				8136648A6B96AFFAFDF8EFE2 /* PersonalizationManager.swift in Sources */,
@@ -421,6 +428,7 @@
 				32C85255E54CE8BBA79891B9 /* SettingsView.swift in Sources */,
 				C88E9A5407EC978105B036F9 /* StaminaRingView.swift in Sources */,
 				20258A5445FFADF89345BB8C /* SummaryEngine.swift in Sources */,
+				A1B2C3D4LOGVIEWERINSSOURCES /* LogViewerView.swift in Sources */,
 				CF1C870298895E3CC7746B39 /* CalendarView.swift in Sources */,
 				7491661A48102D7610F8F1B3 /* SessionChartsView.swift in Sources */,
 				067D0CDED0224EDAB98D812F /* BodyInsightEngine.swift in Sources */,
