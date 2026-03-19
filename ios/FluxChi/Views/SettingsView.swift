@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject var service: FluxService
     @EnvironmentObject var bleManager: BLEManager
     @EnvironmentObject var personalization: PersonalizationManager
+    @ObservedObject private var perfMonitor = PerformanceMonitor.shared
 
     @State private var editHost: String = ""
     @State private var editPort: String = ""
@@ -22,8 +23,10 @@ struct SettingsView: View {
                 serverSection
                 statusSection
                 personalizationSection
+                geekDataSection
                 logsSection
                 controlSection
+                performanceSection
                 aboutSection
             }
             .navigationTitle("设置")
@@ -78,14 +81,14 @@ struct SettingsView: View {
                     Image(systemName: bleManager.isConnected
                           ? "antenna.radiowaves.left.and.right"
                           : "antenna.radiowaves.left.and.right.slash")
-                        .foregroundStyle(bleManager.isConnected ? .green : .secondary)
+                        .foregroundStyle(bleManager.isConnected ? Flux.Colors.success : .secondary)
                         .symbolEffect(.pulse, isActive: bleManager.isConnected)
                 }
 
                 Spacer()
 
                 Circle()
-                    .fill(bleManager.isConnected ? .green : .red)
+                    .fill(bleManager.isConnected ? Flux.Colors.success : Flux.Colors.accent)
                     .frame(width: 10, height: 10)
             }
 
@@ -157,7 +160,7 @@ struct SettingsView: View {
                     Spacer()
                     if service.isConnected {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(Flux.Colors.success)
                     }
                 }
             }
@@ -177,16 +180,16 @@ struct SettingsView: View {
                 icon: "circle.fill",
                 label: "连接",
                 value: service.isConnected ? "已连接" : (bleManager.isConnected ? "BLE" : "未连接"),
-                tint: (service.isConnected || bleManager.isConnected) ? .green : .red
+                tint: (service.isConnected || bleManager.isConnected) ? Flux.Colors.success : Flux.Colors.accent
             )
 
             if let status = service.serverStatus {
                 StatusRow(icon: "brain", label: "模型",
                           value: status.modelLoaded ? "已加载" : "未加载",
-                          tint: status.modelLoaded ? .green : .orange)
+                          tint: status.modelLoaded ? Flux.Colors.success : Flux.Colors.warning)
                 StatusRow(icon: "gauge.with.dots.needle.33percent", label: "模式",
                           value: status.demoMode ? "演示" : "实时",
-                          tint: status.demoMode ? .orange : .blue)
+                          tint: status.demoMode ? Flux.Colors.warning : .blue)
                 if let uptime = status.uptimeSec {
                     StatusRow(icon: "clock", label: "运行",
                               value: formatUptime(uptime), tint: .secondary)
@@ -261,11 +264,37 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Geek Data
+
+    private var geekDataSection: some View {
+        Section {
+            NavigationLink {
+                GeekDataPanel()
+                    .environmentObject(service)
+                    .environmentObject(bleManager)
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("极客数据面板")
+                            .fontWeight(.medium)
+                        Text("EMG 原始信号、RMS 可视化")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "waveform.path.ecg.rectangle")
+                        .foregroundStyle(Color(.systemIndigo))
+                }
+            }
+        } header: {
+            Text("数据")
+        }
+    }
+
     // MARK: - Logs
 
     private var logsSection: some View {
         Section {
-            // 日志级别选择
             Picker("日志级别", selection: $logMinimumLevel) {
                 ForEach(FluxLogLevel.allCases, id: \.self) { level in
                     HStack {
@@ -322,98 +351,34 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("导出格式") {
-                    Button("导出为 JSON") {
-                        exportLogsAsJSON()
-                    }
-                    Button("导出为文本") {
-                        exportLogsAsText()
-                    }
+                    Button("导出为 JSON") { exportLogs(format: .json) }
+                    Button("导出为文本") { exportLogs(format: .text) }
                 }
 
                 Section("筛选选项") {
-                    Button("仅导出错误日志") {
-                        exportErrorLogs()
-                    }
-                    Button("仅导出 BLE 日志") {
-                        exportBLELogs()
-                    }
-                    Button("导出全部日志") {
-                        exportAllLogs()
-                    }
+                    Button("仅导出错误日志") { exportLogs(format: .json, options: .errorsOnly, label: "错误日志") }
+                    Button("仅导出 BLE 日志") { exportLogs(format: .json, options: .bleOnly, label: "BLE 日志") }
+                    Button("导出全部日志") { exportLogs(format: .json, label: "全部日志") }
                 }
             }
             .navigationTitle("导出日志")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") {
-                        showLogExportOptions = false
-                    }
+                    Button("取消") { showLogExportOptions = false }
                 }
             }
         }
     }
 
-    // MARK: - Log Export Actions
-
-    private func exportLogsAsJSON() {
-        Task {
-            do {
-                let url = try await ExportManager.shareLogsURL()
-                showLogExportOptions = false
-                // TODO: 展示分享表
-                FluxLogger.shared.info("日志已导出: \(url.lastPathComponent)", category: .export)
-            } catch {
-                FluxLogger.shared.error("导出失败", category: .export, error: error)
-            }
-        }
-    }
-
-    private func exportLogsAsText() {
-        Task {
-            do {
-                let url = try await ExportManager.shareLogsTextURL()
-                showLogExportOptions = false
-                FluxLogger.shared.info("日志已导出: \(url.lastPathComponent)", category: .export)
-            } catch {
-                FluxLogger.shared.error("导出失败", category: .export, error: error)
-            }
-        }
-    }
-
-    private func exportErrorLogs() {
-        Task {
-            do {
-                let url = try await ExportManager.shareLogsURL(options: .errorsOnly)
-                showLogExportOptions = false
-                FluxLogger.shared.info("错误日志已导出: \(url.lastPathComponent)", category: .export)
-            } catch {
-                FluxLogger.shared.error("导出失败", category: .export, error: error)
-            }
-        }
-    }
-
-    private func exportBLELogs() {
-        Task {
-            do {
-                let url = try await ExportManager.shareLogsURL(options: .bleOnly)
-                showLogExportOptions = false
-                FluxLogger.shared.info("BLE 日志已导出: \(url.lastPathComponent)", category: .export)
-            } catch {
-                FluxLogger.shared.error("导出失败", category: .export, error: error)
-            }
-        }
-    }
-
-    private func exportAllLogs() {
-        Task {
-            do {
-                let url = try await ExportManager.shareLogsURL(options: .default)
-                showLogExportOptions = false
-                FluxLogger.shared.info("全部日志已导出: \(url.lastPathComponent)", category: .export)
-            } catch {
-                FluxLogger.shared.error("导出失败", category: .export, error: error)
-            }
+    private func exportLogs(format: FluxLogger.ExportFormat, options: FluxLogExportOptions = .all, label: String = "日志") {
+        do {
+            let url = try FluxLogger.shared.exportToFile(format: format, options: options)
+            showLogExportOptions = false
+            FluxShare.shareFile(url: url)
+            FluxLog.export.info("\(label)已导出: \(url.lastPathComponent)")
+        } catch {
+            FluxLog.export.error("导出失败", error: error)
         }
     }
 
@@ -440,6 +405,77 @@ struct SettingsView: View {
             } label: {
                 Label("保存状态", systemImage: "square.and.arrow.down")
             }
+        }
+    }
+
+    // MARK: - Performance
+
+    private var performanceSection: some View {
+        Section {
+            let pm = perfMonitor
+
+            HStack {
+                Image(systemName: "bolt.fill")
+                    .foregroundStyle(Flux.Colors.success)
+                    .frame(width: 20)
+                Text("启动耗时")
+                Spacer()
+                Text(pm.launchDurationMs > 0 ? "\(pm.launchDurationMs) ms" : "—")
+                    .font(Flux.Typography.mono)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Image(systemName: "gauge.with.dots.needle.67percent")
+                    .foregroundStyle(pm.fps >= 50 ? Flux.Colors.success : pm.fps >= 30 ? Flux.Colors.warning : Flux.Colors.accent)
+                    .frame(width: 20)
+                Text("帧率")
+                Spacer()
+                Text(pm.isMonitoring ? "\(pm.fps) FPS" : "未启动")
+                    .font(Flux.Typography.mono)
+                    .foregroundStyle(.secondary)
+            }
+
+            if pm.isMonitoring {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(pm.droppedFrames > 10 ? Flux.Colors.accent : .secondary)
+                        .frame(width: 20)
+                    Text("掉帧")
+                    Spacer()
+                    Text("\(pm.droppedFrames)")
+                        .font(Flux.Typography.mono)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack {
+                Image(systemName: "memorychip")
+                    .foregroundStyle(.blue)
+                    .frame(width: 20)
+                Text("内存")
+                Spacer()
+                Text(pm.memoryMB > 0 ? String(format: "%.1f MB", pm.memoryMB) : "—")
+                    .font(Flux.Typography.mono)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button {
+                if pm.isMonitoring {
+                    pm.stopMonitoring()
+                } else {
+                    pm.startMonitoring()
+                }
+            } label: {
+                Label(
+                    pm.isMonitoring ? "停止监测" : "开始监测",
+                    systemImage: pm.isMonitoring ? "stop.circle" : "play.circle"
+                )
+            }
+        } header: {
+            Text("性能监测")
+        } footer: {
+            Text("启动耗时 = 进程创建到首帧渲染；帧率监测使用 CADisplayLink")
         }
     }
 
