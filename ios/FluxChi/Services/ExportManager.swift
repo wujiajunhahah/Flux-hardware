@@ -3,6 +3,117 @@ import UIKit
 
 enum ExportManager {
 
+    // MARK: - Log Export
+
+    /// 日志导出选项
+    struct LogExportOptions {
+        let minimumLevel: FluxLogLevel?
+        let categories: Set<FluxLogCategory>?
+        let limit: Int?
+        let keyword: String?
+
+        static let `default` = LogExportOptions(
+            minimumLevel: nil,
+            categories: nil,
+            limit: nil,
+            keyword: nil
+        )
+
+        static let errorsOnly = LogExportOptions(
+            minimumLevel: .error,
+            categories: nil,
+            limit: nil,
+            keyword: nil
+        )
+
+        static let bleOnly = LogExportOptions(
+            minimumLevel: nil,
+            categories: [.ble],
+            limit: nil,
+            keyword: nil
+        )
+    }
+
+    /// 导出日志为 JSON 数据
+    static func exportLogs(options: LogExportOptions = .default) throws -> Data {
+        let logger = FluxLogger.shared
+
+        var filtered = logger.entries
+
+        // 按级别过滤
+        if let minLevel = options.minimumLevel {
+            filtered = filtered.filter { $0.level >= minLevel }
+        }
+
+        // 按分类过滤
+        if let categories = options.categories {
+            filtered = filtered.filter { categories.contains($0.category) }
+        }
+
+        // 按关键词搜索
+        if let keyword = options.keyword, !keyword.isEmpty {
+            filtered = filtered.filter {
+                $0.message.localizedCaseInsensitiveContains(keyword) ||
+                $0.errorDescription?.localizedCaseInsensitiveContains(keyword) == true
+            }
+        }
+
+        // 限制数量
+        if let limit = options.limit {
+            filtered = Array(filtered.suffix(limit))
+        }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        return try encoder.encode(filtered)
+    }
+
+    /// 导出日志为纯文本
+    static func exportLogsAsText(options: LogExportOptions = .default) throws -> String {
+        let data = try exportLogs(options: options)
+        let entries = try JSONDecoder().decode([FluxLogEntry].self, from: data)
+
+        return entries.map { entry in
+            entry.formatDetailed()
+        }.joined(separator: "\n---\n")
+    }
+
+    /// 分享日志 JSON 文件 URL
+    static func shareLogsURL(options: LogExportOptions = .default) throws -> URL {
+        let data = try exportLogs(options: options)
+
+        let dateStr = {
+            let f = DateFormatter()
+            f.dateFormat = "yyyyMMdd_HHmmss"
+            return f.string(from: Date())
+        }()
+
+        let filename = "fluxchi_logs_\(dateStr).json"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+
+        try data.write(to: url)
+        return url
+    }
+
+    /// 分享日志文本文件 URL
+    static func shareLogsTextURL(options: LogExportOptions = .default) throws -> URL {
+        let text = try exportLogsAsText(options: options)
+
+        let dateStr = {
+            let f = DateFormatter()
+            f.dateFormat = "yyyyMMdd_HHmmss"
+            return f.string(from: Date())
+        }()
+
+        let filename = "fluxchi_logs_\(dateStr).txt"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+
+        try text.write(to: url, atomically: true, encoding: .utf8)
+        return url
+    }
+
     // MARK: - Export Structures
 
     struct ExportPackage: Codable {

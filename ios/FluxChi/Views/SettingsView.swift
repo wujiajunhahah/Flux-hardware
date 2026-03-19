@@ -8,6 +8,8 @@ struct SettingsView: View {
     @State private var editHost: String = ""
     @State private var editPort: String = ""
     @State private var showResetAlert = false
+    @State private var showLogExportOptions = false
+    @State private var showClearLogsAlert = false
     @FocusState private var focusedField: Field?
 
     private enum Field { case host, port }
@@ -19,6 +21,7 @@ struct SettingsView: View {
                 serverSection
                 statusSection
                 personalizationSection
+                logsSection
                 controlSection
                 aboutSection
             }
@@ -37,6 +40,17 @@ struct SettingsView: View {
             .onAppear {
                 editHost = service.host
                 editPort = "\(service.port)"
+            }
+            .sheet(isPresented: $showLogExportOptions) {
+                logExportSheet
+            }
+            .alert("清空日志", isPresented: $showClearLogsAlert) {
+                Button("取消", role: .cancel) {}
+                Button("清空", role: .destructive) {
+                    FluxLogger.shared.clearLogs()
+                }
+            } message: {
+                Text("将清空所有日志记录，此操作不可撤销")
             }
         }
     }
@@ -242,6 +256,140 @@ struct SettingsView: View {
             Text("个性化")
         } footer: {
             Text("每次记录反馈后，模型会自动学习你的个人特征")
+        }
+    }
+
+    // MARK: - Logs
+
+    private var logsSection: some View {
+        Section("日志") {
+            HStack {
+                Label("日志条目", systemImage: "doc.text")
+                Spacer()
+                Text("\(FluxLogger.shared.entries.count)")
+                    .foregroundStyle(.secondary)
+            }
+
+            NavigationLink {
+                LogViewerView()
+            } label: {
+                Label("查看日志", systemImage: "list.bullet")
+            }
+
+            Button {
+                showLogExportOptions = true
+            } label: {
+                Label("导出日志", systemImage: "square.and.arrow.up")
+            }
+
+            Button {
+                showClearLogsAlert = true
+            } label: {
+                Label("清空日志", systemImage: "trash")
+                    .foregroundStyle(.red)
+            }
+        } footer: {
+            Text("日志用于调试和分析问题")
+        }
+    }
+
+    @ViewBuilder
+    private var logExportSheet: some View {
+        NavigationStack {
+            Form {
+                Section("导出格式") {
+                    Button("导出为 JSON") {
+                        exportLogsAsJSON()
+                    }
+                    Button("导出为文本") {
+                        exportLogsAsText()
+                    }
+                }
+
+                Section("筛选选项") {
+                    Button("仅导出错误日志") {
+                        exportErrorLogs()
+                    }
+                    Button("仅导出 BLE 日志") {
+                        exportBLELogs()
+                    }
+                    Button("导出全部日志") {
+                        exportAllLogs()
+                    }
+                }
+            }
+            .navigationTitle("导出日志")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        showLogExportOptions = false
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Log Export Actions
+
+    private func exportLogsAsJSON() {
+        Task {
+            do {
+                let url = try ExportManager.shareLogsURL()
+                showLogExportOptions = false
+                // TODO: 展示分享表
+                FluxLogger.shared.info("日志已导出: \(url.lastPathComponent)", category: .export)
+            } catch {
+                FluxLogger.shared.error("导出失败", category: .export, error: error)
+            }
+        }
+    }
+
+    private func exportLogsAsText() {
+        Task {
+            do {
+                let url = try ExportManager.shareLogsTextURL()
+                showLogExportOptions = false
+                FluxLogger.shared.info("日志已导出: \(url.lastPathComponent)", category: .export)
+            } catch {
+                FluxLogger.shared.error("导出失败", category: .export, error: error)
+            }
+        }
+    }
+
+    private func exportErrorLogs() {
+        Task {
+            do {
+                let url = try ExportManager.shareLogsURL(options: .errorsOnly)
+                showLogExportOptions = false
+                FluxLogger.shared.info("错误日志已导出: \(url.lastPathComponent)", category: .export)
+            } catch {
+                FluxLogger.shared.error("导出失败", category: .export, error: error)
+            }
+        }
+    }
+
+    private func exportBLELogs() {
+        Task {
+            do {
+                let url = try ExportManager.shareLogsURL(options: .bleOnly)
+                showLogExportOptions = false
+                FluxLogger.shared.info("BLE 日志已导出: \(url.lastPathComponent)", category: .export)
+            } catch {
+                FluxLogger.shared.error("导出失败", category: .export, error: error)
+            }
+        }
+    }
+
+    private func exportAllLogs() {
+        Task {
+            do {
+                let url = try ExportManager.shareLogsURL(options: .default)
+                showLogExportOptions = false
+                FluxLogger.shared.info("全部日志已导出: \(url.lastPathComponent)", category: .export)
+            } catch {
+                FluxLogger.shared.error("导出失败", category: .export, error: error)
+            }
         }
     }
 

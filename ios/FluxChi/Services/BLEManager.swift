@@ -1,6 +1,7 @@
 import Foundation
 import CoreBluetooth
 import Combine
+import OSLog
 
 // BLE constants extracted to a nonisolated enum so CBCentralManager / CBPeripheral
 // delegate callbacks (which run nonisolated) can reference them without crossing
@@ -56,13 +57,17 @@ final class BLEManager: NSObject, ObservableObject {
     // MARK: - Scanning
 
     func startScan() {
-        guard central.state == .poweredOn else { return }
+        guard central.state == .poweredOn else {
+            FluxLogger.logBLEScan("启动扫描失败: 蓝牙未就绪 (state: \(central.state.rawValue))", level: .warn)
+            return
+        }
         discoveredDevices.removeAll()
         isScanning = true
         central.scanForPeripherals(
             withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
+        FluxLogger.logBLEScan("启动扫描，15秒超时")
         Task {
             try? await Task.sleep(for: .seconds(15))
             if isScanning { stopScan() }
@@ -72,6 +77,7 @@ final class BLEManager: NSObject, ObservableObject {
     func stopScan() {
         central.stopScan()
         isScanning = false
+        FluxLogger.logBLEScan("停止扫描，发现 \(discoveredDevices.count) 个设备")
     }
 
     // MARK: - Connect / Disconnect
@@ -79,6 +85,8 @@ final class BLEManager: NSObject, ObservableObject {
     func connect(to peripheral: CBPeripheral) {
         stopScan()
         self.peripheral = peripheral
+        let deviceName = peripheral.name ?? "未知设备"
+        FluxLogger.logBLEConnect("发起连接: \(deviceName) [UUID: \(peripheral.identifier.uuidString.prefix(8))]")
         central.connect(peripheral, options: nil)
     }
 
@@ -86,6 +94,8 @@ final class BLEManager: NSObject, ObservableObject {
         guard let p = peripheral else { return }
         if let c = dataChar { p.setNotifyValue(false, for: c) }
         central.cancelPeripheralConnection(p)
+        let deviceName = p.name ?? connectedDeviceName ?? "未知设备"
+        FluxLogger.logBLEDisconnect("主动断开: \(deviceName)")
         peripheral = nil
         dataChar = nil
         connectedDeviceName = nil
@@ -118,6 +128,10 @@ final class BLEManager: NSObject, ObservableObject {
         if emgFrameCount % 50 == 0 {
             latestRMS = emgBuffer.rms()
             buildAndPushState()
+
+            // 采样日志 - 记录每 50 帧的状态
+            let rmsPreview = latestRMS.prefix(3).map { String(format: "%.1f", $0) }.joined(separator: ", ")
+            FluxLogger.logBLEData("Frame \(emgFrameCount) | RMS: [\(rmsPreview), ...] | Channels: \(nCh)")
         }
     }
 
@@ -200,6 +214,7 @@ extension BLEManager: CBCentralManagerDelegate {
         Task { @MainActor in
             if !self.discoveredDevices.contains(where: { $0.identifier == peripheral.identifier }) {
                 self.discoveredDevices.append(peripheral)
+                FluxLogger.logBLEScan("发现设备: \(name) [RSSI: \(RSSI)]")
             }
         }
     }
@@ -208,6 +223,7 @@ extension BLEManager: CBCentralManagerDelegate {
         Task { @MainActor in
             self.peripheralState = .connected
             self.connectedDeviceName = peripheral.name ?? "WAVELETECH"
+            FluxLogger.logBLEConnect("连接成功: \(self.connectedDeviceName ?? "未知设备")")
             peripheral.delegate = self
             peripheral.discoverServices([BLEConstants.serviceUUID])
         }
@@ -220,7 +236,13 @@ extension BLEManager: CBCentralManagerDelegate {
     ) {
         Task { @MainActor in
             self.peripheralState = .disconnected
+            let deviceName = self.connectedDeviceName ?? peripheral.name ?? "未知设备"
             self.connectedDeviceName = nil
+            if let error = error {
+                FluxLogger.logBLEDisconnect("意外断开: \(deviceName) | Error: \(error.localizedDescription)", error: error, level: .error)
+            } else {
+                FluxLogger.logBLEDisconnect("正常断开: \(deviceName)", level: .info)
+            }
         }
     }
 }
