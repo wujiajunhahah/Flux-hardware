@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var showResetAlert = false
     @State private var showLogExportOptions = false
     @State private var showClearLogsAlert = false
+    @State private var logMinimumLevel: FluxLogLevel = .info
     @FocusState private var focusedField: Field?
 
     private enum Field { case host, port }
@@ -40,6 +41,7 @@ struct SettingsView: View {
             .onAppear {
                 editHost = service.host
                 editPort = "\(service.port)"
+                logMinimumLevel = FluxLogger.shared.config.minimumLevel
             }
             .sheet(isPresented: $showLogExportOptions) {
                 logExportSheet
@@ -263,6 +265,26 @@ struct SettingsView: View {
 
     private var logsSection: some View {
         Section("日志") {
+            // 日志级别选择
+            Picker("日志级别", selection: $logMinimumLevel) {
+                ForEach(FluxLogLevel.allCases, id: \.self) { level in
+                    HStack {
+                        Image(systemName: level.icon)
+                            .foregroundStyle(level.color)
+                            .frame(width: 20)
+                        Text(level.label)
+                    }
+                    .tag(level)
+                }
+            }
+            .onChange(of: logMinimumLevel) { _, newLevel in
+                Task { @MainActor in
+                    var newConfig = FluxLogger.shared.config
+                    newConfig.minimumLevel = newLevel
+                    FluxLogger.shared.updateConfig(newConfig)
+                }
+            }
+
             HStack {
                 Label("日志条目", systemImage: "doc.text")
                 Spacer()

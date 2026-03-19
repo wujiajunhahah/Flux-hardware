@@ -9,12 +9,14 @@ enum Flux {
         static let success = Color.green
         static let warning = Color.orange
 
-        static func forStaminaState(_ state: StaminaState) -> Color {
-            switch state {
-            case .focused:    return .red
-            case .fading:     return .orange
-            case .depleted:   return .red.opacity(0.6)
-            case .recovering: return .green
+        /// 根据状态字符串返回对应颜色 - 与 StaminaState.rawValues 保持一致
+        static func forStaminaState(_ state: String) -> Color {
+            switch state.lowercased() {
+            case "focused":    return .red
+            case "fading":     return .orange
+            case "depleted":   return .red.opacity(0.6)
+            case "recovering": return .green
+            default:           return .gray
             }
         }
 
@@ -93,7 +95,7 @@ enum Flux {
         /// 次要文字 - 辅助信息
         static let secondary = Color.secondary
         /// 第三级文字 - 占位符等
-        static let tertiary = Color(.tertiaryLabel)
+        static let tertiary = Color(UIColor.tertiaryLabel)
 
         /// 暗化文字 - Widget 中使用
         static let dim = Color(white: 0.45)
@@ -112,11 +114,11 @@ enum Flux {
 
     enum Backgrounds {
         /// 主背景 - 系统背景色
-        static let primary = Color(uiColor: .systemBackground)
+        static let primary = Color(UIColor.systemBackground)
         /// 次要背景 - 分组背景
-        static let secondary = Color(uiColor: .secondarySystemBackground)
+        static let secondary = Color(UIColor.secondarySystemBackground)
         /// 第三级背景 - 用于更深层次
-        static let tertiary = Color(uiColor: .tertiarySystemBackground)
+        static let tertiary = Color(UIColor.tertiarySystemBackground)
 
         /// 抬升背景 - 浮层效果
         static let elevated = Color(white: 0.05, opacity: 1)
