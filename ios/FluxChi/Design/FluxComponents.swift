@@ -61,13 +61,13 @@ struct FluxMetricCard: View {
     }
 
     private var compactLayout: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: Flux.Spacing.tight / 2) {
             Text(value)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .font(Flux.Typography.metric(Flux.Sizes.textBody))
                 .foregroundStyle(tint)
             Text(title)
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
+                .font(.system(size: Flux.Sizes.textLabel))
+                .foregroundStyle(Flux.Label.secondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title) \(value)")
@@ -87,9 +87,9 @@ struct FluxStatusBadge: View {
             .font(.caption)
             .fontWeight(.semibold)
             .foregroundStyle(tint)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(tint.opacity(0.12), in: Capsule())
+            .padding(.horizontal, Flux.Spacing.item - 2)
+            .padding(.vertical, Flux.Spacing.tight + 1)
+            .background(tint.opacity(Flux.Opacity.medium), in: Capsule())
             .symbolEffect(.pulse, isActive: isActive)
     }
 }
@@ -113,22 +113,22 @@ struct FluxEMGBars: View {
         let channels = activeChannels.isEmpty ? Array(rms.enumerated().map { ($0.offset, $0.element) }) : activeChannels
         let maxVal = max(channels.map(\.value).max() ?? 1, 1)
 
-        HStack(alignment: .bottom, spacing: 4) {
+        HStack(alignment: .bottom, spacing: Flux.Spacing.tight) {
             ForEach(channels, id: \.index) { idx, val in
-                VStack(spacing: 2) {
-                    RoundedRectangle(cornerRadius: 2)
+                VStack(spacing: Flux.Spacing.tight / 2) {
+                    RoundedRectangle(cornerRadius: Flux.Spacing.tight / 2)
                         .fill(barColor.gradient)
-                        .frame(height: max(4, CGFloat(val / maxVal) * height))
-                        .animation(.easeOut(duration: 0.15), value: val)
+                        .frame(height: max(Flux.Spacing.tight, CGFloat(val / maxVal) * height))
+                        .animation(Flux.Motion.fast, value: val)
 
                     Text("C\(idx + 1)")
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.tertiary)
+                        .font(Flux.Typography.monoSmall)
+                        .foregroundStyle(Flux.Label.tertiary)
                 }
                 .frame(maxWidth: .infinity)
             }
         }
-        .frame(height: height + 16)
+        .frame(height: height + Flux.Spacing.group)
     }
 }
 
@@ -142,8 +142,7 @@ struct FluxLiveIndicator: View {
             .fill(isLive ? Flux.Colors.success : Color.primary.opacity(0.2))
             .frame(width: 8, height: 8)
             .shadow(color: isLive ? Flux.Colors.success.opacity(0.5) : .clear, radius: 4)
-            .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true),
-                        value: isLive)
+            .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isLive)
             .accessibilityLabel(isLive ? "已连接" : "未连接")
     }
 }
@@ -200,8 +199,8 @@ struct FluxEmptyState: View {
                 Button(action: action) {
                     Text(label)
                         .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, Flux.Spacing.section)
+                        .padding(.vertical, Flux.Spacing.item - 2)
                         .background(Flux.Colors.accent, in: Capsule())
                         .foregroundStyle(.white)
                 }

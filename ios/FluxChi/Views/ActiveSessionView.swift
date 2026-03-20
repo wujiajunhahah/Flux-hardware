@@ -599,7 +599,7 @@ struct ActiveSessionView: View {
     // MARK: - Helpers
 
     private var staminaRingColor: Color {
-        Flux.Colors.forStaminaState(staminaState.rawValue)
+        Flux.Colors.forStaminaState(staminaState)
     }
 
     private func formatElapsed(_ seconds: TimeInterval) -> String {

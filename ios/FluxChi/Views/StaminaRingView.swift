@@ -12,7 +12,7 @@ struct StaminaRingView: View {
     private var numberSize: CGFloat { size * 0.26 }
 
     private var ringColor: Color {
-        Flux.Colors.forStaminaState(state.rawValue)
+        Flux.Colors.forStaminaState(state)
     }
 
     var body: some View {

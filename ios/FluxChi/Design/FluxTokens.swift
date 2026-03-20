@@ -16,28 +16,36 @@ enum Flux {
         static let success = Color.green
         static let warning = Color.orange
         static let info = Color.blue
-        static let destructive = Color.red
+        static let destructive = Color(UIColor.systemRed)  // 与 accent 区分：系统红偏冷
 
         // 边界 & 分割线
         static let border = Color.primary.opacity(0.1)
         static let divider = Color.primary.opacity(0.08)
 
-        /// 根据状态字符串返回对应颜色 - 与 StaminaState.rawValues 保持一致
-        static func forStaminaState(_ state: String) -> Color {
-            switch state.lowercased() {
-            case "focused":    return .red
-            case "fading":     return .orange
-            case "depleted":   return .red.opacity(0.6)
-            case "recovering": return .green
-            default:           return .gray
+        /// 根据 StaminaState 枚举返回对应颜色（唯一数据源）
+        static func forStaminaState(_ state: StaminaState) -> Color {
+            switch state {
+            case .focused:    return .red
+            case .fading:     return .orange
+            case .depleted:   return .red.opacity(0.6)
+            case .recovering: return .green
             }
+        }
+
+        /// String 版 — 兼容 rawValue 传入场景，逐步迁移后删除
+        @available(*, deprecated, message: "Use forStaminaState(_ state: StaminaState) instead")
+        static func forStaminaState(_ state: String) -> Color {
+            if let parsed = StaminaState(rawValue: state.lowercased()) {
+                return forStaminaState(parsed)
+            }
+            return .gray
         }
 
         /// 根据续航数值返回颜色
         static func forStaminaValue(_ value: Double) -> Color {
-            if value > 60 { return forStaminaState("focused") }
-            if value > 30 { return forStaminaState("fading") }
-            return forStaminaState("depleted")
+            if value > 60 { return forStaminaState(.focused) }
+            if value > 30 { return forStaminaState(.fading) }
+            return forStaminaState(.depleted)
         }
 
         static func forUrgency(_ value: Double) -> Color {
@@ -75,8 +83,8 @@ enum Flux {
         static let secondary = Color(UIColor.secondarySystemBackground)
         /// 更深层次背景
         static let tertiary = Color(UIColor.tertiarySystemBackground)
-        /// 抬升背景 - 自适应 dark/light
-        static let elevated = Color(UIColor.secondarySystemBackground)
+        /// 抬升背景 - sheet/popover 等浮层（dark 模式下比 secondary 更亮）
+        static let elevated = Color(UIColor.secondarySystemGroupedBackground)
         /// 遮罩背景
         static let overlay = Color.black.opacity(0.6)
         /// 休息模式背景 - 深绿色调
@@ -192,16 +200,6 @@ enum Flux {
         static func glow(_ view: some View, color: Color = Colors.accent, radius: CGFloat = 10) -> some View {
             view.shadow(color: color.opacity(0.3), radius: radius, x: 0, y: 2)
         }
-    }
-
-    // MARK: - App Constants
-
-    enum App {
-        static let name    = "FluxChi"
-        static let version = "1.0"
-        static let schemaVersion = 1
-        static let snapshotIntervalMs = 500
-        static let githubURL = URL(string: "https://github.com/wujiajunhahah/Flux-hardware")!
     }
 
     // MARK: - Formatters
