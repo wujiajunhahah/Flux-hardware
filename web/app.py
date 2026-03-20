@@ -11,6 +11,8 @@ RESTful API + SSE + WebSocket 三种接入方式。
   python web/app.py --port /dev/tty.usbserial-XXXX
   python web/app.py --demo
   python web/app.py --demo --speed 10
+  python web/app.py --web-port 8000
+      无 --demo/--port/--ble 时数据源为「空闲」，在网页「数据源」或 POST /api/v1/transport/apply 切换
 =========================================================
 """
 from __future__ import annotations
@@ -31,8 +33,15 @@ from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
-from src.stream import CHANNEL_COUNT, BaseEMGStream, BleEMGStream, SerialEMGStream
+from src.stream import (
+    CHANNEL_COUNT,
+    BaseEMGStream,
+    BleEMGStream,
+    SerialEMGStream,
+    normalize_serial_device,
+)
 from src.energy import StaminaEngine, StaminaState
 from src.decision import DecisionEngine
 
@@ -60,6 +69,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # ─── Global state ────────────────────────────────────────────
 stream: Optional[BaseEMGStream] = None
 onnx_session = None
+_real_onnx_session = None  # 文件加载的 ONNX，切换 demo 时不丢失
 onnx_classes: List[str] = []
 onnx_config: Optional[dict] = None
 stamina_engine: Optional[StaminaEngine] = None
@@ -72,6 +82,11 @@ latest_payload: Dict = {}
 _server_start: float = time.time()
 SAMPLE_RATE = 1000
 WINDOW_SEC = 0.25
+
+_transport_lock = asyncio.Lock()
+_emg_buffer_reset_requested = False
+current_serial_port: Optional[str] = None
+current_ble_address: Optional[str] = None
 
 
 def _ok(data: dict) -> dict:
@@ -247,6 +262,177 @@ class DemoClassifier:
         return self.classes[idx], 0.85, probs
 
 
+def _raw_serial_port_rows() -> List[Dict[str, str]]:
+    try:
+        from serial.tools import list_ports
+
+        rows: List[Dict[str, str]] = []
+        for p in list_ports.comports():
+            rows.append(
+                {
+                    "device": p.device,
+                    "description": (p.description or "").strip(),
+                    "hwid": (getattr(p, "hwid", None) or "").strip(),
+                }
+            )
+        return rows
+    except Exception as exc:
+        print(f"[transport] 枚举串口失败（常因未安装 pyserial：pip install pyserial）: {exc}")
+        return []
+
+
+def _dedupe_mac_tty_vs_cu(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    if sys.platform != "darwin":
+        return rows
+    devs = {r["device"] for r in rows}
+    out: List[Dict[str, str]] = []
+    for r in rows:
+        dev = r["device"]
+        if dev.startswith("/dev/tty."):
+            cu = "/dev/cu." + dev[len("/dev/tty.") :]
+            if cu in devs:
+                continue
+        out.append(r)
+    return out
+
+
+def _score_serial_row(row: Dict[str, str]) -> int:
+    d = row["device"].lower()
+    desc = row["description"].lower()
+    hw = row.get("hwid", "").upper()
+    s = 0
+    if "usbserial" in d or "usbserial" in desc:
+        s += 55
+    if "usbmodem" in d and "bluetooth" not in d:
+        s += 22
+    for k in (
+        "cp210",
+        "ch340",
+        "ch341",
+        "ftdi",
+        "cp2102",
+        "uart bridge",
+        "usb uart",
+        "usb-to-uart",
+        "serial adapter",
+    ):
+        if k in desc:
+            s += 28
+    for vid in ("10C4", "1A86", "0403"):
+        if vid in hw:
+            s += 18
+    if d.startswith("/dev/cu."):
+        s += 8
+    if d.startswith("/dev/tty.") and sys.platform == "darwin":
+        s -= 12
+    for bad in ("bluetooth-incoming", "debug-console"):
+        if bad in d:
+            s -= 95
+    if "bluetooth" in d or "bluetooth" in desc:
+        s -= 32
+    return s
+
+
+def _serialize_port_for_api(row: Dict[str, str], score: int) -> Dict[str, object]:
+    return {
+        "device": normalize_serial_device(row["device"]),
+        "description": row["description"] or "n/a",
+        "likely_emg_bridge": score >= 22,
+    }
+
+
+def _build_serial_catalog(include_other: bool) -> tuple[List[Dict[str, object]], List[Dict[str, object]]]:
+    raw = _dedupe_mac_tty_vs_cu(_raw_serial_port_rows())
+    scored = sorted(((r, _score_serial_row(r)) for r in raw), key=lambda t: -t[1])
+    items = [(_serialize_port_for_api(r, sc), sc) for r, sc in scored]
+    strong = [p for p, sc in items if sc >= 22]
+    weak = [p for p, sc in items if sc < 22]
+    if not strong:
+        primary = [p for p, _ in items]
+        secondary: List[Dict[str, object]] = []
+    else:
+        primary = strong
+        secondary = weak if include_other else []
+    return primary, secondary
+
+
+def _resolve_serial_port(explicit: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """显式路径会规范为 macOS 的 cu.*；自动选择时优先 USB 串口桥得分高的设备。"""
+    ex = (explicit or "").strip()
+    if ex:
+        return normalize_serial_device(ex), None
+
+    raw = _dedupe_mac_tty_vs_cu(_raw_serial_port_rows())
+    if not raw:
+        return None, "未检测到串口，请插上 USB 接收器或在「手动路径」填写路径"
+
+    scored = sorted(((r, _score_serial_row(r)) for r in raw), key=lambda t: -t[1])
+    strong = [(r, sc) for r, sc in scored if sc >= 22]
+    pool: List[tuple[Dict[str, str], int]] = strong if strong else scored
+
+    if len(pool) == 1:
+        return normalize_serial_device(pool[0][0]["device"]), None
+
+    top0, sc0 = pool[0][0], pool[0][1]
+    sc1 = pool[1][1] if len(pool) > 1 else -999
+    if sc0 >= 40 and (sc0 - sc1) >= 18:
+        return normalize_serial_device(top0["device"]), None
+
+    preview = "、".join(normalize_serial_device(r["device"]) for r, _ in pool[:5])
+    return None, (
+        "无法自动唯一选定接收器。请在下拉中选 likely_emg_bridge 或含 CP2102/usbserial 的 /dev/cu.*；"
+        "若已连接仍无数据，请确认手环在发送数据。候选："
+        f"{preview}"
+    )
+
+
+def _serial_apply_message(port: str, auto: bool) -> str:
+    if auto:
+        return f"已自动连接串口：{port}"
+    return f"已连接串口 {port}"
+
+
+def _stream_signal_stats() -> Optional[Dict[str, object]]:
+    if stream is None:
+        return None
+    try:
+        st = stream.frame_stats()
+        return {
+            "emg_frames": st.emg_frames,
+            "total_frames": st.total_frames,
+            "imu_frames": st.imu_frames,
+            "dropped_frames": st.dropped_frames,
+        }
+    except Exception:
+        return None
+
+
+def _transport_mode_label() -> str:
+    if stream is None:
+        return "idle"
+    if isinstance(stream, DemoEMGStream):
+        return "demo"
+    if isinstance(stream, SerialEMGStream):
+        return "serial"
+    if isinstance(stream, BleEMGStream):
+        return "ble"
+    return "unknown"
+
+
+def _request_emg_buffer_reset() -> None:
+    global _emg_buffer_reset_requested
+    _emg_buffer_reset_requested = True
+
+
+class TransportApplyBody(BaseModel):
+    mode: str = Field(..., description="idle | demo | serial | ble")
+    port: Optional[str] = Field(
+        None,
+        description="serial 模式：串口路径；省略时若本机仅 1 个串口则自动选用",
+    )
+    address: Optional[str] = Field(None, description="ble 模式：设备地址，留空则自动扫描")
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  API v1
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -265,12 +451,118 @@ async def v1_status():
         "connected": stream is not None,
         "model_loaded": onnx_session is not None,
         "demo_mode": demo_mode,
+        "transport_mode": _transport_mode_label(),
+        "serial_port": current_serial_port,
+        "ble_address": current_ble_address,
         "speed": speed_multiplier,
         "sample_rate": SAMPLE_RATE,
         "channels": CHANNEL_COUNT,
         "uptime_sec": round(time.time() - _server_start, 1),
         "websocket_clients": len(active_connections),
     })
+
+
+@app.get("/api/v1/transport", tags=["System"], summary="数据源状态与串口列表")
+async def v1_transport(
+    include_all: bool = Query(
+        False,
+        description="为 true 时附带 serial_ports_other（耳机/蓝牙等低优先级端口）",
+    ),
+):
+    """
+    `serial_ports` 为筛选、排序后的列表（优先 USB 串口桥）；`stream_stats` 用于判断是否真的收到 EMG 帧。
+    """
+    primary, secondary = _build_serial_catalog(include_other=include_all)
+    data: Dict[str, object] = {
+        "mode": _transport_mode_label(),
+        "demo_mode": demo_mode,
+        "serial_port": current_serial_port,
+        "ble_address": current_ble_address,
+        "serial_ports": primary,
+        "signal_hint": (
+            "若已选串口但 emg_frames 长时间为 0：多半选错设备；macOS 请用 /dev/cu.*；"
+            "并确认手环已通过该接收器以 921600 波特发送 D2D2D2 协议包。"
+        ),
+    }
+    if include_all and secondary:
+        data["serial_ports_other"] = secondary
+    stats = _stream_signal_stats()
+    if stats is not None:
+        data["stream_stats"] = stats
+    return _ok(data)
+
+
+@app.post("/api/v1/transport/apply", tags=["System"], summary="切换数据源")
+async def v1_transport_apply(body: TransportApplyBody):
+    """运行时切换演示数据 / USB 串口 / BLE / 断开。与命令行 `--demo` `--port` `--ble` 等价。"""
+    global stream, onnx_session, demo_mode, latest_payload
+    global current_serial_port, current_ble_address
+
+    mode = (body.mode or "").strip().lower()
+    if mode not in ("idle", "demo", "serial", "ble"):
+        return _err("bad_request", f"未知 mode: {body.mode!r}")
+
+    async with _transport_lock:
+        _request_emg_buffer_reset()
+
+        old = stream
+        stream = None
+        if old is not None:
+            try:
+                old.stop()
+            except Exception as exc:
+                print(f"[transport] stop previous stream: {exc}")
+
+        demo_mode = False
+        current_serial_port = None
+        current_ble_address = None
+
+        if mode == "idle":
+            latest_payload.clear()
+            onnx_session = _real_onnx_session
+            return _ok({"mode": "idle", "message": "已断开数据源"})
+
+        if mode == "demo":
+            demo_mode = True
+            new_stream = DemoEMGStream()
+            new_stream.start()
+            stream = new_stream
+            onnx_session = _real_onnx_session if _real_onnx_session is not None else DemoClassifier(stream)
+            return _ok({"mode": "demo", "message": "已切换为演示数据"})
+
+        if mode == "serial":
+            auto_pick = not (body.port or "").strip()
+            port, res_err = _resolve_serial_port(body.port)
+            if res_err or not port:
+                return _err("bad_request", res_err or "无法解析串口")
+            try:
+                new_stream = SerialEMGStream(port)
+                new_stream.start()
+            except Exception as exc:
+                return _err("open_failed", str(exc))
+            stream = new_stream
+            current_serial_port = port
+            onnx_session = _real_onnx_session
+            return _ok(
+                {
+                    "mode": "serial",
+                    "serial_port": port,
+                    "auto_selected": auto_pick,
+                    "message": _serial_apply_message(port, auto_pick),
+                }
+            )
+
+        # ble
+        addr = (body.address or "").strip() or None
+        try:
+            new_stream = BleEMGStream(address=addr)
+            new_stream.start()
+        except Exception as exc:
+            return _err("open_failed", str(exc))
+        stream = new_stream
+        current_ble_address = addr or "auto"
+        onnx_session = _real_onnx_session
+        return _ok({"mode": "ble", "ble_address": current_ble_address, "message": "BLE 已启动（自动扫描或指定地址）"})
 
 
 @app.get("/api/v1/model", tags=["System"], summary="模型信息")
@@ -507,7 +799,7 @@ async def broadcast(data: dict):
 
 # ─── Processing loop ────────────────────────────────────────
 async def processing_loop():
-    global stamina_engine, decision_engine
+    global stamina_engine, decision_engine, _emg_buffer_reset_requested
 
     window_samples = int(WINDOW_SEC * SAMPLE_RATE)
     stamina_engine = StaminaEngine(sample_rate=SAMPLE_RATE, speed=speed_multiplier)
@@ -519,6 +811,11 @@ async def processing_loop():
     log_interval = time.time()
 
     while True:
+        if _emg_buffer_reset_requested:
+            emg_buffer = np.zeros((0, CHANNEL_COUNT))
+            total_received = 0
+            _emg_buffer_reset_requested = False
+
         if stream is None:
             await asyncio.sleep(0.1)
             continue
@@ -640,6 +937,7 @@ async def startup():
 # ─── Entrypoint ──────────────────────────────────────────────
 def main():
     global stream, onnx_session, onnx_classes, onnx_config, demo_mode, speed_multiplier
+    global _real_onnx_session, current_serial_port, current_ble_address
 
     parser = argparse.ArgumentParser(description="FluxChi API Server")
     parser.add_argument("--port", help="Serial port for WAVELETECH wristband")
@@ -663,7 +961,9 @@ def main():
         if onnx_path.exists() and config_path.exists():
             config = json.loads(config_path.read_text())
             try:
-                onnx_session = ONNXClassifier(str(onnx_path), config)
+                loaded = ONNXClassifier(str(onnx_path), config)
+                _real_onnx_session = loaded
+                onnx_session = loaded
                 onnx_config = config
                 onnx_classes = config.get("classes", [])
                 print(f"[web] Loaded ONNX model: {onnx_path}")
@@ -678,22 +978,30 @@ def main():
         print("[web] DEMO mode (synthetic data)")
         stream = DemoEMGStream()
         stream.start()
-        if onnx_session is None:
+        if _real_onnx_session is None:
             onnx_session = DemoClassifier(stream)
             print("[web] Using demo classifier")
+        else:
+            onnx_session = _real_onnx_session
     elif args.ble is not None:
         addr = None if args.ble == "auto" else args.ble
         print(f"[web] BLE mode — {'auto-scan' if addr is None else addr}")
         stream = BleEMGStream(address=addr)
         stream.start()
+        current_ble_address = addr or "auto"
+        onnx_session = _real_onnx_session
     elif args.port:
         print(f"[web] Connecting to {args.port}...")
         stream = SerialEMGStream(args.port)
         stream.start()
+        current_serial_port = args.port
+        onnx_session = _real_onnx_session
     else:
-        print("[web] No port specified and --demo not set.")
-        print("[web] Use --port /dev/tty.usbserial-XXXX  or  --ble  or  --demo")
-        sys.exit(1)
+        print("[web] 未指定 --demo / --port / --ble — 数据源空闲，可在网页「数据源」中选择或调用 POST /api/v1/transport/apply")
+        stream = None
+        current_serial_port = None
+        current_ble_address = None
+        onnx_session = _real_onnx_session
 
     if onnx_session is None:
         print("[web] No model — signal-only mode")
@@ -706,8 +1014,7 @@ def main():
     print(f"  Swagger     http://localhost:{p}/docs")
     print(f"  SSE stream  http://localhost:{p}/api/v1/stream")
     print(f"  Pulse       http://localhost:{p}/api/v1/pulse")
-    mode = "demo" if demo_mode else ("ble" if args.ble is not None else "serial")
-    print(f"  Mode: {mode}  Speed: {speed_multiplier}x\n")
+    print(f"  Mode: {_transport_mode_label()}  Speed: {speed_multiplier}x\n")
     uvicorn.run(app, host=args.host, port=p, log_level="warning")
 
 

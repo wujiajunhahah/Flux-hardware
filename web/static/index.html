@@ -99,6 +99,42 @@ body {
   0%,100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+.transport-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(0,0,0,0.5);
+  font-size: 11px;
+}
+.transport-bar select,
+.transport-bar input[type="text"] {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 2px;
+  max-width: 100%;
+}
+.transport-bar button {
+  background: var(--red);
+  color: #fff;
+  border: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.transport-bar button:hover { filter: brightness(1.08); }
+.transport-msg { color: var(--dim); flex: 1 1 160px; min-width: 120px; }
+.transport-label { color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+
 .hdr-label {
   font-size: 9px;
   letter-spacing: 2px;
@@ -397,6 +433,21 @@ body {
   </div>
 </div>
 
+<div class="transport-bar" id="transportBar">
+  <span class="transport-label">数据源</span>
+  <select id="transportMode" aria-label="数据源类型">
+    <option value="idle">未连接</option>
+    <option value="demo">演示数据</option>
+    <option value="serial">USB 串口</option>
+    <option value="ble">蓝牙 BLE</option>
+  </select>
+  <select id="serialPortSelect" style="display:none;min-width:180px;" aria-label="串口列表"></select>
+  <input type="text" id="serialPortManual" style="display:none;min-width:200px;" placeholder="仅多个串口时需要填写" autocomplete="off"/>
+  <input type="text" id="bleAddrInput" style="display:none;min-width:200px;" placeholder="BLE 地址（留空=自动扫描）" autocomplete="off"/>
+  <button type="button" id="transportApplyBtn">应用</button>
+  <span class="transport-msg" id="transportMsg"></span>
+</div>
+
 <div class="page">
 
   <div class="sec full">
@@ -606,6 +657,128 @@ const chart = new Chart(document.getElementById('trendChart'), {
     plugins:{legend:{display:false}}
   }
 });
+
+(async function initTransport(){
+  const modeSel = document.getElementById('transportMode');
+  const serialSel = document.getElementById('serialPortSelect');
+  const serialManual = document.getElementById('serialPortManual');
+  const bleInp = document.getElementById('bleAddrInput');
+  const btn = document.getElementById('transportApplyBtn');
+  const msg = document.getElementById('transportMsg');
+
+  function autoPickSingleSerial(){
+    if (serialSel.options.length === 1 && !serialManual.value.trim()) {
+      serialSel.selectedIndex = 0;
+    }
+  }
+
+  function syncModeUI(){
+    const m = modeSel.value;
+    const serialOn = m === 'serial';
+    serialSel.style.display = serialOn ? 'inline-block' : 'none';
+    serialManual.style.display = serialOn ? 'inline-block' : 'none';
+    bleInp.style.display = m === 'ble' ? 'inline-block' : 'none';
+    if (serialOn) autoPickSingleSerial();
+  }
+  modeSel.addEventListener('change', syncModeUI);
+
+  function appendPortOptions(parent, list, starLikely){
+    (list || []).forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.device;
+      const mark = (starLikely && p.likely_emg_bridge) ? '★ ' : '';
+      o.textContent = mark + (p.description ? `${p.device} — ${p.description}` : p.device);
+      parent.appendChild(o);
+    });
+  }
+
+  async function refreshTransport(){
+    try {
+      const r = await fetch('/api/v1/transport?include_all=1');
+      const j = await r.json();
+      if (!j.ok) {
+        msg.textContent = j.message || j.error || '无法读取数据源';
+        msg.style.color = 'var(--yellow)';
+        return;
+      }
+      const d = j.data;
+      modeSel.value = d.mode || 'idle';
+      serialSel.innerHTML = '';
+      appendPortOptions(serialSel, d.serial_ports, true);
+      if (d.serial_ports_other && d.serial_ports_other.length) {
+        const og = document.createElement('optgroup');
+        og.label = '其他端口';
+        appendPortOptions(og, d.serial_ports_other, false);
+        serialSel.appendChild(og);
+      }
+      if (d.serial_port && [...serialSel.options].every(o => o.value !== d.serial_port)) {
+        const o = document.createElement('option');
+        o.value = d.serial_port;
+        o.textContent = d.serial_port;
+        serialSel.appendChild(o);
+      }
+      if (d.serial_port) {
+        serialSel.value = d.serial_port;
+        serialManual.value = '';
+      } else {
+        autoPickSingleSerial();
+      }
+      if (d.ble_address) bleInp.value = d.ble_address === 'auto' ? '' : d.ble_address;
+      syncModeUI();
+
+      if (d.mode === 'serial' && d.stream_stats) {
+        const s = d.stream_stats;
+        msg.textContent = `接收：EMG ${s.emg_frames} 帧 · 总计 ${s.total_frames} · 丢 ${s.dropped_frames}`;
+        msg.style.color = s.emg_frames === 0 ? 'var(--yellow)' : 'var(--green)';
+      } else {
+        msg.textContent = '';
+        msg.style.color = 'var(--dim)';
+      }
+    } catch (e) {
+      msg.textContent = e.message || String(e);
+      msg.style.color = 'var(--red)';
+    }
+  }
+
+  btn.addEventListener('click', async () => {
+    msg.textContent = '…';
+    msg.style.color = 'var(--dim)';
+    const body = { mode: modeSel.value };
+    if (body.mode === 'serial') {
+      const manual = serialManual.value.trim();
+      const fromList = (serialSel.value || '').trim();
+      const chosen = manual || fromList;
+      if (chosen) body.port = chosen;
+    }
+    if (body.mode === 'ble') {
+      const a = bleInp.value.trim();
+      if (a) body.address = a;
+    }
+    try {
+      const r = await fetch('/api/v1/transport/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const j = await r.json();
+      if (!j.ok) {
+        msg.textContent = j.message || j.error || '失败';
+        msg.style.color = 'var(--red)';
+        return;
+      }
+      msg.textContent = (j.data && j.data.message) ? j.data.message : '已应用';
+      msg.style.color = 'var(--green)';
+      await refreshTransport();
+    } catch (e) {
+      msg.textContent = e.message || String(e);
+      msg.style.color = 'var(--red)';
+    }
+  });
+
+  await refreshTransport();
+  syncModeUI();
+  setInterval(refreshTransport, 2500);
+})();
 
 function connect(){
   const proto = location.protocol==='https:'?'wss:':'ws:';

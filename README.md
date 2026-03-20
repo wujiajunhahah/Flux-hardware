@@ -47,6 +47,17 @@ python web/app.py --demo
 
 Open `http://localhost:8000` in your browser.
 
+## Documentation
+
+| Doc | Purpose |
+|-----|---------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design: Web backend, iOS (BLE vs Wi‑Fi), desktop `app.py` |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Setup, run paths, troubleshooting |
+| [docs/API-OVERVIEW.md](docs/API-OVERVIEW.md) | `/api/v1` index, iOS minimal subset, deprecated `/api/*` |
+| [docs/API.md](docs/API.md) | Full REST/SSE reference + Swift examples |
+| [docs/API-CHANGELOG.md](docs/API-CHANGELOG.md) | API contract changes |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | PRs, secrets, scope |
+
 ## Architecture
 
 ```
@@ -88,13 +99,17 @@ Open `http://localhost:8000` in your browser.
 +-- tools/
 |   +-- ble_scan.py               # BLE protocol reverse-engineering tool
 +-- docs/
+|   +-- ARCHITECTURE.md           # Web + iOS + desktop architecture
+|   +-- DEVELOPMENT.md            # Dev setup and runbooks
+|   +-- API-OVERVIEW.md           # Endpoint index, iOS subset
+|   +-- API-CHANGELOG.md          # Contract changelog
 |   +-- API.md                    # REST / SSE API reference (iOS examples)
 +-- model/                        # Trained ONNX models
 ```
 
 ## API
 
-The backend exposes a versioned REST API at `/api/v1/`. Full documentation with Swift examples in [`docs/API.md`](docs/API.md).
+The backend exposes a versioned REST API at `/api/v1/`. Index and iOS subset: [`docs/API-OVERVIEW.md`](docs/API-OVERVIEW.md). Full narrative + Swift examples: [`docs/API.md`](docs/API.md). When the server is running, **Swagger UI** is at `/docs` and the machine-readable schema at `/openapi.json`.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|

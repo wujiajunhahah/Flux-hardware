@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import threading
 import time
 from collections import deque
@@ -73,6 +74,19 @@ def _decode_signed24(b1: int, b2: int, b3: int) -> float:
     return float(micro_volts)
 
 
+def normalize_serial_device(path: str) -> str:
+    """
+    macOS：读线程用 /dev/tty.* 常出现能打开但收不到流或行为异常，
+    与对应 /dev/cu.* 等效时应优先 cu.*。
+    """
+    p = (path or "").strip()
+    if not p:
+        return p
+    if sys.platform == "darwin" and p.startswith("/dev/tty."):
+        return "/dev/cu." + p[len("/dev/tty.") :]
+    return p
+
+
 class BaseEMGStream:
     """Interface for EMG data providers."""
 
@@ -102,7 +116,7 @@ class SerialEMGStream(BaseEMGStream):
         if serial is None:
             raise RuntimeError("pyserial is required for hardware streaming")
 
-        self.port = port
+        self.port = normalize_serial_device(port)
         self.baudrate = baudrate
         self._serial: Optional[serial.Serial] = None
         self._thread: Optional[threading.Thread] = None

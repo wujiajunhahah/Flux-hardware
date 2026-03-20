@@ -1,5 +1,7 @@
 # FluxChi API Reference
 
+> **维护说明**：端点索引、iOS 最小子集、无版本 `/api/*` 废弃策略见 [API-OVERVIEW.md](./API-OVERVIEW.md)。契约变更见 [API-CHANGELOG.md](./API-CHANGELOG.md)。服务运行时的权威机器可读描述为 **`/openapi.json`**，交互文档为 **`/docs`**（Swagger UI）；若与此 Markdown 不一致，以运行实例为准并欢迎修正本文。
+
 ## Overview
 
 FluxChi exposes a versioned REST API, an SSE stream, and a WebSocket endpoint. All three deliver the same core data — choose the transport that fits your client.
@@ -26,6 +28,9 @@ python web/app.py --port /dev/tty.usbserial-0001
 
 # No hardware (demo)
 python web/app.py --demo
+
+# 无初始数据源：启动后在网页「数据源」里选 USB / 演示 / BLE
+python web/app.py --web-port 8000
 
 # Defense demo (10x speed)
 python web/app.py --demo --speed 10
@@ -70,6 +75,67 @@ Always check `ok` before reading `data`.
 ---
 
 ## Endpoints
+
+### `GET /api/v1/transport` — Data source + serial ports
+
+用于网页仪表盘填充「USB 串口」下拉列表，并显示当前模式。
+
+查询参数：`include_all=true` 时额外返回 `serial_ports_other`（耳机/蓝牙虚拟串口等低优先级项）。
+
+`serial_ports` 已按启发式**排序并筛选**：优先 USB 串口桥（CP2102、CH340、FTDI 等），条目可含 `likely_emg_bridge`。连接 `serial` 后 `stream_stats` 会反映是否真正收到协议帧（`emg_frames` 长期为 0 多为选错端口或手环未发数）。
+
+```json
+{
+  "ok": true,
+  "ts": 1741441200.5,
+  "data": {
+    "mode": "serial",
+    "demo_mode": false,
+    "serial_port": "/dev/cu.usbserial-0001",
+    "ble_address": null,
+    "serial_ports": [
+      {"device": "/dev/cu.usbserial-0001", "description": "CP2102 …", "likely_emg_bridge": true}
+    ],
+    "serial_ports_other": [],
+    "stream_stats": {"emg_frames": 1204, "total_frames": 1300, "imu_frames": 0, "dropped_frames": 0},
+    "signal_hint": "…"
+  }
+}
+```
+
+`mode` 取值：`idle`（无流）、`demo`、`serial`、`ble`。
+
+---
+
+### `POST /api/v1/transport/apply` — Switch data source
+
+运行时切换数据源，等价于用不同参数重启服务（无需重启进程）。
+
+**Body（JSON）**
+
+| 字段 | 说明 |
+|------|------|
+| `mode` | 必填：`idle` \| `demo` \| `serial` \| `ble` |
+| `port` | `serial` 时**可选**：写明路径则用之；**省略且本机仅检测到 1 个串口时由服务端自动选用**；0 个或多个串口时必须指定 |
+| `address` | `ble` 时可选；省略或空字符串则自动扫描手环 |
+
+示例：
+
+```json
+{"mode": "serial", "port": "/dev/tty.usbserial-1420"}
+```
+
+```json
+{"mode": "demo"}
+```
+
+```json
+{"mode": "idle"}
+```
+
+成功时 `data` 含 `message` 等人读说明；失败时 `ok: false`，常见 `error`：`bad_request`、`open_failed`。
+
+---
 
 ### `GET /api/v1/pulse` — Lightweight Heartbeat
 
