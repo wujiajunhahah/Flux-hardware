@@ -40,6 +40,7 @@ struct FluxChiApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
+                // 须保持为首子视图：见 `SessionManagerBootstrapView` 文档
                 SessionManagerBootstrapView()
                 if onboardingDone {
                     mainTabView

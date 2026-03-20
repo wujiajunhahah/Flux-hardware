@@ -114,7 +114,8 @@ final class FluxService: ObservableObject {
             guard let http = response as? HTTPURLResponse else { return }
             guard (200...299).contains(http.statusCode) else { return }
 
-            var pendingData: String?
+            // SSE：同一事件可含多行 `data:`，须用 `\n` 拼接（HTML 标准）；空行表示事件结束。
+            var pendingDataLines: [String] = []
 
             for try await line in bytes.lines {
                 if Task.isCancelled { return }
@@ -122,8 +123,9 @@ final class FluxService: ObservableObject {
                 let line = line.trimmingCharacters(in: .whitespacesAndNewlines)
 
                 if line.isEmpty {
-                    if let json = pendingData {
-                        pendingData = nil
+                    if !pendingDataLines.isEmpty {
+                        let json = pendingDataLines.joined(separator: "\n")
+                        pendingDataLines.removeAll(keepingCapacity: true)
                         applyStateFromSSEPayload(json)
                     }
                     continue
@@ -132,9 +134,13 @@ final class FluxService: ObservableObject {
                 if line.hasPrefix(":") { continue }
 
                 if line.hasPrefix("data:") {
-                    let rest = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
-                    pendingData = String(rest)
+                    var rest = String(line.dropFirst(5))
+                    if rest.first == " " { rest.removeFirst() }
+                    pendingDataLines.append(rest)
                 }
+            }
+            if !pendingDataLines.isEmpty {
+                applyStateFromSSEPayload(pendingDataLines.joined(separator: "\n"))
             }
         } catch is CancellationError {
             return

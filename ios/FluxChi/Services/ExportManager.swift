@@ -298,6 +298,15 @@ enum ExportManager {
 
     // MARK: - Gateway sync（与 Python 网关归档对齐）
 
+    /// 大 JSON ingest：不用 `URLSession.shared` 的默认超时，避免弱网下误杀。
+    private static let ingestURLSession: URLSession = {
+        let c = URLSessionConfiguration.default
+        c.timeoutIntervalForRequest = 60
+        c.timeoutIntervalForResource = 300
+        c.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: c)
+    }()
+
     enum GatewaySyncError: LocalizedError {
         case invalidURL
         case httpStatus(Int, String)
@@ -343,7 +352,7 @@ enum ExportManager {
         req.httpMethod = "POST"
         req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         req.httpBody = data
-        let (respData, resp) = try await URLSession.shared.data(for: req)
+        let (respData, resp) = try await ingestURLSession.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw GatewaySyncError.badEnvelope }
         let preview = String(data: respData, encoding: .utf8).map { String($0.prefix(200)) } ?? ""
         guard (200...299).contains(http.statusCode) else {
