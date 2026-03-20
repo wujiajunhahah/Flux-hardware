@@ -26,6 +26,7 @@ private enum BLEConstants {
 
 extension Notification.Name {
     static let bleDeviceDetached = Notification.Name("BLEManager.deviceDetached")
+    static let fluxShowRestFromNotification = Notification.Name("FluxChi.showRestFromNotification")
 }
 
 @MainActor
@@ -74,7 +75,7 @@ final class BLEManager: NSObject, ObservableObject {
 
     func startScan() {
         guard central.state == .poweredOn else {
-            FluxLogger.logBLEScan("启动扫描失败: 蓝牙未就绪 (state: \(central.state.rawValue))", level: .warn)
+            FluxLog.ble.warn("启动扫描失败: 蓝牙未就绪 (state: \(central.state.rawValue))")
             return
         }
         discoveredDevices.removeAll()
@@ -83,7 +84,7 @@ final class BLEManager: NSObject, ObservableObject {
             withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
-        FluxLogger.logBLEScan("启动扫描，15秒超时")
+        FluxLog.ble.info("启动扫描，15秒超时")
         Task {
             try? await Task.sleep(for: .seconds(15))
             if isScanning { stopScan() }
@@ -93,7 +94,7 @@ final class BLEManager: NSObject, ObservableObject {
     func stopScan() {
         central.stopScan()
         isScanning = false
-        FluxLogger.logBLEScan("停止扫描，发现 \(discoveredDevices.count) 个设备")
+        FluxLog.ble.info("停止扫描，发现 \(discoveredDevices.count) 个设备")
     }
 
     // MARK: - Connect / Disconnect
@@ -102,7 +103,7 @@ final class BLEManager: NSObject, ObservableObject {
         stopScan()
         self.peripheral = peripheral
         let deviceName = peripheral.name ?? "未知设备"
-        FluxLogger.logBLEConnect("发起连接: \(deviceName) [UUID: \(peripheral.identifier.uuidString.prefix(8))]")
+        FluxLog.ble.info("发起连接: \(deviceName) [UUID: \(peripheral.identifier.uuidString.prefix(8))]")
         central.connect(peripheral, options: nil)
     }
 
@@ -111,7 +112,7 @@ final class BLEManager: NSObject, ObservableObject {
         if let c = dataChar { p.setNotifyValue(false, for: c) }
         central.cancelPeripheralConnection(p)
         let deviceName = p.name ?? connectedDeviceName ?? "未知设备"
-        FluxLogger.logBLEDisconnect("主动断开: \(deviceName)")
+        FluxLog.ble.info("主动断开: \(deviceName)")
         peripheral = nil
         dataChar = nil
         connectedDeviceName = nil
@@ -148,7 +149,7 @@ final class BLEManager: NSObject, ObservableObject {
 
             // 采样日志 - 记录每 50 帧的状态
             let rmsPreview = latestRMS.prefix(3).map { String(format: "%.1f", $0) }.joined(separator: ", ")
-            FluxLogger.logBLEData("Frame \(emgFrameCount) | RMS: [\(rmsPreview), ...] | Channels: \(nCh)")
+            FluxLog.ble.debug("Frame \(emgFrameCount) | RMS: [\(rmsPreview), ...] | Channels: \(nCh)")
         }
     }
 
@@ -248,7 +249,7 @@ extension BLEManager: CBCentralManagerDelegate {
             self.deviceRSSI[peripheral.identifier] = RSSI.intValue
             if !self.discoveredDevices.contains(where: { $0.identifier == peripheral.identifier }) {
                 self.discoveredDevices.append(peripheral)
-                FluxLogger.logBLEScan("发现设备: \(name) [RSSI: \(RSSI)]")
+                FluxLog.ble.info("发现设备: \(name) [RSSI: \(RSSI)]")
             }
         }
     }
@@ -257,7 +258,7 @@ extension BLEManager: CBCentralManagerDelegate {
         Task { @MainActor in
             self.peripheralState = .connected
             self.connectedDeviceName = peripheral.name ?? "WAVELETECH"
-            FluxLogger.logBLEConnect("连接成功: \(self.connectedDeviceName ?? "未知设备")")
+            FluxLog.ble.info("连接成功: \(self.connectedDeviceName ?? "未知设备")")
             peripheral.delegate = self
             peripheral.discoverServices([BLEConstants.serviceUUID, BLEConstants.batteryServiceUUID])
         }
@@ -273,9 +274,9 @@ extension BLEManager: CBCentralManagerDelegate {
             let deviceName = self.connectedDeviceName ?? peripheral.name ?? "未知设备"
             self.connectedDeviceName = nil
             if let error = error {
-                FluxLogger.logBLEDisconnect("意外断开: \(deviceName) | Error: \(error.localizedDescription)", error: error, level: .error)
+                FluxLog.ble.error("意外断开: \(deviceName)", error: error)
             } else {
-                FluxLogger.logBLEDisconnect("正常断开: \(deviceName)", level: .info)
+                FluxLog.ble.info("正常断开: \(deviceName)")
             }
         }
     }

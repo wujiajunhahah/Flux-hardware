@@ -38,10 +38,10 @@ struct ADHDDotMap: View {
             .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.medium))
 
             HStack(spacing: 16) {
-                dotLegend(color: Flux.Colors.forStaminaState(.focused), label: "专注")
-                dotLegend(color: Flux.Colors.forStaminaState(.fading), label: "下降")
-                dotLegend(color: Flux.Colors.forStaminaState(.depleted), label: "耗尽")
-                dotLegend(color: Flux.Colors.forStaminaState(.recovering), label: "恢复")
+                dotLegend(color: Flux.Colors.forStaminaState("focused"), label: "专注")
+                dotLegend(color: Flux.Colors.forStaminaState("fading"), label: "下降")
+                dotLegend(color: Flux.Colors.forStaminaState("depleted"), label: "耗尽")
+                dotLegend(color: Flux.Colors.forStaminaState("recovering"), label: "恢复")
             }
             .font(.caption2)
         }
@@ -54,7 +54,7 @@ struct ADHDDotMap: View {
     }
 
     private func stateColor(_ raw: String) -> Color {
-        Flux.Colors.forStaminaState(StaminaState(rawValue: raw) ?? .focused)
+        Flux.Colors.forStaminaState(raw)
     }
 
     private func dotLegend(color: Color, label: String) -> some View {

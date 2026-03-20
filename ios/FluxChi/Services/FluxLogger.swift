@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import SwiftUI
 
-// MARK: - Flux Logger System
+// MARK: - Log Level
 
 /// 日志级别 - 支持比较和排序
 enum FluxLogLevel: Int, Comparable, CaseIterable, Codable {
@@ -42,6 +42,8 @@ enum FluxLogLevel: Int, Comparable, CaseIterable, Codable {
         lhs.rawValue < rhs.rawValue
     }
 }
+
+// MARK: - Log Category
 
 /// 日志分类 - 按功能模块划分
 enum FluxLogCategory: String, CaseIterable, Codable {
@@ -90,7 +92,9 @@ enum FluxLogCategory: String, CaseIterable, Codable {
     }
 }
 
-/// 日志条目模型
+// MARK: - Log Entry
+
+/// 日志条目模型 - 包含源码位置用于快速定位
 struct FluxLogEntry: Identifiable, Codable, Hashable {
     let id: UUID
     let timestamp: Date
@@ -99,13 +103,21 @@ struct FluxLogEntry: Identifiable, Codable, Hashable {
     let message: String
     let errorDescription: String?
 
+    // 源码定位 - debug 核心能力
+    let file: String
+    let function: String
+    let line: Int
+
     init(
         id: UUID = UUID(),
         timestamp: Date = Date(),
         level: FluxLogLevel,
         category: FluxLogCategory,
         message: String,
-        errorDescription: String? = nil
+        errorDescription: String? = nil,
+        file: String = "",
+        function: String = "",
+        line: Int = 0
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -113,26 +125,52 @@ struct FluxLogEntry: Identifiable, Codable, Hashable {
         self.category = category
         self.message = message
         self.errorDescription = errorDescription
+        self.file = file
+        self.function = function
+        self.line = line
     }
 
-    /// 格式化为单行文本
+    /// 文件名（不含路径）
+    var fileName: String {
+        (file as NSString).lastPathComponent
+    }
+
+    /// 源码位置简写：FileName.swift:42
+    var sourceLocation: String {
+        guard !file.isEmpty else { return "" }
+        return "\(fileName):\(line)"
+    }
+
+    // MARK: - Formatting
+
+    private static let compactFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss.SSS"
+        return f
+    }()
+
+    private static let detailedFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        return f
+    }()
+
+    /// 单行格式 - 控制台输出
     func formatCompact() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        let time = formatter.string(from: timestamp)
-        let errorSuffix = errorDescription.map { " \($0)" } ?? ""
-        return "[\(time)] [\(level.label)] [\(category.rawValue)] \(message)\(errorSuffix)"
+        let time = Self.compactFormatter.string(from: timestamp)
+        let loc = sourceLocation.isEmpty ? "" : " \(sourceLocation)"
+        let err = errorDescription.map { " | \($0)" } ?? ""
+        return "[\(time)] [\(level.label)] [\(category.rawValue)]\(loc) \(message)\(err)"
     }
 
-    /// 格式化为详细文本
+    /// 详细格式 - 导出用
     func formatDetailed() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-        let time = formatter.string(from: timestamp)
-        var result = """
-        [\(time)] \(level.label) - \(category.rawValue)
-        \(message)
-        """
+        let time = Self.detailedFormatter.string(from: timestamp)
+        var result = "[\(time)] \(level.label) - \(category.rawValue)"
+        if !sourceLocation.isEmpty {
+            result += " @ \(sourceLocation) \(function)"
+        }
+        result += "\n\(message)"
         if let error = errorDescription {
             result += "\nError: \(error)"
         }
@@ -140,7 +178,8 @@ struct FluxLogEntry: Identifiable, Codable, Hashable {
     }
 }
 
-/// 日志配置
+// MARK: - Log Config
+
 struct FluxLogConfig {
     var minimumLevel: FluxLogLevel
     var enableConsole: Bool
@@ -157,7 +196,7 @@ struct FluxLogConfig {
     )
 
     static let production = FluxLogConfig(
-        minimumLevel: .error,
+        minimumLevel: .warn,
         enableConsole: false,
         maxMemoryEntries: 500,
         maxFileEntries: 5000,
@@ -165,38 +204,106 @@ struct FluxLogConfig {
     )
 }
 
-// MARK: - Category Proxy (便捷访问)
+// MARK: - Log Export Options (唯一定义)
 
-/// 类别代理 - 提供"一键引用"的便捷日志接口
-struct FluxLoggerCategoryProxy {
+struct FluxLogExportOptions {
+    let minimumLevel: FluxLogLevel?
+    let categories: Set<FluxLogCategory>?
+    let limit: Int?
+    let keyword: String?
+
+    static let all = FluxLogExportOptions(
+        minimumLevel: nil, categories: nil, limit: nil, keyword: nil
+    )
+
+    static let errorsOnly = FluxLogExportOptions(
+        minimumLevel: .error, categories: nil, limit: nil, keyword: nil
+    )
+
+    static let bleOnly = FluxLogExportOptions(
+        minimumLevel: nil, categories: [.ble], limit: nil, keyword: nil
+    )
+}
+
+// MARK: - Category Proxy
+
+/// 便捷分类代理 - `FluxLog.ble.info("connected")`
+struct FluxLogProxy {
     let category: FluxLogCategory
 
-    func debug(_ message: String) {
+    func debug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        FluxLog.debug(message, category: category, file: file, function: function, line: line)
+    }
+
+    func info(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        FluxLog.info(message, category: category, file: file, function: function, line: line)
+    }
+
+    func warn(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        FluxLog.warn(message, category: category, file: file, function: function, line: line)
+    }
+
+    func error(_ message: String, error: Error? = nil, file: String = #file, function: String = #function, line: Int = #line) {
+        FluxLog.error(message, category: category, error: error, file: file, function: function, line: line)
+    }
+}
+
+// MARK: - FluxLog (统一入口 - 替代全局函数 + BLE 专用方法)
+
+/// 全局日志入口 - 用法:
+/// ```
+/// FluxLog.info("启动完成", category: .app)
+/// FluxLog.ble.debug("Frame received")
+/// FluxLog.error("导出失败", category: .export, error: err)
+/// ```
+enum FluxLog {
+    // 分类代理 - 一键引用
+    static let ble         = FluxLogProxy(category: .ble)
+    static let nlp         = FluxLogProxy(category: .nlp)
+    static let ml          = FluxLogProxy(category: .ml)
+    static let session     = FluxLogProxy(category: .session)
+    static let performance = FluxLogProxy(category: .performance)
+    static let export      = FluxLogProxy(category: .export)
+    static let app         = FluxLogProxy(category: .app)
+    static let network     = FluxLogProxy(category: .network)
+    static let storage     = FluxLogProxy(category: .storage)
+    static let ui          = FluxLogProxy(category: .ui)
+    static let live        = FluxLogProxy(category: .liveActivity)
+
+    static func debug(_ message: String, category: FluxLogCategory = .app,
+                       file: String = #file, function: String = #function, line: Int = #line) {
         Task { @MainActor in
-            FluxLogger.shared.debug(message, category: category)
+            FluxLogger.shared.log(level: .debug, message: message, category: category,
+                                   file: file, function: function, line: line)
         }
     }
 
-    func info(_ message: String) {
+    static func info(_ message: String, category: FluxLogCategory = .app,
+                      file: String = #file, function: String = #function, line: Int = #line) {
         Task { @MainActor in
-            FluxLogger.shared.info(message, category: category)
+            FluxLogger.shared.log(level: .info, message: message, category: category,
+                                   file: file, function: function, line: line)
         }
     }
 
-    func warn(_ message: String) {
+    static func warn(_ message: String, category: FluxLogCategory = .app,
+                      file: String = #file, function: String = #function, line: Int = #line) {
         Task { @MainActor in
-            FluxLogger.shared.warn(message, category: category)
+            FluxLogger.shared.log(level: .warn, message: message, category: category,
+                                   file: file, function: function, line: line)
         }
     }
 
-    func error(_ message: String, error: Error? = nil) {
+    static func error(_ message: String, category: FluxLogCategory = .app, error: Error? = nil,
+                       file: String = #file, function: String = #function, line: Int = #line) {
         Task { @MainActor in
-            FluxLogger.shared.error(message, category: category, error: error)
+            FluxLogger.shared.log(level: .error, message: message, category: category, error: error,
+                                   file: file, function: function, line: line)
         }
     }
 }
 
-// MARK: - Main Logger Class
+// MARK: - FluxLogger (核心引擎)
 
 @MainActor
 final class FluxLogger: ObservableObject {
@@ -205,7 +312,7 @@ final class FluxLogger: ObservableObject {
 
     static let shared = FluxLogger()
 
-    // MARK: - Published State
+    // MARK: - Published
 
     @Published private(set) var entries: [FluxLogEntry] = []
     @Published private(set) var config: FluxLogConfig
@@ -213,26 +320,16 @@ final class FluxLogger: ObservableObject {
     // MARK: - Private
 
     private let fileManager = FileManager.default
-    private var logFileURL: URL {
-        let documentsDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return documentsDir.appendingPathComponent("fluxchi_logs.json")
-    }
-
     private let osLog = OSLog(subsystem: "com.fluxchi.logger", category: "FluxLog")
 
-    // MARK: - Category Proxies (便捷访问 - "一键引用")
+    /// 持久化节流 - 防止高频写入
+    private var pendingSave = false
+    private let saveInterval: TimeInterval = 5.0 // 最多 5 秒写一次磁盘
 
-    static let ble = FluxLoggerCategoryProxy(category: .ble)
-    static let nlp = FluxLoggerCategoryProxy(category: .nlp)
-    static let performance = FluxLoggerCategoryProxy(category: .performance)
-    static let ml = FluxLoggerCategoryProxy(category: .ml)
-    static let session = FluxLoggerCategoryProxy(category: .session)
-    static let liveActivity = FluxLoggerCategoryProxy(category: .liveActivity)
-    static let export = FluxLoggerCategoryProxy(category: .export)
-    static let app = FluxLoggerCategoryProxy(category: .app)
-    static let network = FluxLoggerCategoryProxy(category: .network)
-    static let storage = FluxLoggerCategoryProxy(category: .storage)
-    static let ui = FluxLoggerCategoryProxy(category: .ui)
+    private var logFileURL: URL {
+        let dir = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return dir.appendingPathComponent("fluxchi_logs.json")
+    }
 
     // MARK: - Init
 
@@ -245,16 +342,20 @@ final class FluxLogger: ObservableObject {
 
     func updateConfig(_ newConfig: FluxLogConfig) {
         self.config = newConfig
-        info("日志配置已更新: minimumLevel=\(newConfig.minimumLevel.label)", category: .app)
+        log(level: .info, message: "日志配置已更新: minimumLevel=\(newConfig.minimumLevel.label)",
+            category: .app, file: #file, function: #function, line: #line)
     }
 
-    // MARK: - Logging Methods
+    // MARK: - Core Log Method
 
-    private func log(
+    func log(
         level: FluxLogLevel,
         message: String,
         category: FluxLogCategory,
-        error: Error? = nil
+        error: Error? = nil,
+        file: String = #file,
+        function: String = #function,
+        line: Int = #line
     ) {
         guard level >= config.minimumLevel else { return }
 
@@ -263,7 +364,10 @@ final class FluxLogger: ObservableObject {
             level: level,
             category: category,
             message: message,
-            errorDescription: error?.localizedDescription
+            errorDescription: error?.localizedDescription,
+            file: file,
+            function: function,
+            line: line
         )
 
         // 内存存储
@@ -288,63 +392,59 @@ final class FluxLogger: ObservableObject {
         }()
         os_log("%{public}@", log: osLog, type: osLogType, entry.formatCompact())
 
-        // 异步持久化
+        // 节流持久化 - 不再每条都写磁盘
         if config.enableFilePersistence {
-            Task.detached(priority: .background) { [weak self] in
-                await self?.saveToFile()
+            scheduleSave()
+        }
+    }
+
+    // MARK: - Throttled Persistence
+
+    private func scheduleSave() {
+        guard !pendingSave else { return }
+        pendingSave = true
+
+        Task.detached(priority: .background) { [weak self] in
+            try? await Task.sleep(for: .seconds(self?.saveInterval ?? 5.0))
+            await self?.performSave()
+        }
+    }
+
+    private func performSave() {
+        pendingSave = false
+        let entriesToSave = Array(entries.suffix(config.maxFileEntries))
+        let url = logFileURL
+
+        // 在后台线程写文件
+        Task.detached(priority: .background) {
+            do {
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                let data = try encoder.encode(entriesToSave)
+                try data.write(to: url, options: .atomic)
+            } catch {
+                print("[FluxLogger] 保存日志失败: \(error)")
             }
         }
     }
 
-    func debug(_ message: String, category: FluxLogCategory = .app) {
-        log(level: .debug, message: message, category: category)
-    }
+    private func loadFromFile() {
+        guard config.enableFilePersistence,
+              fileManager.fileExists(atPath: logFileURL.path) else { return }
 
-    func info(_ message: String, category: FluxLogCategory = .app) {
-        log(level: .info, message: message, category: category)
-    }
-
-    func warn(_ message: String, category: FluxLogCategory = .app) {
-        log(level: .warn, message: message, category: category)
-    }
-
-    func error(_ message: String, category: FluxLogCategory = .app, error: Error? = nil) {
-        log(level: .error, message: message, category: category, error: error)
-    }
-
-    // MARK: - BLE Specialized Methods
-
-    /// 记录 BLE 扫描事件
-    static func logBLEScan(_ message: String, level: FluxLogLevel = .info) {
-        Task { @MainActor in
-            shared.log(level: level, message: message, category: .ble)
+        do {
+            let data = try Data(contentsOf: logFileURL)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let loaded = try decoder.decode([FluxLogEntry].self, from: data)
+            entries = Array(loaded.suffix(config.maxMemoryEntries))
+        } catch {
+            print("[FluxLogger] 加载日志失败: \(error)")
         }
     }
 
-    /// 记录 BLE 连接事件
-    static func logBLEConnect(_ message: String, level: FluxLogLevel = .info) {
-        Task { @MainActor in
-            shared.log(level: level, message: message, category: .ble)
-        }
-    }
+    // MARK: - Query
 
-    /// 记录 BLE 断开事件
-    static func logBLEDisconnect(_ message: String, error: Error? = nil, level: FluxLogLevel = .warn) {
-        Task { @MainActor in
-            shared.log(level: level, message: message, category: .ble, error: error)
-        }
-    }
-
-    /// 记录 BLE 数据事件（采样使用）
-    static func logBLEData(_ message: String, level: FluxLogLevel = .debug) {
-        Task { @MainActor in
-            shared.log(level: level, message: message, category: .ble)
-        }
-    }
-
-    // MARK: - Query Methods
-
-    /// 获取日志条目
     func fetchEntries(
         limit: Int? = nil,
         category: FluxLogCategory? = nil,
@@ -352,180 +452,143 @@ final class FluxLogger: ObservableObject {
     ) -> [FluxLogEntry] {
         var filtered = entries
 
-        if let category = category {
-            filtered = filtered.filter { $0.category == category }
-        }
+        if let category { filtered = filtered.filter { $0.category == category } }
+        if let level { filtered = filtered.filter { $0.level >= level } }
+        if let limit { filtered = Array(filtered.suffix(limit)) }
 
-        if let level = level {
+        return filtered
+    }
+
+    func searchEntries(keyword: String) -> [FluxLogEntry] {
+        guard !keyword.isEmpty else { return entries }
+        return entries.filter {
+            $0.message.localizedCaseInsensitiveContains(keyword) ||
+            $0.errorDescription?.localizedCaseInsensitiveContains(keyword) == true ||
+            $0.fileName.localizedCaseInsensitiveContains(keyword) ||
+            $0.function.localizedCaseInsensitiveContains(keyword)
+        }
+    }
+
+    // MARK: - Export
+
+    func exportEntries(options: FluxLogExportOptions = .all) -> [FluxLogEntry] {
+        var filtered = entries
+
+        if let level = options.minimumLevel {
             filtered = filtered.filter { $0.level >= level }
         }
-
-        if let limit = limit {
+        if let categories = options.categories {
+            filtered = filtered.filter { categories.contains($0.category) }
+        }
+        if let keyword = options.keyword, !keyword.isEmpty {
+            filtered = filtered.filter {
+                $0.message.localizedCaseInsensitiveContains(keyword) ||
+                $0.errorDescription?.localizedCaseInsensitiveContains(keyword) == true
+            }
+        }
+        if let limit = options.limit {
             filtered = Array(filtered.suffix(limit))
         }
 
         return filtered
     }
 
-    /// 搜索日志
-    func searchEntries(keyword: String) -> [FluxLogEntry] {
-        entries.filter {
-            $0.message.localizedCaseInsensitiveContains(keyword) ||
-            $0.errorDescription?.localizedCaseInsensitiveContains(keyword) == true
-        }
-    }
-
-    /// 获取指定时间范围的日志
-    func fetchEntries(from startDate: Date, to endDate: Date) -> [FluxLogEntry] {
-        entries.filter { $0.timestamp >= startDate && $0.timestamp <= endDate }
-    }
-
-    // MARK: - Export Methods
-
-    /// 导出日志为 JSON
-    func exportLogs() throws -> URL {
+    func exportAsJSON(options: FluxLogExportOptions = .all) throws -> Data {
+        let filtered = exportEntries(options: options)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-
-        let data = try encoder.encode(entries)
-        let dateStr = DateFormatter().string(from: Date()).replacingOccurrences(of: " ", with: "_").replacingOccurrences(of: ":", with: "")
-        let filename = "fluxchi_logs_\(dateStr).json"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-
-        try data.write(to: url)
-        return url
+        return try encoder.encode(filtered)
     }
 
-    /// 导出日志为文本
-    func exportLogsAsText(
-        minimumLevel: FluxLogLevel? = nil,
-        categories: Set<FluxLogCategory>? = nil,
-        limit: Int? = nil
-    ) throws -> URL {
-        let filtered = fetchEntries(limit: limit, category: categories?.first, level: minimumLevel)
-
-        let text = filtered.map { $0.formatDetailed() }.joined(separator: "\n---\n")
-
-        let dateStr = DateFormatter().string(from: Date()).replacingOccurrences(of: " ", with: "_").replacingOccurrences(of: ":", with: "")
-        let filename = "fluxchi_logs_\(dateStr).txt"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-
-        try text.write(to: url, atomically: true, encoding: .utf8)
-        return url
+    func exportAsText(options: FluxLogExportOptions = .all) -> String {
+        exportEntries(options: options)
+            .map { $0.formatDetailed() }
+            .joined(separator: "\n---\n")
     }
+
+    /// 导出到临时文件并返回 URL
+    func exportToFile(format: ExportFormat, options: FluxLogExportOptions = .all) throws -> URL {
+        let dateStr = Self.exportDateFormatter.string(from: Date())
+
+        switch format {
+        case .json:
+            let data = try exportAsJSON(options: options)
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("fluxchi_logs_\(dateStr).json")
+            try data.write(to: url)
+            return url
+
+        case .text:
+            let text = exportAsText(options: options)
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("fluxchi_logs_\(dateStr).txt")
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        }
+    }
+
+    enum ExportFormat {
+        case json, text
+    }
+
+    private static let exportDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyyMMdd_HHmmss"
+        return f
+    }()
 
     // MARK: - Management
 
-    /// 清空所有日志
     func clearLogs() {
         entries.removeAll()
-        info("日志已清空", category: .app)
         try? fileManager.removeItem(at: logFileURL)
     }
 
-    /// 清空过期日志（保留最近的 N 条）
     func trimOldLogs(keepingRecent count: Int) {
         if entries.count > count {
             entries = Array(entries.suffix(count))
         }
     }
 
-    // MARK: - File Persistence
-
-    private nonisolated func saveToFile() async {
-        guard await config.enableFilePersistence else { return }
-
-        // 获取当前需要保存的条目
-        let entriesToSave = await entries.suffix(await config.maxFileEntries)
-        let logURL = await logFileURL
-
+    /// 强制立即保存（退出前调用）
+    func flushToDisk() {
+        pendingSave = false
+        let entriesToSave = Array(entries.suffix(config.maxFileEntries))
+        let url = logFileURL
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(Array(entriesToSave))
-            try data.write(to: logURL, options: .atomic)
+            let data = try encoder.encode(entriesToSave)
+            try data.write(to: url, options: .atomic)
         } catch {
-            print("[FluxLogger] 保存日志失败: \(error)")
-        }
-    }
-
-    private func loadFromFile() {
-        guard config.enableFilePersistence else { return }
-
-        guard fileManager.fileExists(atPath: logFileURL.path) else { return }
-
-        do {
-            let data = try Data(contentsOf: logFileURL)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-
-            let loaded = try decoder.decode([FluxLogEntry].self, from: data)
-
-            // 只加载最近的 maxMemoryEntries 条
-            entries = Array(loaded.suffix(config.maxMemoryEntries))
-
-            info("已从文件加载 \(entries.count) 条日志", category: .app)
-        } catch {
-            print("[FluxLogger] 加载日志失败: \(error)")
+            print("[FluxLogger] flush 失败: \(error)")
         }
     }
 }
 
-// MARK: - Global Convenience Functions
+// MARK: - Backward Compatibility (迁移期保留)
 
-/// 全局便捷函数
-func LogDebug(_ message: String, category: FluxLogCategory = .app) {
-    Task { @MainActor in
-        FluxLogger.shared.debug(message, category: category)
+/// 兼容旧调用方 - 逐步替换为 FluxLog.*
+extension FluxLogger {
+    // 保留旧的直接调用方式
+    func debug(_ message: String, category: FluxLogCategory = .app,
+               file: String = #file, function: String = #function, line: Int = #line) {
+        log(level: .debug, message: message, category: category, file: file, function: function, line: line)
     }
-}
 
-func LogInfo(_ message: String, category: FluxLogCategory = .app) {
-    Task { @MainActor in
-        FluxLogger.shared.info(message, category: category)
+    func info(_ message: String, category: FluxLogCategory = .app,
+              file: String = #file, function: String = #function, line: Int = #line) {
+        log(level: .info, message: message, category: category, file: file, function: function, line: line)
     }
-}
 
-func LogWarn(_ message: String, category: FluxLogCategory = .app) {
-    Task { @MainActor in
-        FluxLogger.shared.warn(message, category: category)
+    func warn(_ message: String, category: FluxLogCategory = .app,
+              file: String = #file, function: String = #function, line: Int = #line) {
+        log(level: .warn, message: message, category: category, file: file, function: function, line: line)
     }
-}
 
-func LogError(_ message: String, category: FluxLogCategory = .app, error: Error? = nil) {
-    Task { @MainActor in
-        FluxLogger.shared.error(message, category: category, error: error)
+    func error(_ message: String, category: FluxLogCategory = .app, error: Error? = nil,
+               file: String = #file, function: String = #function, line: Int = #line) {
+        log(level: .error, message: message, category: category, error: error, file: file, function: function, line: line)
     }
-}
-
-// MARK: - Export Options
-
-/// 日志导出选项
-struct LogExportOptions {
-    let minimumLevel: FluxLogLevel?
-    let categories: Set<FluxLogCategory>?
-    let limit: Int?
-    let keyword: String?
-
-    static let `default` = LogExportOptions(
-        minimumLevel: nil,
-        categories: nil,
-        limit: nil,
-        keyword: nil
-    )
-
-    static let errorsOnly = LogExportOptions(
-        minimumLevel: .error,
-        categories: nil,
-        limit: nil,
-        keyword: nil
-    )
-
-    static let bleOnly = LogExportOptions(
-        minimumLevel: nil,
-        categories: [.ble],
-        limit: nil,
-        keyword: nil
-    )
 }

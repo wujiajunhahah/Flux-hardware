@@ -3,119 +3,21 @@ import UIKit
 
 enum ExportManager {
 
-    // MARK: - Log Export
+    // MARK: - Log Export (委托给 FluxLogger)
 
-    /// 日志导出选项
-    struct LogExportOptions {
-        let minimumLevel: FluxLogLevel?
-        let categories: Set<FluxLogCategory>?
-        let limit: Int?
-        let keyword: String?
-
-        static let `default` = LogExportOptions(
-            minimumLevel: nil as FluxLogLevel?,
-            categories: nil as Set<FluxLogCategory>?,
-            limit: nil as Int?,
-            keyword: nil as String?
-        )
-
-        static let errorsOnly = LogExportOptions(
-            minimumLevel: .error,
-            categories: nil as Set<FluxLogCategory>?,
-            limit: nil as Int?,
-            keyword: nil as String?
-        )
-
-        static let bleOnly = LogExportOptions(
-            minimumLevel: nil as FluxLogLevel?,
-            categories: [.ble],
-            limit: nil as Int?,
-            keyword: nil as String?
-        )
+    /// 导出日志为 JSON 文件 URL
+    @MainActor
+    static func shareLogsURL(options: FluxLogExportOptions = .all) throws -> URL {
+        try FluxLogger.shared.exportToFile(format: .json, options: options)
     }
 
-    /// 导出日志为 JSON 数据
-    static func exportLogs(options: LogExportOptions = .default) async throws -> Data {
-        // 在 MainActor 上访问日志数据
-        let entries = await FluxLogger.shared.entries
-
-        var filtered = entries
-
-        // 按级别过滤
-        if let minLevel = options.minimumLevel {
-            filtered = filtered.filter { $0.level >= minLevel }
-        }
-
-        // 按分类过滤
-        if let categories = options.categories {
-            filtered = filtered.filter { categories.contains($0.category) }
-        }
-
-        // 按关键词搜索
-        if let keyword = options.keyword, !keyword.isEmpty {
-            filtered = filtered.filter {
-                $0.message.localizedCaseInsensitiveContains(keyword) ||
-                $0.errorDescription?.localizedCaseInsensitiveContains(keyword) == true
-            }
-        }
-
-        // 限制数量
-        if let limit = options.limit {
-            filtered = Array(filtered.suffix(limit))
-        }
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-
-        return try encoder.encode(filtered)
+    /// 导出日志为文本文件 URL
+    @MainActor
+    static func shareLogsTextURL(options: FluxLogExportOptions = .all) throws -> URL {
+        try FluxLogger.shared.exportToFile(format: .text, options: options)
     }
 
-    /// 导出日志为纯文本
-    static func exportLogsAsText(options: LogExportOptions = .default) async throws -> String {
-        let data = try await exportLogs(options: options)
-        let entries = try JSONDecoder().decode([FluxLogEntry].self, from: data)
-
-        return entries.map { entry in
-            entry.formatDetailed()
-        }.joined(separator: "\n---\n")
-    }
-
-    /// 分享日志 JSON 文件 URL
-    static func shareLogsURL(options: LogExportOptions = .default) async throws -> URL {
-        let data = try await exportLogs(options: options)
-
-        let dateStr = {
-            let f = DateFormatter()
-            f.dateFormat = "yyyyMMdd_HHmmss"
-            return f.string(from: Date())
-        }()
-
-        let filename = "fluxchi_logs_\(dateStr).json"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-
-        try data.write(to: url)
-        return url
-    }
-
-    /// 分享日志文本文件 URL
-    static func shareLogsTextURL(options: LogExportOptions = .default) async throws -> URL {
-        let text = try await exportLogsAsText(options: options)
-
-        let dateStr = {
-            let f = DateFormatter()
-            f.dateFormat = "yyyyMMdd_HHmmss"
-            return f.string(from: Date())
-        }()
-
-        let filename = "fluxchi_logs_\(dateStr).txt"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-
-        try text.write(to: url, atomically: true, encoding: .utf8)
-        return url
-    }
-
-    // MARK: - Export Structures
+    // MARK: - Session Export Structures
 
     struct ExportPackage: Codable {
         let fluxchiVersion: String
@@ -209,7 +111,7 @@ enum ExportManager {
         let featureWindow: String
     }
 
-    // MARK: - Export
+    // MARK: - Session Export
 
     static func export(session: Session) throws -> Data {
         let iso = ISO8601DateFormatter()
@@ -312,7 +214,7 @@ enum ExportManager {
                     "fading": 30,
                     "depleted": 0
                 ],
-                emgDecoding: "24-bit signed → μV = (value / 8388607) × 4.5 / 1200 × 1e6",
+                emgDecoding: "24-bit signed -> uV = (value / 8388607) * 4.5 / 1200 * 1e6",
                 featureWindow: "250 samples @ 1kHz = 250ms sliding window"
             )
         )

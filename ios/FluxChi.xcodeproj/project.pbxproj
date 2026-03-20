@@ -48,6 +48,12 @@
 		FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C4C08A362F4D9CE7712D17 /* BLEManager.swift */; };
 		067D0CDED0224EDAB98D812F /* BodyInsightEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 329C9D3D967840AD9E96D156 /* BodyInsightEngine.swift */; };
 		FDBD1A530498FCADA98A80E7 /* NLPSummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */; };
+		NLP00000001TYPES0000000001 /* NLPTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = NLP00000002TYPES0000000001 /* NLPTypes.swift */; };
+		NLP00000001BRIDGE000000001 /* NLPModelBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = NLP00000002BRIDGE000000001 /* NLPModelBridge.swift */; };
+		NLP00000001PROMPT000000001 /* NLPPromptBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = NLP00000002PROMPT000000001 /* NLPPromptBuilder.swift */; };
+		NLP00000001FALLBK000000001 /* NLPFallbackGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = NLP00000002FALLBK000000001 /* NLPFallbackGenerator.swift */; };
+		NLP00000001STATS0000000001 /* NLPStatsExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = NLP00000002STATS0000000001 /* NLPStatsExtractor.swift */; };
+		NLP00000001ANOML0000000001 /* NLPAnomalyDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = NLP00000002ANOML0000000001 /* NLPAnomalyDetector.swift */; };
 		FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371B9343B23F955F6F6A51BF /* FluxModels.swift */; };
 		C0C0C0C0C0C0C0C0C0C0C002 /* ConnectionGuideSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */; };
 				WD00000001000000000000001 /* FluxChiWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = WD00000002000000000000001 /* FluxChiWidgets.swift */; };
@@ -133,6 +139,12 @@
 		WD00000002000000000000003 /* FluxChiLive.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FluxChiLive.entitlements; sourceTree = "<group>"; };
 		CB49A2D62F6982F9001A70B2 /* WidgetDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetDataManager.swift; sourceTree = "<group>"; };
 		PV00000002000000000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		NLP00000002TYPES0000000001 /* NLPTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NLPTypes.swift; sourceTree = "<group>"; };
+		NLP00000002BRIDGE000000001 /* NLPModelBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NLPModelBridge.swift; sourceTree = "<group>"; };
+		NLP00000002PROMPT000000001 /* NLPPromptBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NLPPromptBuilder.swift; sourceTree = "<group>"; };
+		NLP00000002FALLBK000000001 /* NLPFallbackGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NLPFallbackGenerator.swift; sourceTree = "<group>"; };
+		NLP00000002STATS0000000001 /* NLPStatsExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NLPStatsExtractor.swift; sourceTree = "<group>"; };
+		NLP00000002ANOML0000000001 /* NLPAnomalyDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NLPAnomalyDetector.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -242,6 +254,19 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		NLP00000003GROUP0000000001 /* NLP */ = {
+			isa = PBXGroup;
+			children = (
+				NLP00000002TYPES0000000001 /* NLPTypes.swift */,
+				NLP00000002BRIDGE000000001 /* NLPModelBridge.swift */,
+				NLP00000002PROMPT000000001 /* NLPPromptBuilder.swift */,
+				NLP00000002FALLBK000000001 /* NLPFallbackGenerator.swift */,
+				NLP00000002STATS0000000001 /* NLPStatsExtractor.swift */,
+				NLP00000002ANOML0000000001 /* NLPAnomalyDetector.swift */,
+			);
+			path = NLP;
+			sourceTree = "<group>";
+		};
 		96BE7038B8B379D612345B1B /* Services */ = {
 			isa = PBXGroup;
 			children = (
@@ -258,6 +283,7 @@
 				CF9F63942587BE4E4AB46CDE /* SummaryEngine.swift */,
 				329C9D3D967840AD9E96D156 /* BodyInsightEngine.swift */,
 				7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */,
+				NLP00000003GROUP0000000001 /* NLP */,
 				DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */,
 				CB49A2D62F6982F9001A70B2 /* WidgetDataManager.swift */,
 				A1B2C3D4SAVELOGRREF /* ModelContext+SaveLogging.swift */,
@@ -436,6 +462,12 @@
 				7491661A48102D7610F8F1B3 /* SessionChartsView.swift in Sources */,
 				067D0CDED0224EDAB98D812F /* BodyInsightEngine.swift in Sources */,
 				FDBD1A530498FCADA98A80E7 /* NLPSummaryEngine.swift in Sources */,
+				NLP00000001TYPES0000000001 /* NLPTypes.swift in Sources */,
+				NLP00000001BRIDGE000000001 /* NLPModelBridge.swift in Sources */,
+				NLP00000001PROMPT000000001 /* NLPPromptBuilder.swift in Sources */,
+				NLP00000001FALLBK000000001 /* NLPFallbackGenerator.swift in Sources */,
+				NLP00000001STATS0000000001 /* NLPStatsExtractor.swift in Sources */,
+				NLP00000001ANOML0000000001 /* NLPAnomalyDetector.swift in Sources */,
 				9838B0DD287D1F821E2BC65D /* LiveActivityManager.swift in Sources */,
 				CB49A2D72F6982F9001A70B2 /* WidgetDataManager.swift in Sources */,
 				A1B2C3D4SAVELOG1SOURCES /* ModelContext+SaveLogging.swift in Sources */,

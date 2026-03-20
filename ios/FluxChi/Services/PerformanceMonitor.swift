@@ -102,7 +102,7 @@ final class PerformanceMonitor: ObservableObject {
             totalDropped += max(dropped, 0)
         }
 
-        let elapsed = link.timestamp - (lastTimestamp == 0 ? link.timestamp : (link.timestamp - actualInterval + fpsUpdateInterval > link.timestamp ? lastTimestamp : lastTimestamp))
+        _ = link.timestamp - (lastTimestamp == 0 ? link.timestamp : (link.timestamp - actualInterval + fpsUpdateInterval > link.timestamp ? lastTimestamp : lastTimestamp))
 
         // 每秒更新 FPS
         let timeSinceLastUpdate = link.timestamp - lastTimestamp

@@ -1,13 +1,26 @@
 import SwiftUI
 
+// MARK: - Flux Design System
+
+/// FluxChi 统一设计规范
+/// 所有视觉常量集中在此，禁止在视图中硬编码数值。
 enum Flux {
 
-    // MARK: - Colors
+    // MARK: - Colors (语义色板)
 
     enum Colors {
+        // 品牌主色
         static let accent = Color.red
+
+        // 语义色
         static let success = Color.green
         static let warning = Color.orange
+        static let info = Color.blue
+        static let destructive = Color.red
+
+        // 边界 & 分割线
+        static let border = Color.primary.opacity(0.1)
+        static let divider = Color.primary.opacity(0.08)
 
         /// 根据状态字符串返回对应颜色 - 与 StaminaState.rawValues 保持一致
         static func forStaminaState(_ state: String) -> Color {
@@ -20,9 +33,54 @@ enum Flux {
             }
         }
 
+        /// 根据续航数值返回颜色
+        static func forStaminaValue(_ value: Double) -> Color {
+            if value > 60 { return forStaminaState("focused") }
+            if value > 30 { return forStaminaState("fading") }
+            return forStaminaState("depleted")
+        }
+
         static func forUrgency(_ value: Double) -> Color {
             value >= 0.7 ? .red : value >= 0.5 ? .orange : .primary
         }
+    }
+
+    // MARK: - Label (文字层次 - 避免与 SwiftUI.Text 冲突)
+
+    enum Label {
+        /// 主要文字
+        static let primary = Color.primary
+        /// 次要文字
+        static let secondary = Color.secondary
+        /// 第三级文字
+        static let tertiary = Color(UIColor.tertiaryLabel)
+        /// 暗化文字 - Widget 中使用
+        static let dim = Color(white: 0.45)
+        /// 静音文字
+        static let muted = Color(white: 0.55)
+        /// 强调色文字
+        static let accent = Colors.accent
+        /// 成功色文字
+        static let success = Colors.success
+        /// 警告色文字
+        static let warning = Colors.warning
+    }
+
+    // MARK: - Surface (背景层次 - 语义更清晰)
+
+    enum Surface {
+        /// 主背景
+        static let primary = Color(UIColor.systemBackground)
+        /// 分组背景
+        static let secondary = Color(UIColor.secondarySystemBackground)
+        /// 更深层次背景
+        static let tertiary = Color(UIColor.tertiarySystemBackground)
+        /// 抬升背景 - 自适应 dark/light
+        static let elevated = Color(UIColor.secondarySystemBackground)
+        /// 遮罩背景
+        static let overlay = Color.black.opacity(0.6)
+        /// 休息模式背景 - 深绿色调
+        static let rest = Color(red: 0.04, green: 0.12, blue: 0.08)
     }
 
     // MARK: - Typography
@@ -53,6 +111,87 @@ enum Flux {
         static let small:  CGFloat = 8
         static let medium: CGFloat = 12
         static let large:  CGFloat = 16
+        static let xl:     CGFloat = 24
+    }
+
+    // MARK: - Sizes
+
+    enum Sizes {
+        // Icon
+        static let iconSmall:  CGFloat = 12
+        static let iconMedium: CGFloat = 16
+        static let iconLarge:  CGFloat = 24
+        static let iconXLarge: CGFloat = 32
+
+        // Ring
+        static let ringSmall:  CGFloat = 72
+        static let ringMedium: CGFloat = 88
+        static let ringLarge:  CGFloat = 120
+        static let ringXLarge: CGFloat = 200
+
+        // Text
+        static let textLabel:    CGFloat = 9
+        static let textBody:     CGFloat = 14
+        static let textHeadline: CGFloat = 22
+        static let textDisplay:  CGFloat = 44
+
+        // Stroke
+        static let strokeThin:   CGFloat = 0.5
+        static let strokeNormal: CGFloat = 1
+        static let strokeThick:  CGFloat = 2
+        static let strokeBold:   CGFloat = 4
+    }
+
+    // MARK: - Opacity
+
+    enum Opacity {
+        static let xLight:     Double = 0.01
+        static let light:      Double = 0.06
+        static let medium:     Double = 0.12
+        static let semiStrong: Double = 0.18
+        static let strong:     Double = 0.3
+        static let xStrong:    Double = 0.5
+    }
+
+    // MARK: - Motion (避免与 SwiftUI.Animation 冲突)
+
+    enum Motion {
+        static let fast: SwiftUI.Animation = .easeOut(duration: 0.15)
+        static let standard: SwiftUI.Animation = .easeOut(duration: 0.3)
+        static let spring: SwiftUI.Animation = .spring(response: 0.6, dampingFraction: 0.7)
+        static let slow: SwiftUI.Animation = .easeInOut(duration: 0.8)
+
+        static func easeOut(duration: Double) -> SwiftUI.Animation {
+            .easeOut(duration: duration)
+        }
+
+        static func spring(response: Double, dampingFraction: Double) -> SwiftUI.Animation {
+            .spring(response: response, dampingFraction: dampingFraction)
+        }
+    }
+
+    // MARK: - Shadow (实际可用的阴影修饰符)
+
+    enum Shadow {
+        /// 小阴影 - 按钮、小卡片
+        static func small(_ view: some View, color: Color = .black.opacity(0.08)) -> some View {
+            view.shadow(color: color, radius: 2, x: 0, y: 1)
+        }
+
+        /// 中阴影 - 卡片、浮层
+        static func medium(_ view: some View, color: Color = .black.opacity(0.12)) -> some View {
+            view.shadow(color: color, radius: 8, x: 0, y: 4)
+        }
+
+        /// 大阴影 - 模态、弹窗
+        static func large(_ view: some View, color: Color = .black.opacity(0.16)) -> some View {
+            view.shadow(color: color, radius: 16, x: 0, y: 8)
+        }
+
+        /// 发光效果
+        static func glow(_ view: some View, color: Color = Colors.accent, radius: CGFloat = 10) -> some View {
+            view.shadow(color: color.opacity(0.3), radius: radius, x: 0, y: 2)
+        }
     }
 
     // MARK: - App Constants
@@ -86,146 +225,13 @@ enum Flux {
         if h > 0 { return "\(h) 小时 \(m) 分钟" }
         return "\(m) 分钟"
     }
+}
 
-    // MARK: - Text (文字层次)
+// MARK: - Backward Compatibility (逐步迁移后删除)
 
-    enum Text {
-        /// 主要文字 - 标准可读性
-        static let primary = Color.primary
-        /// 次要文字 - 辅助信息
-        static let secondary = Color.secondary
-        /// 第三级文字 - 占位符等
-        static let tertiary = Color(UIColor.tertiaryLabel)
-
-        /// 暗化文字 - Widget 中使用
-        static let dim = Color(white: 0.45)
-        /// 静音文字 - 更暗
-        static let muted = Color(white: 0.55)
-
-        /// 强调色文字
-        static let accent = Colors.accent
-        /// 成功色文字
-        static let success = Colors.success
-        /// 警告色文字
-        static let warning = Colors.warning
-    }
-
-    // MARK: - Backgrounds (背景层次)
-
-    enum Backgrounds {
-        /// 主背景 - 系统背景色
-        static let primary = Color(UIColor.systemBackground)
-        /// 次要背景 - 分组背景
-        static let secondary = Color(UIColor.secondarySystemBackground)
-        /// 第三级背景 - 用于更深层次
-        static let tertiary = Color(UIColor.tertiarySystemBackground)
-
-        /// 抬升背景 - 浮层效果
-        static let elevated = Color(white: 0.05, opacity: 1)
-        /// 遮罩背景 - 半透明黑色
-        static let overlay = Color.black.opacity(0.6)
-
-        /// 休息模式专用背景 - 深绿色调
-        static let rest = Color(red: 0.04, green: 0.12, blue: 0.08)
-    }
-
-    // MARK: - Sizes (尺寸系统)
-
-    enum Sizes {
-        // MARK: Icon Sizes
-
-        static let iconSmall: CGFloat = 12
-        static let iconMedium: CGFloat = 16
-        static let iconLarge: CGFloat = 24
-        static let iconXLarge: CGFloat = 32
-
-        // MARK: Ring Sizes
-
-        static let ringSmall: CGFloat = 72
-        static let ringMedium: CGFloat = 88
-        static let ringLarge: CGFloat = 120
-        static let ringXLarge: CGFloat = 200
-
-        // MARK: Text Sizes
-
-        static let textLabel: CGFloat = 9
-        static let textBody: CGFloat = 14
-        static let textHeadline: CGFloat = 22
-        static let textDisplay: CGFloat = 44
-
-        // MARK: Stroke Widths
-
-        static let strokeThin: CGFloat = 0.5
-        static let strokeNormal: CGFloat = 1
-        static let strokeThick: CGFloat = 2
-        static let strokeBold: CGFloat = 4
-    }
-
-    // MARK: - Opacity (不透明度)
-
-    enum Opacity {
-        /// 极淡 - 几乎透明
-        static let xLight: Double = 0.01
-        /// 淡 - 轻微可见
-        static let light: Double = 0.06
-        /// 中等 - 标准半透明
-        static let medium: Double = 0.12
-        /// 半强 - 明显半透明
-        static let semiStrong: Double = 0.18
-        /// 强 - 高可见度
-        static let strong: Double = 0.3
-        /// 极强 - 接近不透明
-        static let xStrong: Double = 0.5
-    }
-
-    // MARK: - Animation (动画)
-
-    enum Animation {
-        /// 快速动画 - 轻微反馈
-        static let fastDuration: Double = 0.15
-        /// 中速动画 - 标准过渡
-        static let mediumDuration: Double = 0.6
-        /// 慢速动画 - 大场景过渡
-        static let slowDuration: Double = 0.8
-
-        /// 缓出动画
-        static let easeOut = SwiftUI.Animation.easeOut(duration: 0.15)
-
-        /// 弹簧动画
-        static let spring = SwiftUI.Animation.spring(response: 0.6, dampingFraction: 0.7)
-
-        /// 创建缓出动画（自定义时长）
-        static func easeOut(duration: Double) -> SwiftUI.Animation {
-            .easeOut(duration: duration)
-        }
-
-        /// 创建弹簧动画（自定义参数）
-        static func spring(response: Double, dampingFraction: Double) -> SwiftUI.Animation {
-            .spring(response: response, dampingFraction: dampingFraction)
-        }
-    }
-
-    // MARK: - Shadows (阴影)
-
-    enum Shadows {
-        /// 阴影配置 - 小阴影
-        static func small(color: Color = .black.opacity(0.1)) -> [Color: CGFloat] {
-            [color: 1]  // 简化表示，实际使用 .shadow()
-        }
-
-        /// 阴影配置 - 中阴影
-        static func medium(color: Color = .black.opacity(0.15)) -> [Color: CGFloat] {
-            [color: 1]
-        }
-
-        /// 阴影配置 - 大阴影
-        static func large(color: Color = .black.opacity(0.2)) -> [Color: CGFloat] {
-            [color: 1]
-        }
-
-        /// 发光颜色
-        static func glowColor(base: Color = Colors.accent) -> Color {
-            base.opacity(0.3)
-        }
-    }
+extension Flux {
+    /// @available(*, deprecated, renamed: "Label")
+    typealias Text = Label
+    /// @available(*, deprecated, renamed: "Surface")
+    typealias Backgrounds = Surface
 }
