@@ -1,6 +1,26 @@
 import Foundation
 import Combine
 
+// MARK: - Errors
+
+enum FluxServiceError: LocalizedError {
+    case invalidResponse
+    case httpStatus(code: Int, bodyPreview: String?)
+    case decodingFailed(underlying: Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "无效的服务器响应"
+        case .httpStatus(let code, let preview):
+            if let p = preview, !p.isEmpty { return "HTTP \(code): \(p)" }
+            return "HTTP \(code)"
+        case .decodingFailed(let e):
+            return "JSON 解析失败: \(e.localizedDescription)"
+        }
+    }
+}
+
 @MainActor
 final class FluxService: ObservableObject {
 
@@ -78,10 +98,8 @@ final class FluxService: ObservableObject {
                 }
             }
         } catch {
-            if self.isConnected {
-                self.isConnected = false
-                self.connectionError = error.localizedDescription
-            }
+            self.isConnected = false
+            self.connectionError = error.localizedDescription
         }
     }
 
@@ -90,30 +108,58 @@ final class FluxService: ObservableObject {
             let response: FluxResponse<ServerStatus> = try await get("api/v1/status")
             self.serverStatus = response.data
         } catch {
-            // silent
+            FluxLog.network.warn("fetchStatus 失败: \(error.localizedDescription)")
         }
     }
 
     func resetStamina() async {
-        let _: FluxResponse<[String: String]>? = try? await post("api/v1/stamina/reset")
+        do {
+            let _: FluxResponse<[String: String]> = try await post("api/v1/stamina/reset")
+        } catch {
+            FluxLog.network.warn("resetStamina 失败: \(error.localizedDescription)")
+        }
     }
 
     func saveStamina() async {
-        let _: FluxResponse<[String: String]>? = try? await post("api/v1/stamina/save")
+        do {
+            let _: FluxResponse<[String: String]> = try await post("api/v1/stamina/save")
+        } catch {
+            FluxLog.network.warn("saveStamina 失败: \(error.localizedDescription)")
+        }
     }
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
         let url = baseURL.appendingPathComponent(path)
-        let (data, _) = try await session.data(from: url)
-        return try JSONDecoder().decode(T.self, from: data)
+        let (data, response) = try await session.data(from: url)
+        try Self.validate(data: data, response: response)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw FluxServiceError.decodingFailed(underlying: error)
+        }
     }
 
     private func post<T: Decodable>(_ path: String) async throws -> T {
         let url = baseURL.appendingPathComponent(path)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        let (data, _) = try await session.data(for: request)
-        return try JSONDecoder().decode(T.self, from: data)
+        let (data, response) = try await session.data(for: request)
+        try Self.validate(data: data, response: response)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw FluxServiceError.decodingFailed(underlying: error)
+        }
+    }
+
+    private static func validate(data: Data, response: URLResponse) throws {
+        guard let http = response as? HTTPURLResponse else {
+            throw FluxServiceError.invalidResponse
+        }
+        guard (200...299).contains(http.statusCode) else {
+            let preview = String(data: data, encoding: .utf8).map { String($0.prefix(160)) }
+            throw FluxServiceError.httpStatus(code: http.statusCode, bodyPreview: preview)
+        }
     }
 }
 

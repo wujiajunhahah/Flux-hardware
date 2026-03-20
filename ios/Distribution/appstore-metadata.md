@@ -13,7 +13,9 @@
 - **主要类别**: 健康健美 (Health & Fitness)
 - **次要类别**: 效率 (Productivity)
 
-## 版本信息 (v1.0)
+## 版本信息 (v1.2)
+
+> 上架注意：`CFBundleShortVersionString` 须高于 App Store **当前已批准**版本；被拒后若某版本列车已关闭，需在 App Store Connect **新建版本**（如 1.2）再传构建。
 
 ### 描述（中文）
 

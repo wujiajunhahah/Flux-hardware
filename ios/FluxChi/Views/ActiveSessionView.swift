@@ -50,7 +50,7 @@ struct ActiveSessionView: View {
     var body: some View {
         ZStack {
             // 背景：专注=黑色，休息=深绿
-            (isResting ? Color(red: 0.04, green: 0.12, blue: 0.08) : Color.black)
+            (isResting ? Flux.Surface.rest : Flux.Surface.focusImmersive)
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 0.8), value: isResting)
 

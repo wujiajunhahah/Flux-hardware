@@ -32,12 +32,6 @@ struct RecorderView: View {
                     FluxLiveIndicator(isLive: service.isConnected || bleManager.isConnected)
                 }
             }
-            .onAppear {
-                sessionManager.configure(
-                    modelContext: modelContext,
-                    stateProvider: { [weak service] in service?.state }
-                )
-            }
             .sheet(isPresented: $showFeedback) {
                 if let session = finishedSession {
                     FeedbackView(session: session)

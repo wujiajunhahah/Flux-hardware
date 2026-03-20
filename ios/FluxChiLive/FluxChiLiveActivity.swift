@@ -183,16 +183,9 @@ struct FluxChiLiveActivity: Widget {
         min(max(stamina / 100, 0), 1)
     }
 
-    /// 返回状态对应颜色 - 与 Flux.Colors.forStaminaState 保持一致
-    /// 注意：由于 Widget Extension 无法直接访问主 app 代码，此处颜色值需手动同步
+    /// 与主 App `Flux.Colors.forStaminaState` 同源：`StaminaStatePalette`（双 target 共享）
     private func staminaColor(_ state: String) -> Color {
-        switch state {
-        case "focused":    return .green           // Flux.Colors.forStaminaState(.focused)
-        case "fading":     return .orange          // Flux.Colors.forStaminaState(.fading)
-        case "depleted":   return .red.opacity(0.6) // Flux.Colors.forStaminaState(.depleted)
-        case "recovering": return .green           // Flux.Colors.forStaminaState(.recovering)
-        default:           return .gray
-        }
+        StaminaStatePalette.color(forRawState: state)
     }
 
     private func stateLabel(_ state: String) -> String {

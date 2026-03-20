@@ -61,6 +61,9 @@
 		WD00000001000000000000002 /* WidgetDataReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = WD00000002000000000000002 /* WidgetDataReader.swift */; };
 		CB49A2D72F6982F9001A70B2 /* WidgetDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB49A2D62F6982F9001A70B2 /* WidgetDataManager.swift */; };
 		PV00000001000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = PV00000002000000000000001 /* PrivacyInfo.xcprivacy */; };
+		STMPALETTE01BUILDMAIN00001 /* StaminaStatePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = STMPALETTE01FILEREF000001 /* StaminaStatePalette.swift */; };
+		STMPALETTE01BUILDLIVE00002 /* StaminaStatePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = STMPALETTE01FILEREF000001 /* StaminaStatePalette.swift */; };
+		SMBOOTSTRAP01BUILD00000001 /* SessionManagerBootstrapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMBOOTSTRAP01REF000000001 /* SessionManagerBootstrapView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -123,6 +126,8 @@
 		AFE9F1742177A39AF876CD42 /* CalendarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
 		B304D5891CBDFF2564CBBE02 /* FeedbackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackView.swift; sourceTree = "<group>"; };
 		C32BDA8520B5BD858B560924 /* FluxTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxTokens.swift; sourceTree = "<group>"; };
+		STMPALETTE01FILEREF000001 /* StaminaStatePalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaminaStatePalette.swift; sourceTree = "<group>"; };
+		SMBOOTSTRAP01REF000000001 /* SessionManagerBootstrapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManagerBootstrapView.swift; sourceTree = "<group>"; };
 		C4785E01E03B638F651433EC /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
 		C9347838A8E7866E13F8FA2B /* FluxChiLive */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = FluxChiLive; sourceTree = BUILT_PRODUCTS_DIR; };
 		CE36952EACC328036003CF02 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -224,6 +229,7 @@
 				E528776B3F3519BE71383DDE /* StaminaRingView.swift */,
 				AFE9F1742177A39AF876CD42 /* CalendarView.swift */,
 				9992B47B1D2369E9BB080354 /* SessionChartsView.swift */,
+				SMBOOTSTRAP01REF000000001 /* SessionManagerBootstrapView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -243,6 +249,7 @@
 			children = (
 				E24A0B2A711EEB09198CB250 /* FluxComponents.swift */,
 				C32BDA8520B5BD858B560924 /* FluxTokens.swift */,
+				STMPALETTE01FILEREF000001 /* StaminaStatePalette.swift */,
 			);
 			path = Design;
 			sourceTree = "<group>";
@@ -421,6 +428,7 @@
 			files = (
 				41D01B608D506EF66567135B /* FluxChiLiveBundle.swift in Sources */,
 				2894A586BC7D4FEC4DA96468 /* FluxChiLiveActivity.swift in Sources */,
+				STMPALETTE01BUILDLIVE00002 /* StaminaStatePalette.swift in Sources */,
 				D866EFFE47F922A1A563C184 /* LiveActivityManager.swift in Sources */,
 				WD00000001000000000000001 /* FluxChiWidgets.swift in Sources */,
 				WD00000001000000000000002 /* WidgetDataReader.swift in Sources */,
@@ -448,6 +456,8 @@
 				FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */,
 				66E6A5ADCD0E5DFFDB401A86 /* FluxService.swift in Sources */,
 				5909BF9467E24D418EE4A8F4 /* FluxTokens.swift in Sources */,
+				STMPALETTE01BUILDMAIN00001 /* StaminaStatePalette.swift in Sources */,
+				SMBOOTSTRAP01BUILD00000001 /* SessionManagerBootstrapView.swift in Sources */,
 				A1B2C3D4LOGGERINSSOURCES /* FluxLogger.swift in Sources */,
 				4E31F1403404087AC5CD20C6 /* HistoryView.swift in Sources */,
 				0E7705B78C0617D5054DCF05 /* OnDeviceStaminaEngine.swift in Sources */,
@@ -496,7 +506,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = FluxChiLive/FluxChiLive.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = M4T239BM58;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FluxChiLive/Info.plist;
@@ -506,7 +516,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fluxchi.app.live;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -649,7 +659,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = FluxChi/FluxChi.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = M4T239BM58;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FluxChi/Resources/Info.plist;
@@ -665,7 +675,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fluxchi.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -678,7 +688,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = FluxChi/FluxChi.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = M4T239BM58;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FluxChi/Resources/Info.plist;
@@ -694,7 +704,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fluxchi.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -707,7 +717,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = FluxChiLive/FluxChiLive.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = M4T239BM58;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FluxChiLive/Info.plist;
@@ -717,7 +727,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.fluxchi.app.live;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;

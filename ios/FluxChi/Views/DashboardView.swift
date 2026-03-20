@@ -140,10 +140,6 @@ struct DashboardView: View {
                 ToolbarItem(placement: .topBarTrailing) { recordButton }
             }
             .onAppear {
-                sessionManager.configure(
-                    modelContext: modelContext,
-                    stateProvider: { [weak service] in service?.state }
-                )
                 updateWidgetData()
             }
             .onChange(of: todaySessions.count) { _, _ in

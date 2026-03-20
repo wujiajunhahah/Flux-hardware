@@ -40,6 +40,7 @@ struct FluxChiApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
+                SessionManagerBootstrapView()
                 if onboardingDone {
                     mainTabView
                 } else {

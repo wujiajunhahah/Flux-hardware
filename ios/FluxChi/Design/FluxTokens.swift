@@ -22,23 +22,18 @@ enum Flux {
         static let border = Color.primary.opacity(0.1)
         static let divider = Color.primary.opacity(0.08)
 
-        /// 根据 StaminaState 枚举返回对应颜色（唯一数据源）
+        /// 根据 StaminaState 枚举返回对应颜色（实现见 `StaminaStatePalette`，与 Extension 共用）
         static func forStaminaState(_ state: StaminaState) -> Color {
-            switch state {
-            case .focused:    return .red
-            case .fading:     return .orange
-            case .depleted:   return .red.opacity(0.6)
-            case .recovering: return .green
-            }
+            StaminaStatePalette.color(forRawState: state.rawValue)
         }
 
         /// String 版 — 兼容 rawValue 传入场景，逐步迁移后删除
         @available(*, deprecated, message: "Use forStaminaState(_ state: StaminaState) instead")
         static func forStaminaState(_ state: String) -> Color {
             if let parsed = StaminaState(rawValue: state.lowercased()) {
-                return forStaminaState(parsed)
+                return StaminaStatePalette.color(forRawState: parsed.rawValue)
             }
-            return .gray
+            return StaminaStatePalette.color(forRawState: state)
         }
 
         /// 根据续航数值返回颜色
@@ -89,6 +84,8 @@ enum Flux {
         static let overlay = Color.black.opacity(0.6)
         /// 休息模式背景 - 深绿色调
         static let rest = Color(red: 0.04, green: 0.12, blue: 0.08)
+        /// 沉浸专注全屏（与 `ActiveSessionView` 一致）
+        static let focusImmersive = Color.black
     }
 
     // MARK: - Typography
