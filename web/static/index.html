@@ -132,6 +132,9 @@ body {
   border-radius: 2px;
 }
 .transport-bar button:hover { filter: brightness(1.08); }
+.session-bar button { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
+.session-bar button:hover { filter: brightness(1.15); }
+a.session-dl { color: var(--green); font-size: 11px; margin-left: 4px; }
 .transport-msg { color: var(--dim); flex: 1 1 160px; min-width: 120px; }
 .transport-label { color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
 
@@ -446,6 +449,14 @@ body {
   <input type="text" id="bleAddrInput" style="display:none;min-width:200px;" placeholder="BLE 地址（留空=自动扫描）" autocomplete="off"/>
   <button type="button" id="transportApplyBtn">应用</button>
   <span class="transport-msg" id="transportMsg"></span>
+</div>
+
+<div class="transport-bar session-bar">
+  <span class="transport-label">记录</span>
+  <button type="button" id="sessionStartBtn">开始</button>
+  <button type="button" id="sessionStopBtn">结束并保存</button>
+  <a id="sessionDownloadLink" class="session-dl" href="#" style="display:none" download>下载 JSON</a>
+  <span class="transport-msg" id="sessionInsightMsg"></span>
 </div>
 
 <div class="page">
@@ -778,6 +789,48 @@ const chart = new Chart(document.getElementById('trendChart'), {
   await refreshTransport();
   syncModeUI();
   setInterval(refreshTransport, 2500);
+})();
+
+(function sessionRecordBar(){
+  const startB = document.getElementById('sessionStartBtn');
+  const stopB = document.getElementById('sessionStopBtn');
+  const dl = document.getElementById('sessionDownloadLink');
+  const insightEl = document.getElementById('sessionInsightMsg');
+  startB.addEventListener('click', async () => {
+    insightEl.textContent = '…';
+    try {
+      const r = await fetch('/api/v1/sessions/web/start', { method: 'POST' });
+      const j = await r.json();
+      insightEl.textContent = j.ok ? '记录中（与 App 同构快照，由后端写入）' : (j.message || j.error || '失败');
+      insightEl.style.color = j.ok ? 'var(--green)' : 'var(--red)';
+      dl.style.display = 'none';
+    } catch (e) {
+      insightEl.textContent = e.message || String(e);
+      insightEl.style.color = 'var(--red)';
+    }
+  });
+  stopB.addEventListener('click', async () => {
+    insightEl.textContent = '…';
+    try {
+      const r = await fetch('/api/v1/sessions/web/stop', { method: 'POST' });
+      const j = await r.json();
+      if (!j.ok) {
+        insightEl.textContent = j.message || j.error || '失败';
+        insightEl.style.color = 'var(--red)';
+        return;
+      }
+      const d = j.data || {};
+      insightEl.textContent = d.insight || '已保存';
+      insightEl.style.color = 'var(--green)';
+      if (d.download_url) {
+        dl.href = d.download_url;
+        dl.style.display = 'inline';
+      }
+    } catch (e) {
+      insightEl.textContent = e.message || String(e);
+      insightEl.style.color = 'var(--red)';
+    }
+  });
 })();
 
 function connect(){

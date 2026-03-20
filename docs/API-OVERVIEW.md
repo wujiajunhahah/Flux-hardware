@@ -56,6 +56,15 @@ FastAPI 应用在运行时提供：
 | `POST /api/v1/stamina/load` | 加载 |
 | `GET /api/v1/transport` | 当前数据源模式 + 本机串口列表（网页选 USB） |
 | `POST /api/v1/transport/apply` | 切换 `idle` / `demo` / `serial` / `ble`（body 见 [API.md](./API.md)） |
+| `POST /api/v1/sessions/web/start` | 网页开始记录（快照由后端 loop 写入） |
+| `POST /api/v1/sessions/web/stop` | 结束网页记录 → 归档 + **洞察** + 下载链接 |
+| `POST /api/v1/sessions/ingest` | 导入与 iOS `ExportPackage` 同构的 JSON（手机同步到电脑） |
+| `GET /api/v1/sessions` | 已归档会话列表 |
+| `GET /api/v1/sessions/{id}` | 读取归档 JSON |
+| `GET /api/v1/sessions/{id}/file` | 下载归档文件 |
+| `GET /api/v1/sessions/{id}/insight` | 仅返回洞察文案 |
+
+**多端对齐**（6ch BLE / 8ch USB、归档目录）：见 [MULTI_PLATFORM.md](./MULTI_PLATFORM.md)。
 
 **WebSocket**：`ws://<host>:<port>/ws` — 主要服务 **Web 仪表盘**；iOS 当前以 **REST 轮询** 为主。  
 （说明：当前 FastAPI 导出的 `openapi.json` 的 `paths` 里**可能不包含** `/ws`，以 [`web/app.py`](../web/app.py) 中 `@app.websocket` 为准。）
@@ -72,6 +81,7 @@ FastAPI 应用在运行时提供：
 | 主状态（回退） | GET | `/api/v1/state` |
 | 状态栏/诊断 | GET | `/api/v1/status` |
 | 可选控制 | POST | `/api/v1/stamina/reset`、`/api/v1/stamina/save` |
+| 会话同步到网关 | POST | `/api/v1/sessions/ingest`（Body = `ExportManager.export` 的 JSON；见 `ExportManager.uploadSessionToGateway`） |
 
 REST 响应须先判信封 **`ok`**；`ok == false` 时客户端应视为错误（使用 `error` / `message`），勿把 `data` 当有效负载。
 

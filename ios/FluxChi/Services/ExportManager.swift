@@ -32,6 +32,8 @@ enum ExportManager {
         let feedback: FeedbackExport?
         let summary: SummaryExport?
         let processing: ProcessingInfo
+        /// 与网关落盘一致：`fluxchi_yyyyMMdd_HHmmss_{uuid}.json`（导出时刻墙钟 + 全小写 UUID）
+        let suggestedArchiveFileName: String?
     }
 
     struct DeviceInfo: Codable {
@@ -113,9 +115,17 @@ enum ExportManager {
 
     // MARK: - Session Export
 
-    static func export(session: Session) throws -> Data {
+    private static func suggestedArchiveFileName(for session: Session, wallClock: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyyMMdd_HHmmss"
+        return "fluxchi_\(f.string(from: wallClock))_\(session.id.uuidString.lowercased()).json"
+    }
+
+    static func export(session: Session, exportWallClock: Date = Date()) throws -> Data {
         let iso = ISO8601DateFormatter()
         let sessionStart = session.startedAt
+        let archiveName = suggestedArchiveFileName(for: session, wallClock: exportWallClock)
 
         let sortedSegments = session.segments.sorted { $0.startedAt < $1.startedAt }
 
@@ -150,7 +160,7 @@ enum ExportManager {
         let package = ExportPackage(
             fluxchiVersion: Flux.App.version,
             schemaVersion: Flux.App.schemaVersion,
-            exportedAt: iso.string(from: Date()),
+            exportedAt: iso.string(from: exportWallClock),
             device: DeviceInfo(
                 model: UIDevice.current.model,
                 systemVersion: UIDevice.current.systemVersion,
@@ -216,7 +226,8 @@ enum ExportManager {
                 ],
                 emgDecoding: "24-bit signed -> uV = (value / 8388607) * 4.5 / 1200 * 1e6",
                 featureWindow: "250 samples @ 1kHz = 250ms sliding window"
-            )
+            ),
+            suggestedArchiveFileName: archiveName
         )
 
         let encoder = JSONEncoder()
@@ -225,13 +236,9 @@ enum ExportManager {
     }
 
     static func shareURL(for session: Session) throws -> URL {
-        let data = try export(session: session)
-        let dateStr = {
-            let f = DateFormatter()
-            f.dateFormat = "yyyyMMdd_HHmm"
-            return f.string(from: session.startedAt)
-        }()
-        let filename = "fluxchi_\(dateStr)_\(session.id.uuidString.prefix(6)).json"
+        let wall = Date()
+        let data = try export(session: session, exportWallClock: wall)
+        let filename = suggestedArchiveFileName(for: session, wallClock: wall)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
         try data.write(to: url)
         return url
@@ -287,5 +294,66 @@ enum ExportManager {
                 stdRMS: round(std * 100) / 100
             )
         }
+    }
+
+    // MARK: - Gateway sync（与 Python 网关归档对齐）
+
+    enum GatewaySyncError: LocalizedError {
+        case invalidURL
+        case httpStatus(Int, String)
+        case badEnvelope
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidURL: return "网关地址无效"
+            case .httpStatus(let c, let t): return "网关 HTTP \(c): \(t)"
+            case .badEnvelope: return "网关返回格式异常"
+            }
+        }
+    }
+
+    private struct IngestEnvelope: Decodable {
+        let ok: Bool?
+        let data: IngestData?
+    }
+
+    private struct IngestData: Decodable {
+        let sessionId: String?
+        let insight: String?
+
+        enum CodingKeys: String, CodingKey {
+            case sessionId = "session_id"
+            case insight
+        }
+    }
+
+    /// 将导出 JSON POST 到运行 `web/app.py` 的机器；后端统一 8 路 RMS 并生成洞察。
+    static func uploadSessionToGateway(session: Session) async throws -> String {
+        let data = try export(session: session)
+        let host = UserDefaults.standard.string(forKey: "flux_host") ?? "127.0.0.1"
+        var port = UserDefaults.standard.integer(forKey: "flux_port")
+        if port == 0 { port = 8000 }
+        return try await uploadExportData(data, host: host, port: port)
+    }
+
+    static func uploadExportData(_ data: Data, host: String, port: Int) async throws -> String {
+        let urlStr = "http://\(host):\(port)/api/v1/sessions/ingest"
+        guard let url = URL(string: urlStr) else { throw GatewaySyncError.invalidURL }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        req.httpBody = data
+        let (respData, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw GatewaySyncError.badEnvelope }
+        let preview = String(data: respData, encoding: .utf8).map { String($0.prefix(200)) } ?? ""
+        guard (200...299).contains(http.statusCode) else {
+            throw GatewaySyncError.httpStatus(http.statusCode, preview)
+        }
+        let dec = JSONDecoder()
+        let env = try? dec.decode(IngestEnvelope.self, from: respData)
+        guard env?.ok == true, let sid = env?.data?.sessionId, !sid.isEmpty else {
+            throw GatewaySyncError.badEnvelope
+        }
+        return sid
     }
 }

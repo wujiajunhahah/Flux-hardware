@@ -13,6 +13,8 @@ struct SessionSummarySheet: View {
     @State private var showCorrection = false
     @State private var accuracyRating: Int = 3
     @State private var appeared = false
+    @State private var gatewaySyncing = false
+    @State private var gatewaySyncMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -32,6 +34,28 @@ struct SessionSummarySheet: View {
             .navigationTitle("专注完成")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        gatewaySyncing = true
+                        gatewaySyncMessage = nil
+                        Task {
+                            defer { gatewaySyncing = false }
+                            do {
+                                let id = try await ExportManager.uploadSessionToGateway(session: session)
+                                gatewaySyncMessage = "已同步到网关（\(id.prefix(8).uppercased())…）"
+                            } catch {
+                                gatewaySyncMessage = error.localizedDescription
+                            }
+                        }
+                    } label: {
+                        if gatewaySyncing {
+                            ProgressView()
+                        } else {
+                            Text("同步到电脑")
+                        }
+                    }
+                    .disabled(gatewaySyncing)
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { dismiss() }
                         .fontWeight(.semibold)
@@ -72,6 +96,13 @@ struct SessionSummarySheet: View {
             .padding(.vertical, 8)
 
             insightCard
+            if let g = gatewaySyncMessage {
+                Text(g)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
         }
     }
 

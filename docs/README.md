@@ -9,6 +9,7 @@
 | [API-OVERVIEW.md](./API-OVERVIEW.md) | HTTP 端点索引、iOS 最小 API 子集、`/api/v1` vs 无版本路径 |
 | [API-CHANGELOG.md](./API-CHANGELOG.md) | 对外 JSON 契约变更记录（维护约定） |
 | [API.md](./API.md) | REST / SSE 详解与 Swift 示例（与运行中 `/docs`、`openapi.json` 对照） |
+| [MULTI_PLATFORM.md](./MULTI_PLATFORM.md) | 多端对齐：后端规范 8 路 RMS、会话归档、手机↔网页互通 |
 | [MODEL_TRAINING_GUIDE.md](./MODEL_TRAINING_GUIDE.md) | 模型训练相关 |
 
 ## 上架与产品（FocuX）

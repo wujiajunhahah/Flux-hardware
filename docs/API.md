@@ -137,6 +137,24 @@ Always check `ok` before reading `data`.
 
 ---
 
+### Sessions / 归档与洞察（多端）
+
+与 [MULTI_PLATFORM.md](./MULTI_PLATFORM.md) 一致：**RMS 在服务端规范为 8 维**；洞察由 `session_insight` 生成。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/sessions/web/start` | 网页开始记录 |
+| POST | `/api/v1/sessions/web/stop` | 结束并落盘 `data/sessions/`，返回 `insight`、`download_url` |
+| POST | `/api/v1/sessions/ingest` | Body = iOS `ExportPackage` JSON |
+| GET | `/api/v1/sessions` | 列表 |
+| GET | `/api/v1/sessions/{id}` | 完整 JSON |
+| GET | `/api/v1/sessions/{id}/file` | 附件下载（`filename` 与磁盘一致，见下） |
+| GET | `/api/v1/sessions/{id}/insight` | 仅洞察字符串 |
+
+**归档文件名**：`fluxchi_yyyyMMdd_HHmmss_{uuid}.json`（UUID 小写；服务端保存时用**服务端墙钟**写入并更新 JSON 内 **`suggestedArchiveFileName`**）。列表项含 **`archiveFile`**（实际文件名）、**`suggestedArchiveFileName`**。iOS 导出包内 **`suggestedArchiveFileName`** 使用**导出时刻**墙钟，上传网关后可能被服务端覆盖为 ingest 时刻。
+
+---
+
 ### `GET /api/v1/pulse` — Lightweight Heartbeat
 
 Minimal payload for iOS background polling. ~200 bytes.

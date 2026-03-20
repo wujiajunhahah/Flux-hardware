@@ -23,13 +23,13 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -42,6 +42,9 @@ from src.stream import (
     SerialEMGStream,
     normalize_serial_device,
 )
+from src.canonical_signal import CANONICAL_EMG_CHANNELS, canonicalize_export_package, normalize_rms_to_canonical
+from src.session_insight import session_insight_text
+from src.session_store import list_sessions_meta, load_session, save_session_package, session_file_path
 from src.energy import StaminaEngine, StaminaState
 from src.decision import DecisionEngine
 
@@ -87,6 +90,9 @@ _transport_lock = asyncio.Lock()
 _emg_buffer_reset_requested = False
 current_serial_port: Optional[str] = None
 current_ble_address: Optional[str] = None
+
+# 网页极简录制：由 processing_loop 按 500ms 写入快照（与 iOS snapshotInterval 一致）
+web_recording: Optional[Dict[str, Any]] = None
 
 
 def _ok(data: dict) -> dict:
@@ -433,6 +439,87 @@ class TransportApplyBody(BaseModel):
     address: Optional[str] = Field(None, description="ble 模式：设备地址，留空则自动扫描")
 
 
+def _capture_web_recording_snapshot() -> None:
+    """processing_loop 在写入 latest_payload 后调用；500ms 节流。"""
+    global web_recording
+    if not web_recording or not latest_payload:
+        return
+    now = time.time()
+    if now - web_recording["_last_snap"] < 0.5:
+        return
+    web_recording["_last_snap"] = now
+    t0 = float(web_recording["started_at"])
+    st = latest_payload.get("stamina") or {}
+    rms = latest_payload.get("rms") or []
+    n_src = len(rms) if isinstance(rms, list) else 0
+    r8 = normalize_rms_to_canonical(rms if isinstance(rms, list) else [], source_channels=n_src or CHANNEL_COUNT)
+    web_recording["snapshots"].append(
+        {
+            "t": round(now - t0, 3),
+            "segIdx": 0,
+            "stamina": round(float(st.get("value", 0)), 1),
+            "state": st.get("state", "unknown"),
+            "con": round(float(st.get("consistency", 0)), 3),
+            "ten": round(float(st.get("tension", 0)), 3),
+            "fat": round(float(st.get("fatigue", 0)), 3),
+            "act": latest_payload.get("activity", "idle"),
+            "conf": round(float(latest_payload.get("confidence", 0)), 2),
+            "rms": r8,
+        }
+    )
+
+
+def _build_web_session_package(rec: Dict[str, Any]) -> Dict[str, Any]:
+    import uuid as _uuid
+
+    snaps = rec.get("snapshots") or []
+    sid = str(_uuid.uuid4())
+    dur = float(snaps[-1]["t"]) if snaps else 0.0
+    iso_start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(rec["started_at"]))
+    iso_end = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    return {
+        "fluxchiVersion": "2.1-web",
+        "schemaVersion": 1,
+        "exportedAt": iso_end,
+        "device": {"model": "FluxChi-Web", "systemVersion": "", "source": "wifi"},
+        "session": {
+            "id": sid,
+            "startedAt": iso_start,
+            "endedAt": iso_end,
+            "title": "Web 记录",
+            "source": "wifi",
+            "durationSec": round(dur, 1),
+        },
+        "signalMeta": {
+            "totalChannels": CANONICAL_EMG_CHANNELS,
+            "activeChannels": CHANNEL_COUNT,
+            "sampleIntervalMs": 500,
+            "snapshotCount": len(snaps),
+            "note": "网关网页录制；与 iOS ExportPackage 同构，已由后端规范 8 路 RMS。",
+        },
+        "segments": [
+            {
+                "id": str(_uuid.uuid4()),
+                "label": "work",
+                "startedAt": iso_start,
+                "endedAt": iso_end,
+                "durationSec": round(dur, 1),
+                "snapshotCount": len(snaps),
+            }
+        ],
+        "snapshots": list(snaps),
+        "channelStats": [],
+        "feedback": None,
+        "summary": None,
+        "processing": {
+            "staminaWeights": {"consistency": 0.40, "tension": 0.25, "fatigue": 0.35},
+            "staminaThresholds": {"focused": 60, "fading": 30, "depleted": 0},
+            "emgDecoding": "gateway_web_recorder",
+            "featureWindow": "aligned_with_ios_export",
+        },
+    }
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  API v1
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -563,6 +650,111 @@ async def v1_transport_apply(body: TransportApplyBody):
         current_ble_address = addr or "auto"
         onnx_session = _real_onnx_session
         return _ok({"mode": "ble", "ble_address": current_ble_address, "message": "BLE 已启动（自动扫描或指定地址）"})
+
+
+# ── Sessions / 多端归档（后端统一规范与洞察）──────────────────────
+@app.post("/api/v1/sessions/web/start", tags=["Sessions"], summary="网页开始记录")
+async def v1_sessions_web_start():
+    """仅设标志位；快照由 processing_loop 写入。前端无需传参。"""
+    global web_recording
+    async with _transport_lock:
+        web_recording = {"started_at": time.time(), "_last_snap": 0.0, "snapshots": []}
+    return _ok({"message": "已开始记录", "sample_interval_ms": 500})
+
+
+@app.post("/api/v1/sessions/web/stop", tags=["Sessions"], summary="网页结束记录并归档")
+async def v1_sessions_web_stop():
+    global web_recording
+    async with _transport_lock:
+        rec = web_recording
+        web_recording = None
+    if not rec or not rec.get("snapshots"):
+        return _err("no_data", "没有快照或未开始记录")
+    pkg = _build_web_session_package(rec)
+    canonicalize_export_package(pkg)
+    insight = session_insight_text(pkg)
+    avg_s = sum(s.get("stamina", 0) for s in pkg["snapshots"]) / len(pkg["snapshots"])
+    pkg["summary"] = {
+        "text": insight,
+        "avgStamina": round(avg_s, 1),
+        "minStamina": min(s.get("stamina", 0) for s in pkg["snapshots"]),
+        "maxStamina": max(s.get("stamina", 0) for s in pkg["snapshots"]),
+        "totalDurationSec": pkg["session"]["durationSec"],
+        "workDurationSec": pkg["session"]["durationSec"],
+        "restDurationSec": 0.0,
+    }
+    sid = save_session_package(pkg)
+    return _ok(
+        {
+            "session_id": sid,
+            "insight": insight,
+            "snapshot_count": len(pkg["snapshots"]),
+            "download_url": f"/api/v1/sessions/{sid}/file",
+        }
+    )
+
+
+@app.post("/api/v1/sessions/ingest", tags=["Sessions"], summary="导入会话包（如手机导出 JSON）")
+async def v1_sessions_ingest(body: Dict[str, Any] = Body(...)):
+    """Body 与 iOS `ExportPackage` JSON 同构；后端规范化 8 路 RMS 并落盘。"""
+    if not isinstance(body, dict) or "session" not in body:
+        return _err("bad_request", "缺少 session 字段或 JSON 格式错误")
+    canonicalize_export_package(body)
+    insight = session_insight_text(body)
+    snaps = body.get("snapshots") or []
+    stamins = [float(s.get("stamina", 0)) for s in snaps if isinstance(s, dict)]
+    sum_obj = body.get("summary")
+    if not isinstance(sum_obj, dict):
+        sum_obj = {}
+        body["summary"] = sum_obj
+    if not (sum_obj.get("text") or "").strip():
+        sum_obj["text"] = insight
+    sum_obj.setdefault("avgStamina", sum(stamins) / len(stamins) if stamins else 0)
+    sum_obj.setdefault("minStamina", min(stamins) if stamins else 0)
+    sum_obj.setdefault("maxStamina", max(stamins) if stamins else 0)
+    dur = (body.get("session") or {}).get("durationSec", 0)
+    sum_obj.setdefault("totalDurationSec", dur)
+    sum_obj.setdefault("workDurationSec", dur)
+    sum_obj.setdefault("restDurationSec", 0.0)
+    sid = save_session_package(body)
+    return _ok({"session_id": sid, "insight": insight})
+
+
+@app.get("/api/v1/sessions", tags=["Sessions"], summary="已归档会话列表")
+async def v1_sessions_list():
+    return _ok({"sessions": list_sessions_meta()})
+
+
+@app.get("/api/v1/sessions/{session_id}", tags=["Sessions"], summary="读取会话 JSON")
+async def v1_sessions_get(session_id: str):
+    try:
+        return _ok(load_session(session_id))
+    except ValueError:
+        return _err("bad_request", "非法 session_id")
+    except FileNotFoundError:
+        return _err("not_found", "会话不存在")
+
+
+@app.get("/api/v1/sessions/{session_id}/file", tags=["Sessions"], summary="下载会话 JSON 文件")
+async def v1_sessions_download(session_id: str):
+    try:
+        path = session_file_path(session_id)
+    except ValueError:
+        return _err("bad_request", "非法 session_id")
+    if not path.is_file():
+        return _err("not_found", "会话不存在")
+    return FileResponse(path, media_type="application/json", filename=path.name)
+
+
+@app.get("/api/v1/sessions/{session_id}/insight", tags=["Sessions"], summary="仅返回洞察文案")
+async def v1_sessions_insight(session_id: str):
+    try:
+        pkg = load_session(session_id)
+    except ValueError:
+        return _err("bad_request", "非法 session_id")
+    except FileNotFoundError:
+        return _err("not_found", "会话不存在")
+    return _ok({"insight": session_insight_text(pkg)})
 
 
 @app.get("/api/v1/model", tags=["System"], summary="模型信息")
@@ -924,6 +1116,8 @@ async def processing_loop():
 
         latest_payload.clear()
         latest_payload.update(payload)
+
+        _capture_web_recording_snapshot()
 
         await broadcast(payload)
         await asyncio.sleep(0.01)
