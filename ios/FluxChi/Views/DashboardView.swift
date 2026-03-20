@@ -366,7 +366,7 @@ struct DashboardView: View {
                 if let session = sessionManager.endSession() {
                     let summary = SummaryEngine.generate(for: session)
                     SummaryEngine.apply(summary, to: session)
-                    try? modelContext.save()
+                    modelContext.saveLogged()
                     finishedSession = session
                     showSummary = true
                 }

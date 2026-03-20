@@ -120,7 +120,7 @@ struct HistoryView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
                                 modelContext.delete(session)
-                                try? modelContext.save()
+                                modelContext.saveLogged()
                             } label: {
                                 Label("删除", systemImage: "trash")
                             }

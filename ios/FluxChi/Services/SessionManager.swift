@@ -40,7 +40,7 @@ final class SessionManager: ObservableObject {
         isPaused = false
 
         startTimers()
-        try? ctx.save()
+        ctx.saveLogged()
     }
 
     func addSegment(label: SegmentLabel) {
@@ -54,7 +54,7 @@ final class SessionManager: ObservableObject {
         ctx.insert(segment)
 
         activeSegment = segment
-        try? ctx.save()
+        ctx.saveLogged()
     }
 
     func pauseSession() {
@@ -83,7 +83,7 @@ final class SessionManager: ObservableObject {
         isPaused = false
         elapsed = 0
 
-        try? ctx.save()
+        ctx.saveLogged()
         return finished
     }
 
@@ -128,7 +128,7 @@ final class SessionManager: ObservableObject {
         ctx.insert(snapshot)
 
         if segment.snapshots.count % 10 == 0 {
-            try? ctx.save()
+            ctx.saveLogged()
         }
     }
 

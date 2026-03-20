@@ -1,8 +1,16 @@
-快速启动（复制下面每一行到终端执行，不要带任何符号）
+# Desktop Gesture Trainer -- Quick Start
 
-cd /Users/wujiajun/Downloads/FluxChi/reference/harward-gesture
-source .venv/bin/activate
+> This is the **desktop serial gesture application** (root `app.py`).
+> If you want the **Web API + iOS phone connection**, see the main [README.md](README.md) and run `python web/app.py` instead.
+
+```bash
+cd /path/to/harward-gesture          # enter repo root
+source .venv/bin/activate             # activate venv
 python3 app.py --port /dev/cu.usbserial-0001 --baud 921600 --fs 1000
+```
 
-如果端口不是 usbserial-0001，请先查端口：
+If your serial port name is different:
+
+```bash
 ls /dev/cu.usbserial*
+```

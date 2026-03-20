@@ -287,12 +287,12 @@ struct SessionDetailView: View {
                 let result = await engine.generateSummary(for: session)
                 nlpSummary = result
                 session.summaryText = result
-                try? modelContext.save()
+                modelContext.saveLogged()
             } else {
                 let summary = SummaryEngine.generate(for: session)
                 SummaryEngine.apply(summary, to: session)
                 nlpSummary = summary.text
-                try? modelContext.save()
+                modelContext.saveLogged()
             }
             isGeneratingSummary = false
         }

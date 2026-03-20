@@ -200,7 +200,7 @@ struct FeedbackView: View {
         fb.session = session
         session.feedback = fb
         modelContext.insert(fb)
-        try? modelContext.save()
+        modelContext.saveLogged()
 
         personalization.addTrainingData(session: session, feedback: fb)
         dismiss()

@@ -283,7 +283,7 @@ struct SessionSummarySheet: View {
                         FluxStatusBadge(
                             label: predicted.displayName,
                             icon: predicted.systemImage,
-                            tint: Flux.Colors.forStaminaState(predicted),
+                            tint: Flux.Colors.forStaminaState(predicted.rawValue),
                             isActive: false
                         )
                     }
@@ -409,7 +409,7 @@ struct SessionSummarySheet: View {
         } else {
             session.feedback?.feeling = feeling
         }
-        try? modelContext.save()
+        modelContext.saveLogged()
 
         if let fb = session.feedback {
             personalization.addTrainingData(session: session, feedback: fb)
@@ -419,7 +419,7 @@ struct SessionSummarySheet: View {
     private func saveAccuracyRating(_ rating: Int) {
         guard let fb = session.feedback else { return }
         fb.accuracyRating = rating
-        try? modelContext.save()
+        modelContext.saveLogged()
 
         // 低准确度 (1-2) 时，额外触发一次学习以加大纠正力度
         if rating <= 2 {

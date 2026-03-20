@@ -144,7 +144,7 @@ struct ActiveSessionView: View {
             handleDeviceDetach()
         }
         // 通知点击触发休息 Banner
-        .onReceive(NotificationCenter.default.publisher(for: FluxChiApp.showRestFromNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .fluxShowRestFromNotification)) { _ in
             if !isResting {
                 withAnimation(.spring(duration: 0.5)) {
                     showRestBanner = true
@@ -431,7 +431,7 @@ struct ActiveSessionView: View {
         if let session = sessionManager.endSession() {
             let summary = SummaryEngine.generate(for: session)
             SummaryEngine.apply(summary, to: session)
-            try? modelContext.save()
+            modelContext.saveLogged()
             onSessionFinished?(session)
         }
 
@@ -599,7 +599,7 @@ struct ActiveSessionView: View {
     // MARK: - Helpers
 
     private var staminaRingColor: Color {
-        Flux.Colors.forStaminaState(staminaState)
+        Flux.Colors.forStaminaState(staminaState.rawValue)
     }
 
     private func formatElapsed(_ seconds: TimeInterval) -> String {

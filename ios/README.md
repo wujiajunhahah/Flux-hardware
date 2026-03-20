@@ -1,70 +1,133 @@
 # FluxChi iOS
 
-SwiftUI 原生 iOS 客户端，连接 FluxChi EMG Stamina Engine。
+SwiftUI native iOS client for the FluxChi EMG Stamina Engine.
 
-## 功能
+## Features
 
-- **REST 实时轮询** — 通过 WiFi 连接电脑端 FluxChi 服务器 (500ms 间隔)
-- **BLE 直连手环** — CoreBluetooth 直接连接 WAVELETECH 手环（无需 USB 接收器或电脑）
-- **自动模式切换** — BLE 连接时停止 WiFi 轮询，断开时自动恢复
-- **续航仪表盘** — 实时显示 Stamina 环、三维度、活动分类、EMG 信号
-- **Apple HIG** — 遵循 Human Interface Guidelines，支持 Dynamic Type、深色模式
+- **REST real-time polling** -- WiFi connection to the Mac backend (500ms interval)
+- **BLE direct** -- CoreBluetooth connects to WAVELETECH wristband (no USB dongle or computer needed)
+- **Auto mode switch** -- BLE connected = WiFi polling stops; BLE disconnected = auto resume
+- **Focus sessions** -- Full-screen immersive focus mode with recording, segmentation, pause/resume
+- **Session summary** -- AI-generated NLP summary after each session (iOS 26+ on-device Foundation Models)
+- **Dashboard** -- Stamina ring, 3 dimensions, recommendation card, iOS Widget-style insight charts, AI coach chat
+- **BIOSORA calendar** -- Dot-matrix data visualization calendar with monthly stats and sparklines
+- **History** -- Session list with detail view, charts, export
+- **Live Activity + Widget** -- Dynamic Island + Lock Screen + Home Screen widgets (small/medium/large)
+- **Onboarding** -- First-launch guide
+- **Structured logging** -- FluxLogger with level filtering, export (JSON/text), viewer
+- **Performance monitor** -- Launch time, FPS, memory usage, dropped frames
+- **Geek data panel** -- Raw EMG signals and RMS visualization
+- **Personalization** -- On-device learning from user feedback, calibration offset
+- **Data export** -- Sessions as JSON with schema version and metadata
+- **Apple HIG** -- Dynamic Type, dark mode, iOS 26 TabBar minimize
 
-## 架构
+## Architecture
 
 ```
 FluxChi/
-├── FluxChiApp.swift              # App 入口 + TabView
-├── Models/
-│   └── FluxModels.swift          # Codable 数据模型
-├── Services/
-│   ├── FluxService.swift         # REST API 轮询客户端
-│   └── BLEManager.swift          # CoreBluetooth 直连手环
-├── Views/
-│   ├── DashboardView.swift       # 主仪表盘
-│   ├── StaminaRingView.swift     # 续航环形组件
-│   ├── BLEView.swift             # 蓝牙扫描/连接
-│   └── SettingsView.swift        # 服务器配置
-└── Resources/
-    └── Info.plist                # 蓝牙/网络权限
++-- FluxChiApp.swift                # App entry + TabView + Focus button + Deep Link + Notifications
++-- Design/
+|   +-- FluxTokens.swift            # Design tokens (colors, typography, spacing)
+|   +-- FluxComponents.swift        # Reusable UI components
++-- Models/
+|   +-- FluxModels.swift            # Codable data models (FluxState, StaminaData, etc.)
+|   +-- Session.swift               # SwiftData models (Session, Segment, Snapshot, Feedback)
++-- Services/
+|   +-- FluxService.swift           # REST API polling client
+|   +-- BLEManager.swift            # CoreBluetooth direct wristband connection
+|   +-- SessionManager.swift        # Recording session lifecycle
+|   +-- FluxLogger.swift            # Structured logging system
+|   +-- ExportManager.swift         # Session data export
+|   +-- PerformanceMonitor.swift    # Launch time, FPS, memory tracking
+|   +-- PersonalizationManager.swift # On-device learning
+|   +-- OnDeviceStaminaEngine.swift # Local stamina calculation
+|   +-- EMGFeatureExtractor.swift   # Feature extraction from raw EMG
+|   +-- NLPSummaryEngine.swift      # AI session summary (Foundation Models)
+|   +-- BodyInsightEngine.swift     # Daily insight generation
+|   +-- SummaryEngine.swift         # Rule-based session summary
+|   +-- AlertManager.swift          # Break reminders
+|   +-- LiveActivityManager.swift   # Dynamic Island + Lock Screen
+|   +-- WidgetDataManager.swift     # Widget data bridge
+|   +-- ModelContext+SaveLogging.swift # SwiftData save with error logging
++-- Views/
+|   +-- DashboardView.swift         # Main dashboard with insights + charts
+|   +-- ActiveSessionView.swift     # Full-screen focus session
+|   +-- SessionSummarySheet.swift   # Post-session AI summary
+|   +-- HistoryView.swift           # Session history list
+|   +-- CalendarView.swift          # BIOSORA dot-matrix calendar
+|   +-- SettingsView.swift          # Settings (BLE, server, logs, perf, geek data)
+|   +-- OnboardingView.swift        # First-launch guide
+|   +-- ConnectionGuideSheet.swift  # Connection help
+|   +-- FeedbackView.swift          # Post-session feedback
+|   +-- RecorderView.swift          # Recording controls
+|   +-- SessionDetailView.swift     # Single session detail
+|   +-- SessionChartsView.swift     # Session data charts
+|   +-- StaminaRingView.swift       # Stamina ring component
+|   +-- GeekDataPanel.swift         # Raw EMG data viewer
+|   +-- LogViewerView.swift         # Log browser
++-- ML/
+|   +-- ActivityClassifier.mlpackage # CoreML activity model
++-- Resources/
+    +-- Info.plist                   # Permissions (BLE, local network)
+    +-- PrivacyInfo.xcprivacy        # Privacy manifest
+
+FluxChiLive/                        # Widget + Live Activity extension
++-- FluxChiWidgets.swift            # Small/Medium/Large widgets
++-- FluxChiLiveActivity.swift       # Dynamic Island
++-- WidgetDataReader.swift          # Shared data reader
 ```
 
-## 使用
+## Usage
 
-### 方式 1: WiFi (通过电脑中转)
+### Mode 1: WiFi (via Mac backend)
 
-1. 电脑端启动: `python web/app.py --ble` 或 `--port /dev/tty.usbserial-0001`
-2. 手机和电脑连同一 WiFi
-3. 在 App 设置页输入电脑 IP 地址和端口 (默认 8000)
+1. Start backend on Mac: `python web/app.py --ble` or `--port /dev/tty.usbserial-0001`
+2. Connect phone and Mac to the same WiFi
+3. In app Settings, enter your Mac's IP and port (default 8000)
 
-### 方式 2: BLE 直连
+> **Simulator / local**: default address is `127.0.0.1:8000` -- works out of the box.
+>
+> **Real device**: you must change the address to your Mac's LAN IP (e.g. `192.168.1.x`). `127.0.0.1` on a real device points to the phone itself.
 
-1. 确保 USB 接收器已拔出
-2. 打开 App → 蓝牙 Tab → 扫描
-3. 点击 `WL EEG-XXXX` 连接
+### Mode 2: BLE direct
 
-## 环境要求
+1. Unplug USB dongle (wristband can only pair with one host)
+2. Open app -> Settings -> Bluetooth -> Scan
+3. Tap `WL EEG-XXXX` to connect
 
-- iOS 17.0+
-- Xcode 15.0+
+## Local network HTTP (ATS)
+
+The app connects to the backend over **plain HTTP** (not HTTPS). iOS App Transport Security may block this on some configurations.
+
+Current status: `Info.plist` includes `NSLocalNetworkUsageDescription`. If you encounter connection failures on a real device:
+
+1. Add to `Info.plist`:
+   ```xml
+   <key>NSAppTransportSecurity</key>
+   <dict>
+       <key>NSAllowsLocalNetworking</key>
+       <true/>
+   </dict>
+   ```
+2. Or switch the backend to HTTPS with a self-signed cert.
+
+## Requirements
+
+- iOS 17.0+ (iOS 26+ for Foundation Models NLP summary)
+- Xcode 16.0+ (Xcode 26 beta for iOS 26 features)
 - Swift 5.9+
 
-## 在 Xcode 中打开
+## Build
 
-1. 打开 Xcode → File → New → Project → iOS App
-2. 模板选 SwiftUI，产品名 `FluxChi`
-3. 将 `ios/FluxChi/` 下所有文件拖入项目
-4. 在 Target → Info 中添加 `Info.plist` 中的权限键值
-5. 在 Target → Signing & Capabilities 添加 `Background Modes → Uses Bluetooth LE accessories`
-6. Build & Run
+Open `ios/FluxChi.xcodeproj` in Xcode, select your target device, and Build & Run.
 
-## BLE 协议
+## BLE protocol
 
-| 参数 | 值 |
-|------|-----|
+| Parameter | Value |
+|-----------|-------|
 | Service UUID | `974CBE30-3E83-465E-ACDE-6F92FE712134` |
 | Data Notify | `974CBE31-3E83-465E-ACDE-6F92FE712134` |
 | Write | `974CBE32-3E83-465E-ACDE-6F92FE712134` |
-| 帧大小 | 20 字节 |
-| EMG 帧 | `0xAA` + seq + 6ch × 24bit |
-| IMU 帧 | `0xBB` + seq + 6-axis int16 |
+| Frame size | 20 bytes |
+| EMG frame | `0xAA` + seq + 6ch x 24bit |
+| IMU frame | `0xBB` + seq + 6-axis int16 |

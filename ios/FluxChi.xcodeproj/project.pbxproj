@@ -16,6 +16,7 @@
 		20258A5445FFADF89345BB8C /* SummaryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9F63942587BE4E4AB46CDE /* SummaryEngine.swift */; };
 		A1B2C3D4LOGVIEWERINSSOURCES /* LogViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4LOGVIEWERRREF /* LogViewerView.swift */; };
 		A1B2C3D4LOGGERINSSOURCES /* FluxLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4LOGGERRREF /* FluxLogger.swift */; };
+		A1B2C3D4SAVELOG1SOURCES /* ModelContext+SaveLogging.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4SAVELOGRREF /* ModelContext+SaveLogging.swift */; };
 		2894A586BC7D4FEC4DA96468 /* FluxChiLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D963C643474157682B7673F /* FluxChiLiveActivity.swift */; };
 		2C17DEBF311E0371CC8E5D50 /* AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC8E7B9F0363CDCC7D003AE /* AlertManager.swift */; };
 		32C85255E54CE8BBA79891B9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE36952EACC328036003CF02 /* SettingsView.swift */; };
@@ -88,6 +89,7 @@
 		23BCD5428E4F4BBD013EC82A /* EMGFeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EMGFeatureExtractor.swift; sourceTree = "<group>"; };
 		A1B2C3D4LOGVIEWERRREF /* LogViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerView.swift; sourceTree = "<group>"; };
 		A1B2C3D4LOGGERRREF /* FluxLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxLogger.swift; sourceTree = "<group>"; };
+		A1B2C3D4SAVELOGRREF /* ModelContext+SaveLogging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModelContext+SaveLogging.swift"; sourceTree = "<group>"; };
 		2583B5DFE6B5E2D06D3907A8 /* FluxChiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxChiApp.swift; sourceTree = "<group>"; };
 		2B5C110FA9FAA6244ADABB3C /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
 		2EC8E7B9F0363CDCC7D003AE /* AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertManager.swift; sourceTree = "<group>"; };
@@ -258,6 +260,7 @@
 				7C5067E6E37C15EA3AD053EB /* NLPSummaryEngine.swift */,
 				DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */,
 				CB49A2D62F6982F9001A70B2 /* WidgetDataManager.swift */,
+				A1B2C3D4SAVELOGRREF /* ModelContext+SaveLogging.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -435,6 +438,7 @@
 				FDBD1A530498FCADA98A80E7 /* NLPSummaryEngine.swift in Sources */,
 				9838B0DD287D1F821E2BC65D /* LiveActivityManager.swift in Sources */,
 				CB49A2D72F6982F9001A70B2 /* WidgetDataManager.swift in Sources */,
+				A1B2C3D4SAVELOG1SOURCES /* ModelContext+SaveLogging.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

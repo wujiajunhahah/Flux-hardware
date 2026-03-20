@@ -33,7 +33,7 @@ final class FluxService: ObservableObject {
     private let session: URLSession
 
     init() {
-        self.host = UserDefaults.standard.string(forKey: "flux_host") ?? "10.151.7.187"
+        self.host = UserDefaults.standard.string(forKey: "flux_host") ?? "127.0.0.1"
         self.port = UserDefaults.standard.integer(forKey: "flux_port").nonZero ?? 8000
 
         let config = URLSessionConfiguration.default
