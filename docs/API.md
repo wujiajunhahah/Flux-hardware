@@ -11,6 +11,9 @@ FluxChi exposes a versioned REST API, an SSE stream, and a WebSocket endpoint. A
 | REST | `GET /api/v1/*` | iOS polling, one-shot queries |
 | SSE | `GET /api/v1/stream` | iOS `URLSession`, real-time with auto-reconnect |
 | WebSocket | `ws://host/ws` | Web dashboard, lowest latency |
+| WebSocket | `ws://host/ws/vision` | Browser vision features → server (see [VISION-WEBSOCKET-SPEC.md](./VISION-WEBSOCKET-SPEC.md)) |
+
+`state_update` frames (WebSocket `/ws`, SSE `/api/v1/stream`, `GET /api/v1/state`) may include optional **`vision`** and **`fusion`**. The web dashboard uses **`fusion.stamina`** for the primary ring when **`fusion.source` ≠ `"none"`** and **`fusion.stamina`** is a number; otherwise it falls back to EMG **`stamina.value`**. When there is no EMG and no usable vision, **`fusion.stamina`** may be **`null`** (do not treat as 0–100). When **`vision`** is present, **`vision.stale`** (boolean) indicates whether the snapshot is outside the server’s fresh-frame window (stale vision is omitted from fusion).
 
 Base URL: `http://<host>:8000`
 
@@ -78,11 +81,16 @@ Always check `ok` before reading `data`.
 
 ### `GET /api/v1/transport` — Data source + serial ports
 
-用于网页仪表盘填充「USB 串口」下拉列表，并显示当前模式。
+用于网页仪表盘填充「USB 串口」下拉列表，并显示当前模式。**手环 EMG 与摄像头推流（`/ws/vision`）相互独立**，可同时启用；`data.vision` 反映视觉 WebSocket 连接数与是否在超时窗口内收到 `vision_frame`。
 
 查询参数：`include_all=true` 时额外返回 `serial_ports_other`（耳机/蓝牙虚拟串口等低优先级项）。
 
 `serial_ports` 已按启发式**排序并筛选**：优先 USB 串口桥（CP2102、CH340、FTDI 等），条目可含 `likely_emg_bridge`。连接 `serial` 后 `stream_stats` 会反映是否真正收到协议帧（`emg_frames` 长期为 0 多为选错端口或手环未发数）。
+
+| 字段 | 说明 |
+|------|------|
+| `vision` | `ws_clients`：当前 `/ws/vision` 连接数；`receiving`：约 2.5s 内是否收到帧；`last_frame_age_sec`：距上一帧秒数 |
+| `sources_note` | 人类可读提示：两路可并行 |
 
 ```json
 {
@@ -98,7 +106,9 @@ Always check `ok` before reading `data`.
     ],
     "serial_ports_other": [],
     "stream_stats": {"emg_frames": 1204, "total_frames": 1300, "imu_frames": 0, "dropped_frames": 0},
-    "signal_hint": "…"
+    "signal_hint": "…",
+    "vision": {"ws_clients": 1, "receiving": true, "last_frame_age_sec": 0.08},
+    "sources_note": "手环（EMG）与摄像头（/ws/vision）可同时启用，互不影响。"
   }
 }
 ```

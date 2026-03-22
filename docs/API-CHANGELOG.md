@@ -27,6 +27,22 @@
 
 ## 历史条目
 
+### 2026-03-20 — `fusion.stamina` 可空、`vision.stale`、眨眼统计修复
+
+- **Breaking（轻微）**：当 EMG 与 Vision 均不可用于融合时，`state_update` 内 **`fusion.stamina`** 为 **`null`**（不再使用占位 `50`）；`fusion.state` 仍为 **`unknown`**。客户端应用 `source === "none"` 或 `stamina == null` 时勿把主环当作有效 0–100 分。
+- **新增**：`state_update` 中若含 **`vision`**，增加布尔字段 **`vision.stale`**：服务端在约 **2.5s** 内未收到新 `vision_frame` 时为 `true`；**过期视觉不参与 `FusionEngine` 计算**（与仍附带的快照解耦，便于调试末帧）。
+- **Fixed**：`VisionEngine` 眨眼状态机在睁眼帧登记完整眨眼，**`blink_rate` / `blink_count`** 与 PERCLOS 一致可增长。
+- **Web 仪表盘**：无手环且无有效综合分时主环显示 **「—」**（不再回退为假 **100**）；融合卡片文案与过期提示对齐上述语义。
+
+### 2026-03-20 — WebSocket `/ws/vision` 与实时 `fusion` / `vision` 字段
+
+- **新增**：WebSocket 端点 `ws://{host}:{port}/ws/vision`，浏览器按 [VISION-WEBSOCKET-SPEC.md](./VISION-WEBSOCKET-SPEC.md) 发送 `vision_frame` JSON（不传视频帧）。
+- **实时推送**：`state_update`（`/ws`、`/api/v1/stream` 等与现有仪表盘一致）在存在视觉流时增加可选字段 **`vision`**（`VisionReading.to_dict()`）、**`fusion`**（`FusionEngine` 输出摘要）。无 EMG 数据源时仍会约每 200ms 广播仅含 `vision`/`fusion` 的空 EMG 占位帧，便于「只开摄像头」调试。
+- **静态页**：`/static/vision.html` + `/static/vision.js`（MediaPipe Tasks CDN）。
+- **Web 主仪表盘**：主续航环与趋势图优先显示 **`fusion.stamina`**；新增「综合续航」卡片（来源、权重、视觉摘要、告警标签）；窄屏样式优化（`max-width: 420px`）。
+- **`GET /api/v1/transport`** / **`GET /api/v1/status`**：增加 **`vision`**（`ws_clients`、`receiving`、`last_frame_age_sec`）与 **`sources_note`**；仪表盘分「手环 EMG」「摄像头」两行，二者可同时启用。
+- **摄像头 UX**：抽取 `web/static/vision-capture.js`；主仪表盘支持**本页**开启摄像头（先 `getUserMedia` 再加载模型与 WS，减少「授权后无反馈」）；`vision.html` 保留为独立调试页并含返回仪表盘链接。
+
 ### 2026-03-20 — 会话归档文件名与时间序列
 
 - **落盘**：`data/sessions/fluxchi_yyyyMMdd_HHmmss_{uuid}.json`（小写 UUID）；同 id 再保存时替换旧文件。

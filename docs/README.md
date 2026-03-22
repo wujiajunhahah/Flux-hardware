@@ -19,3 +19,5 @@
 ## 可选 / 专题（非主线交付）
 
 - [LeLamp-FluxChi-HCI-HRI.md](./LeLamp-FluxChi-HCI-HRI.md) — 与第三方表达机器人、ELEGNT 等扩展思路（**当前产品迭代可不读**）
+- [RESEARCH-Camera-Vision.md](./RESEARCH-Camera-Vision.md) — 摄像头 + EMG 多模态调研笔记（内部路线图）
+- [VISION-WEBSOCKET-SPEC.md](./VISION-WEBSOCKET-SPEC.md) — `/ws/vision` 客户端 JSON 格式（实现契约）
