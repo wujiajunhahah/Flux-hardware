@@ -137,6 +137,84 @@ body {
 a.session-dl { color: var(--green); font-size: 11px; margin-left: 4px; }
 .transport-msg { color: var(--dim); flex: 1 1 160px; min-width: 120px; }
 .transport-label { color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+.transport-bar .btn-vision {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+.transport-bar .btn-vision:hover { filter: brightness(1.12); }
+.transport-bar .btn-vision-accent {
+  background: var(--green);
+  color: #0a0a0a;
+  border: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.transport-bar .btn-vision-accent:hover { filter: brightness(1.08); }
+.transport-bar .btn-vision-accent:disabled { opacity: 0.45; cursor: not-allowed; }
+.dash-cam {
+  max-width: 320px;
+  max-height: 240px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: #111;
+  display: none;
+  object-fit: contain;
+}
+.dash-cam.on { display: block; }
+.dash-probe-canvas {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.dash-vision-status {
+  flex-basis: 100%;
+  font-size: 10px;
+  color: var(--dim);
+  line-height: 1.45;
+  margin: 0;
+}
+.vision-pill {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.vision-pill.on {
+  color: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 0 8px var(--green-glow);
+}
+.vision-pill.warn {
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+.vision-pill.off { color: var(--muted); }
+.vision-detail {
+  font-size: 10px;
+  color: var(--dim);
+  flex: 1 1 140px;
+  min-width: 100px;
+  line-height: 1.4;
+}
+.dual-source-note {
+  width: 100%;
+  flex-basis: 100%;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 0;
+}
 
 .hdr-label {
   font-size: 9px;
@@ -158,6 +236,20 @@ a.session-dl { color: var(--green); font-size: 11px; margin-left: 4px; }
     gap: 0 32px;
   }
   .full { grid-column: 1 / -1; }
+}
+
+/* 手机窄屏：顶栏与控件换行、圆环略缩小 */
+@media (max-width: 420px) {
+  .hdr { flex-wrap: wrap; row-gap: 8px; }
+  .hdr-right { margin-left: auto; }
+  .transport-bar, .session-bar { flex-wrap: wrap; row-gap: 8px; }
+  .ring-svg {
+    width: min(72vw, 220px);
+    height: min(72vw, 220px);
+  }
+  .ring-num { font-size: clamp(36px, 11vw, 60px); }
+  .emg-grid { grid-template-columns: repeat(4, 1fr); }
+  .emg-track { height: 36px; }
 }
 
 .sec {
@@ -412,6 +504,78 @@ a.session-dl { color: var(--green); font-size: 11px; margin-left: 4px; }
   to { opacity:1; transform:translateY(0); }
 }
 
+/* ── 综合续航（EMG + 视觉融合）── */
+.fusion-panel {
+  margin-top: 20px;
+  padding: 14px 14px 16px;
+  border: 1px solid var(--line);
+  background: rgba(215,25,33,0.03);
+  border-radius: 4px;
+}
+.fusion-panel.muted { background: transparent; border-color: var(--line); opacity: 0.85; }
+.fusion-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+.fusion-src {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--yellow);
+  padding: 4px 10px;
+  border: 1px solid var(--yellow);
+  border-radius: 2px;
+}
+.fusion-src.emg { color: var(--text); border-color: var(--muted); }
+.fusion-src.vis { color: var(--green); border-color: var(--green); }
+.fusion-src.none { color: var(--muted); border-color: var(--line); }
+.fusion-w {
+  font-size: 10px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.fusion-meta {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.55;
+  word-break: break-word;
+}
+.fusion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.fusion-chip {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 2px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.fusion-chip.warn { border-color: var(--yellow); color: var(--yellow); }
+.fusion-chip.crit { border-color: var(--red); color: var(--red); }
+.emg-compare {
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+.ring-sub {
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-top: 8px;
+  text-align: center;
+}
+
 .ftr {
   text-align:center; padding:24px 0;
   font-size:8px; color: var(--muted);
@@ -437,8 +601,9 @@ a.session-dl { color: var(--green); font-size: 11px; margin-left: 4px; }
 </div>
 
 <div class="transport-bar" id="transportBar">
-  <span class="transport-label">数据源</span>
-  <select id="transportMode" aria-label="数据源类型">
+  <p class="dual-source-note">手环与摄像头可同时启用：先「应用手环」，再于下一行「本页开启摄像头」（只弹一次系统授权，无需另开标签）。</p>
+  <span class="transport-label">手环 EMG</span>
+  <select id="transportMode" aria-label="手环数据源类型">
     <option value="idle">未连接</option>
     <option value="demo">演示数据</option>
     <option value="serial">USB 串口</option>
@@ -447,8 +612,20 @@ a.session-dl { color: var(--green); font-size: 11px; margin-left: 4px; }
   <select id="serialPortSelect" style="display:none;min-width:180px;" aria-label="串口列表"></select>
   <input type="text" id="serialPortManual" style="display:none;min-width:200px;" placeholder="仅多个串口时需要填写" autocomplete="off"/>
   <input type="text" id="bleAddrInput" style="display:none;min-width:200px;" placeholder="BLE 地址（留空=自动扫描）" autocomplete="off"/>
-  <button type="button" id="transportApplyBtn">应用</button>
+  <button type="button" id="transportApplyBtn">应用手环</button>
   <span class="transport-msg" id="transportMsg"></span>
+</div>
+
+<div class="transport-bar" id="visionTransportBar" style="position:relative;">
+  <span class="transport-label">摄像头</span>
+  <span class="vision-pill off" id="visionStatusPill">未推流</span>
+  <span class="vision-detail" id="visionDetail">点「本页开启」后先授权，再加载模型并连 WS</span>
+  <button type="button" class="btn-vision-accent" id="dashVisionStart">本页开启摄像头</button>
+  <button type="button" class="btn-vision" id="dashVisionStop" disabled>停止摄像头</button>
+  <button type="button" class="btn-vision" id="openVisionBtn">新标签调试</button>
+  <video id="dashCam" class="dash-cam" playsinline muted></video>
+  <canvas id="dashProbe" class="dash-probe-canvas" width="640" height="480"></canvas>
+  <p class="dash-vision-status" id="dashVisionInlineStatus"></p>
 </div>
 
 <div class="transport-bar session-bar">
@@ -473,8 +650,19 @@ a.session-dl { color: var(--green); font-size: 11px; margin-left: 4px; }
         <div class="ring-center">
           <div><span class="ring-num" id="ringNum">—</span><span class="ring-pct">%</span></div>
           <div class="ring-state" id="ringState">INITIALIZING</div>
+          <div class="ring-sub" id="ringSub">综合续航</div>
         </div>
       </div>
+    </div>
+
+    <div class="fusion-panel" id="fusionPanel">
+      <div class="fusion-head">
+        <span class="fusion-src none" id="fusionSrc">等待数据</span>
+        <span class="fusion-w" id="fusionW"></span>
+      </div>
+      <div class="fusion-meta" id="fusionMeta">开启手环与/或本页摄像头后，此处显示融合说明。</div>
+      <div class="fusion-chips" id="fusionChips"></div>
+      <div class="emg-compare" id="emgCompare"></div>
     </div>
 
     <div class="glyph-stats">
@@ -634,12 +822,29 @@ const ST = {
   focused:  {t:'FOCUSED',  c:'var(--red)',    gc:'var(--red-glow)'},
   fading:   {t:'FADING',   c:'var(--yellow)', gc:'var(--yellow-glow)'},
   depleted: {t:'DEPLETED', c:'var(--red)',    gc:'var(--red-glow)'},
-  recovering:{t:'RECOVER', c:'var(--green)',  gc:'var(--green-glow)'}
+  recovering:{t:'RECOVER', c:'var(--green)',  gc:'var(--green-glow)'},
+  unknown:  {t:'UNKNOWN',  c:'var(--muted)',  gc:'transparent'}
+};
+const FUSION_SRC = {
+  fused:       { t: '融合 · 手环+视觉', cls: '' },
+  emg_only:    { t: '仅手环', cls: 'emg' },
+  vision_only: { t: '仅摄像头', cls: 'vis' },
+  none:        { t: '无有效信号', cls: 'none' }
+};
+const ALERT_ZH = {
+  nod_detected: '低头瞌睡',
+  distracted: '分心',
+  yawning: '打哈欠',
+  yawn_frequent: '哈欠频繁',
+  perclos_high: '闭眼占比高',
+  blink_rate_high: '眨眼过快'
 };
 const REC = {keep_working:'CONTINUE', take_break:'BREAK', start_working:'READY', rest_more:'REST'};
 
 let ws, knownActs = new Set(), history = [];
 const MAX_H = 150;
+/** 与网关 VISION_FRAME_STALE_SEC 一致，仅用于文案 */
+const VISION_STALE_SEC = 2.5;
 
 const ringEl = document.getElementById('ringFg');
 const CIRC = 2 * Math.PI * 88;
@@ -741,9 +946,34 @@ const chart = new Chart(document.getElementById('trendChart'), {
         const s = d.stream_stats;
         msg.textContent = `接收：EMG ${s.emg_frames} 帧 · 总计 ${s.total_frames} · 丢 ${s.dropped_frames}`;
         msg.style.color = s.emg_frames === 0 ? 'var(--yellow)' : 'var(--green)';
-      } else {
-        msg.textContent = '';
+      } else if (d.mode === 'demo') {
+        msg.textContent = '演示 EMG 中（可与摄像头并行）';
+        msg.style.color = 'var(--green)';
+      } else if (d.mode === 'ble') {
+        msg.textContent = 'BLE 模式（可与摄像头并行）';
         msg.style.color = 'var(--dim)';
+      } else {
+        msg.textContent = d.mode === 'idle' ? '手环未连接（仍可单独开摄像头）' : '';
+        msg.style.color = 'var(--dim)';
+      }
+
+      const vis = d.vision;
+      const pill = document.getElementById('visionStatusPill');
+      const vdet = document.getElementById('visionDetail');
+      if (pill && vdet) {
+        if (vis && vis.receiving) {
+          pill.textContent = '推流中';
+          pill.className = 'vision-pill on';
+          vdet.textContent = 'WS ' + (vis.ws_clients | 0) + ' · 最近帧 ' + (vis.last_frame_age_sec != null ? vis.last_frame_age_sec + 's 前' : '—');
+        } else if (vis && vis.ws_clients > 0) {
+          pill.textContent = '已连接';
+          pill.className = 'vision-pill warn';
+          vdet.textContent = vis.ws_clients + ' 路 WS，暂无帧（采集页点「开启摄像头」）';
+        } else {
+          pill.textContent = '未推流';
+          pill.className = 'vision-pill off';
+          vdet.textContent = '点「本页开启摄像头」或「新标签调试」';
+        }
       }
     } catch (e) {
       msg.textContent = e.message || String(e);
@@ -784,6 +1014,10 @@ const chart = new Chart(document.getElementById('trendChart'), {
       msg.textContent = e.message || String(e);
       msg.style.color = 'var(--red)';
     }
+  });
+
+  document.getElementById('openVisionBtn').addEventListener('click', () => {
+    window.open('/static/vision.html', '_blank', 'noopener,noreferrer');
   });
 
   await refreshTransport();
@@ -851,19 +1085,106 @@ function connect(){
   };
 }
 
+function renderFusionPanel(d) {
+  const fu = d.fusion;
+  const vis = d.vision;
+  const srcEl = document.getElementById('fusionSrc');
+  const wEl = document.getElementById('fusionW');
+  const metaEl = document.getElementById('fusionMeta');
+  const chipsEl = document.getElementById('fusionChips');
+  const cmpEl = document.getElementById('emgCompare');
+  const panel = document.getElementById('fusionPanel');
+
+  if (!fu) {
+    srcEl.textContent = '等待数据';
+    srcEl.className = 'fusion-src none';
+    wEl.textContent = '';
+    metaEl.textContent = '未收到 fusion 字段，请确认网关为最新版本。';
+    chipsEl.innerHTML = '';
+    cmpEl.textContent = '';
+    panel.classList.add('muted');
+    return;
+  }
+  panel.classList.remove('muted');
+
+  const srcKey = fu.source || 'none';
+  const sl = FUSION_SRC[srcKey] || FUSION_SRC.none;
+  srcEl.textContent = sl.t;
+  srcEl.className = 'fusion-src ' + sl.cls;
+
+  if (srcKey === 'fused' && fu.emg_weight != null && fu.vision_weight != null) {
+    wEl.textContent = '权重 手环 ' + Math.round(fu.emg_weight * 100) + '% · 视觉 ' + Math.round(fu.vision_weight * 100) + '%';
+  } else {
+    wEl.textContent = '';
+  }
+
+  const lines = [];
+  if (vis) {
+    if (vis.stale) {
+      lines.push('<span style="color:var(--yellow)">视觉快照已过期（约 ' + VISION_STALE_SEC + 's 内无新帧），不参与综合分。</span>');
+    }
+    const fq = vis.fatigue_score != null ? (vis.fatigue_score * 100).toFixed(0) : '—';
+    const q = vis.quality != null ? (vis.quality * 100).toFixed(0) : '—';
+    lines.push('视觉 疲劳 ' + fq + '% · 信号质量 ' + q + '% · ' + (vis.alertness || '—'));
+    if (vis.perclos != null) {
+      const br = vis.blink_rate != null ? vis.blink_rate.toFixed(0) + '/min' : '—';
+      lines.push('PERCLOS ' + (vis.perclos * 100).toFixed(0) + '% · 眨眼 ' + br);
+    }
+  } else {
+    lines.push('尚无 vision 数据：可在本页开启摄像头，或打开 /static/vision.html 独立调试。');
+  }
+  metaEl.innerHTML = lines.join('<br/>');
+
+  chipsEl.innerHTML = '';
+  const crit = { nod_detected: 1, perclos_high: 1, yawn_frequent: 1 };
+  const warn = { distracted: 1, yawning: 1, blink_rate_high: 1 };
+  for (const a of (fu.alerts || [])) {
+    const chip = document.createElement('span');
+    let cls = 'fusion-chip';
+    if (crit[a]) cls += ' crit';
+    else if (warn[a]) cls += ' warn';
+    chip.className = cls;
+    chip.textContent = ALERT_ZH[a] || a.replace(/_/g, ' ');
+    chipsEl.appendChild(chip);
+  }
+
+  const emgV = fu.emg_stamina;
+  const fus = fu.stamina;
+  if (srcKey === 'fused' && emgV != null && typeof fus === 'number' && Math.abs(fus - emgV) >= 1) {
+    cmpEl.textContent = '手环 ' + Math.round(emgV) + '% → 综合 ' + Math.round(fus) + '%';
+  } else if (srcKey === 'vision_only') {
+    cmpEl.textContent = '当前无手环读数，综合分仅来自摄像头估计。';
+  } else {
+    cmpEl.textContent = '';
+  }
+}
+
 function render(d){
   const st = d.stamina || {};
   const dec = d.decision || {};
-  const val = st.value != null ? st.value : 100;
-  const state = st.state || 'focused';
-  const info = ST[state] || ST.focused;
+  const fu = d.fusion || null;
+  const emgVal = st.value != null ? st.value : null;
+  const fusNum = (fu && fu.source !== 'none' && typeof fu.stamina === 'number') ? fu.stamina : null;
+  const displayVal = fusNum != null ? fusNum : emgVal;
+  const displayState =
+    fusNum != null ? (fu.state || 'focused')
+    : emgVal != null ? (st.state || 'focused')
+    : 'unknown';
+  const info = ST[displayState] || ST.focused;
 
-  // Ring
-  ringEl.style.strokeDashoffset = CIRC * (1 - val / 100);
+  document.getElementById('ringSub').textContent =
+    fusNum != null ? '综合续航' : (emgVal != null ? '手环续航' : '等待数据');
+
+  // Ring：有有效综合分或手环分才画弧；否则空环 + 「—」
+  if (displayVal == null) {
+    ringEl.style.strokeDashoffset = CIRC;
+  } else {
+    ringEl.style.strokeDashoffset = CIRC * (1 - displayVal / 100);
+  }
   ringEl.style.stroke = info.c;
   ringEl.style.filter = `drop-shadow(0 0 8px ${info.gc})`;
-  document.getElementById('ringNum').textContent = Math.round(val);
-  document.getElementById('ringNum').style.textShadow = `0 0 24px ${info.gc}`;
+  document.getElementById('ringNum').textContent = displayVal == null ? '—' : String(Math.round(displayVal));
+  document.getElementById('ringNum').style.textShadow = displayVal == null ? 'none' : `0 0 24px ${info.gc}`;
   const rs = document.getElementById('ringState');
   rs.textContent = info.t;
   rs.style.color = info.c;
@@ -871,7 +1192,8 @@ function render(d){
   // Stats
   document.getElementById('sWork').textContent = Math.round(dec.continuous_work_min||0);
   document.getElementById('sTotal').textContent = Math.round(dec.total_work_min||0);
-  if(state === 'recovering'){
+  const stState = st.state || 'focused';
+  if(stState === 'recovering'){
     document.getElementById('sSuggest').textContent = Math.round(st.suggested_break_min||0);
     document.getElementById('sSugLbl').textContent = 'REST';
   } else {
@@ -928,12 +1250,16 @@ function render(d){
     if(ev) ev.textContent = Math.round(v);
   }
 
-  // Trend
-  history.push(val);
-  if(history.length > MAX_H) history.shift();
-  chart.data.labels = history.map((_,i)=>i);
-  chart.data.datasets[0].data = history;
-  chart.update();
+  // Trend（与主环一致：仅在有数值时入队）
+  if (displayVal != null) {
+    history.push(displayVal);
+    if(history.length > MAX_H) history.shift();
+    chart.data.labels = history.map((_,i)=>i);
+    chart.data.datasets[0].data = history;
+    chart.update();
+  }
+
+  renderFusionPanel(d);
 
   // Alerts
   if(dec.urgency >= 0.5){
@@ -950,6 +1276,55 @@ function render(d){
 }
 
 connect();
+</script>
+<script type="module">
+import { createVisionCapture } from "/static/vision-capture.js";
+
+const video = document.getElementById("dashCam");
+const canvas = document.getElementById("dashProbe");
+const btnStart = document.getElementById("dashVisionStart");
+const btnStop = document.getElementById("dashVisionStop");
+const st = document.getElementById("dashVisionInlineStatus");
+if (video && canvas && btnStart && btnStop && st) {
+  let lineCam = "";
+  let lineWs = "WS 未连接";
+  function refreshSt() {
+    st.textContent = [lineCam, lineWs].filter(Boolean).join(" · ");
+  }
+  const vc = createVisionCapture({
+    video,
+    canvas,
+    onStatus: (t) => {
+      lineCam = t;
+      refreshSt();
+    },
+    onWsState: (t) => {
+      lineWs = "WS " + t;
+      refreshSt();
+    },
+  });
+  btnStart.addEventListener("click", async () => {
+    btnStart.disabled = true;
+    try {
+      await vc.start();
+      video.classList.add("on");
+      btnStop.disabled = false;
+    } catch (e) {
+      lineCam = String(e.message || e);
+      refreshSt();
+      btnStart.disabled = false;
+    }
+  });
+  btnStop.addEventListener("click", () => {
+    vc.stop();
+    video.classList.remove("on");
+    btnStop.disabled = true;
+    btnStart.disabled = false;
+    lineCam = "";
+    lineWs = "WS 未连接";
+    refreshSt();
+  });
+}
 </script>
 </body>
 </html>

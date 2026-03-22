@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FluxChi Vision — 摄像头推送</title>
+  <style>
+    :root { --bg: #0a0a0a; --fg: #ccc; --accent: #d71921; --line: #222; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      margin: 0;
+      padding: 16px;
+      max-width: 720px;
+    }
+    h1 { font-size: 1rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    p.hint { font-size: 0.85rem; color: #666; line-height: 1.5; }
+    video {
+      width: 100%;
+      max-height: 360px;
+      background: #111;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    canvas#probe { display: none; }
+    .row { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.secondary { background: #333; color: #eee; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    #status {
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      background: #111;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+      min-height: 80px;
+    }
+    a { color: #8ab4f8; }
+  </style>
+</head>
+<body>
+  <h1>FluxChi Vision</h1>
+  <p class="hint">
+    推荐在 <strong>仪表盘同页</strong> 开启摄像头（无需多标签）。本页供独立调试；流程：先弹出<strong>一次</strong>摄像头授权 → 再加载模型 → 再连 WebSocket。
+  </p>
+  <p class="hint"><a href="/">← 返回主仪表盘</a></p>
+  <video id="cam" playsinline muted></video>
+  <canvas id="probe" width="640" height="480"></canvas>
+  <div class="row">
+    <button type="button" id="btnStart">开启摄像头并推流</button>
+    <button type="button" class="secondary" id="btnStop" disabled>停止</button>
+    <span id="wsState">WS: 未连接</span>
+  </div>
+  <pre id="status">等待启动…</pre>
+  <script type="module">
+    import { createVisionCapture } from "/static/vision-capture.js";
+
+    const video = document.getElementById("cam");
+    const canvas = document.getElementById("probe");
+    const btnStart = document.getElementById("btnStart");
+    const btnStop = document.getElementById("btnStop");
+    const wsState = document.getElementById("wsState");
+    const statusEl = document.getElementById("status");
+
+    const vc = createVisionCapture({
+      video,
+      canvas,
+      onStatus: (t) => {
+        statusEl.textContent = t;
+      },
+      onWsState: (t) => {
+        wsState.textContent = "WS: " + t;
+      },
+    });
+
+    btnStart.addEventListener("click", async () => {
+      btnStart.disabled = true;
+      try {
+        await vc.start();
+        btnStop.disabled = false;
+      } catch (e) {
+        statusEl.textContent = String(e.message || e);
+        btnStart.disabled = false;
+      }
+    });
+
+    btnStop.addEventListener("click", () => {
+      vc.stop();
+      btnStop.disabled = true;
+      btnStart.disabled = false;
+    });
+  </script>
+</body>
+</html>

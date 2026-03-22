@@ -6,6 +6,7 @@ RESTful API + SSE + WebSocket 三种接入方式。
   REST   — iOS / 第三方轮询       /api/v1/*
   SSE    — iOS URLSession 实时流  /api/v1/stream
   WS     — Web 仪表盘实时推送      /ws
+  WS     — 浏览器视觉特征流        /ws/vision  (见 docs/VISION-WEBSOCKET-SPEC.md)
 
 用法：
   python web/app.py --port /dev/tty.usbserial-XXXX
@@ -47,6 +48,11 @@ from src.session_insight import session_insight_text
 from src.session_store import list_sessions_meta, load_session, save_session_package, session_file_path
 from src.energy import StaminaEngine, StaminaState
 from src.decision import DecisionEngine
+from src.fusion_engine import FusionEngine
+from src.vision_engine import VisionEngine
+from src.modules.emg_module import EmgModule
+from src.modules.vision_module import VisionModule
+from src.context_bus import ContextBus
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -78,6 +84,14 @@ onnx_config: Optional[dict] = None
 stamina_engine: Optional[StaminaEngine] = None
 decision_engine: Optional[DecisionEngine] = None
 active_connections: Set[WebSocket] = set()
+vision_engine: Optional[VisionEngine] = None
+fusion_engine: Optional[FusionEngine] = None
+emg_module: Optional[EmgModule] = None
+vision_module: Optional[VisionModule] = None
+context_bus: Optional[ContextBus] = None
+vision_ws_connections: Set[WebSocket] = set()
+_last_vision_frame_ts: float = 0.0
+VISION_FRAME_STALE_SEC = 2.5
 demo_mode = False
 speed_multiplier = 1.0
 timeline: List[Dict] = []
@@ -413,6 +427,23 @@ def _stream_signal_stats() -> Optional[Dict[str, object]]:
         return None
 
 
+def _vision_signal_summary() -> Dict[str, Any]:
+    """供 /api/v1/transport 与 status：摄像头流与手环数据源独立。"""
+    now = time.time()
+    n = len(vision_ws_connections)
+    if _last_vision_frame_ts <= 0:
+        age = None
+        receiving = False
+    else:
+        age = round(now - _last_vision_frame_ts, 2)
+        receiving = (now - _last_vision_frame_ts) < VISION_FRAME_STALE_SEC
+    return {
+        "ws_clients": n,
+        "receiving": receiving,
+        "last_frame_age_sec": age,
+    }
+
+
 def _transport_mode_label() -> str:
     if stream is None:
         return "idle"
@@ -546,6 +577,7 @@ async def v1_status():
         "channels": CHANNEL_COUNT,
         "uptime_sec": round(time.time() - _server_start, 1),
         "websocket_clients": len(active_connections),
+        "vision": _vision_signal_summary(),
     })
 
 
@@ -576,6 +608,8 @@ async def v1_transport(
     stats = _stream_signal_stats()
     if stats is not None:
         data["stream_stats"] = stats
+    data["vision"] = _vision_signal_summary()
+    data["sources_note"] = "手环（EMG）与摄像头（/ws/vision）可同时启用，互不影响。"
     return _ok(data)
 
 
@@ -989,13 +1023,153 @@ async def broadcast(data: dict):
     active_connections.difference_update(dead)
 
 
+def _ensure_vision_stack() -> None:
+    global vision_engine, fusion_engine, vision_module, context_bus
+    if context_bus is None:
+        context_bus = ContextBus()
+    if vision_engine is None:
+        vision_engine = VisionEngine()
+    if vision_module is None:
+        vision_module = VisionModule(engine=vision_engine, context_bus=context_bus)
+    if fusion_engine is None:
+        fusion_engine = FusionEngine(context_bus=context_bus)
+        fusion_engine.register(vision_module)
+
+
+@app.websocket("/ws/vision")
+async def websocket_vision(ws: WebSocket):
+    """浏览器 MediaPipe → vision_frame JSON；算法见 src/vision_engine.py。"""
+    global _last_vision_frame_ts
+    await ws.accept()
+    _ensure_vision_stack()
+    assert vision_engine is not None
+    vision_ws_connections.add(ws)
+    try:
+        while True:
+            msg = await ws.receive_text()
+            try:
+                data = json.loads(msg)
+            except json.JSONDecodeError:
+                await ws.send_json({"type": "error", "code": "bad_json", "message": "invalid JSON"})
+                continue
+            if data.get("type") == "ping":
+                await ws.send_json({"type": "pong"})
+                continue
+            vision_engine.update(data)
+            if data.get("type") == "vision_frame":
+                _last_vision_frame_ts = time.time()
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"[vision ws] {e}")
+    finally:
+        vision_ws_connections.discard(ws)
+
+
+def _append_vision_and_fusion(payload: dict, stamina_reading) -> None:
+    """写入 vision 快照与 EMG+Vision 融合结果。
+
+    通过正式的 EmgModule / VisionModule 注入 ModuleReading，
+    再调 FusionEngine.fuse() 完成 N-source 融合。
+    """
+    _ensure_vision_stack()
+    now = time.time()
+
+    # ── EMG 侧: 将 StaminaReading 写入 EmgModule ──
+    if emg_module is not None and stamina_reading is not None:
+        from src.sensor_module import ModuleReading
+        emg_module._set_latest(ModuleReading(
+            module_id="emg",
+            stamina=stamina_reading.stamina,
+            quality=1.0,
+            dimensions={
+                "consistency": stamina_reading.consistency,
+                "tension": stamina_reading.tension,
+                "fatigue_mdf": stamina_reading.fatigue,
+            },
+            metadata={"state": stamina_reading.state.value},
+            alerts=[],
+            timestamp=stamina_reading.timestamp,
+        ))
+    elif emg_module is not None:
+        emg_module._latest = None
+
+    # ── Vision 侧: 将 VisionReading 写入 VisionModule ──
+    vr = vision_engine.latest if vision_engine else None
+    vision_stale = (
+        vr is not None
+        and (
+            _last_vision_frame_ts <= 0
+            or (now - _last_vision_frame_ts) >= VISION_FRAME_STALE_SEC
+        )
+    )
+    if vr:
+        vd = vr.to_dict()
+        vd["stale"] = vision_stale
+        payload["vision"] = vd
+
+    if vision_module is not None and vr is not None and not vision_stale:
+        from src.sensor_module import ModuleReading
+        vision_module._set_latest(ModuleReading(
+            module_id="vision",
+            stamina=(1.0 - vr.fatigue_score) * 100.0,
+            quality=vr.quality,
+            dimensions={
+                "perclos": vr.perclos,
+                "blink_rate": vr.blink_rate,
+                "fatigue_score": vr.fatigue_score,
+            },
+            metadata={
+                "alertness_level": vr.alertness_level,
+                "face_present": vr.face_present,
+                "head_nod_detected": vr.head_nod_detected,
+                "head_distracted": vr.head_distracted,
+                "yawn_active": vr.yawn_active,
+            },
+            alerts=_collect_vision_alerts(vr),
+            timestamp=vr.timestamp,
+        ))
+    elif vision_module is not None:
+        vision_module._latest = None
+
+    # ── 融合 ──
+    if fusion_engine:
+        payload["fusion"] = fusion_engine.fuse(now).to_dict()
+
+
+def _collect_vision_alerts(vision) -> list:
+    """从 VisionReading 提取告警列表。"""
+    alerts = []
+    if vision.head_nod_detected:
+        alerts.append("nod_detected")
+    if vision.head_distracted:
+        alerts.append("distracted")
+    if vision.yawn_active:
+        alerts.append("yawning")
+    if vision.yawn_count_window >= 3:
+        alerts.append("yawn_frequent")
+    if vision.perclos > 0.40:
+        alerts.append("perclos_severe")
+    elif vision.perclos > 0.25:
+        alerts.append("perclos_high")
+    if vision.blink_rate > 25:
+        alerts.append("blink_rate_high")
+    return alerts
+
+
 # ─── Processing loop ────────────────────────────────────────
 async def processing_loop():
-    global stamina_engine, decision_engine, _emg_buffer_reset_requested
+    global stamina_engine, decision_engine, _emg_buffer_reset_requested, emg_module
 
     window_samples = int(WINDOW_SEC * SAMPLE_RATE)
     stamina_engine = StaminaEngine(sample_rate=SAMPLE_RATE, speed=speed_multiplier)
     decision_engine = DecisionEngine()
+
+    # 注册 EMG 模块到融合引擎
+    _ensure_vision_stack()
+    emg_module = EmgModule(engine=stamina_engine, context_bus=context_bus)
+    if fusion_engine is not None:
+        fusion_engine.register(emg_module)
 
     emg_buffer = np.zeros((0, CHANNEL_COUNT))
     last_push = time.time()
@@ -1009,7 +1183,21 @@ async def processing_loop():
             _emg_buffer_reset_requested = False
 
         if stream is None:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.2)
+            now = time.time()
+            idle_payload = {
+                "type": "state_update",
+                "timestamp": now,
+                "activity": "idle",
+                "confidence": 0.0,
+                "probabilities": {},
+                "rms": [0.0] * CHANNEL_COUNT,
+                "emg_sample_count": 0,
+            }
+            _append_vision_and_fusion(idle_payload, None)
+            latest_payload.clear()
+            latest_payload.update(idle_payload)
+            await broadcast(idle_payload)
             continue
 
         samples = stream.consume_samples(max_items=512)
@@ -1114,6 +1302,8 @@ async def processing_loop():
                 if len(timeline) > 200:
                     timeline[:] = timeline[-100:]
 
+        _append_vision_and_fusion(payload, stamina_reading)
+
         latest_payload.clear()
         latest_payload.update(payload)
 
@@ -1125,6 +1315,7 @@ async def processing_loop():
 
 @app.on_event("startup")
 async def startup():
+    _ensure_vision_stack()
     asyncio.create_task(processing_loop())
 
 
@@ -1208,6 +1399,7 @@ def main():
     print(f"  Swagger     http://localhost:{p}/docs")
     print(f"  SSE stream  http://localhost:{p}/api/v1/stream")
     print(f"  Pulse       http://localhost:{p}/api/v1/pulse")
+    print(f"  Vision      http://localhost:{p}/static/vision.html  (调试页；主仪表盘已内置摄像头)")
     print(f"  Mode: {_transport_mode_label()}  Speed: {speed_multiplier}x\n")
     uvicorn.run(app, host=args.host, port=p, log_level="warning")
 
