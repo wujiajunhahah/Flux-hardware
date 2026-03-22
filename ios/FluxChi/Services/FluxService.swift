@@ -35,10 +35,38 @@ final class FluxService: ObservableObject {
     /// 个性化管理器引用，由 App 层注入
     weak var personalization: PersonalizationManager?
 
-    /// 经过个性化校准的 stamina 值
+    /// 优先使用服务端 **融合** 续航（与 Web 主环一致），否则 EMG `stamina`；无有效值时为 `nil`。
+    var personalizedDisplayStamina: Double? {
+        guard let state else { return nil }
+        if let fusion = state.fusion,
+           fusion.source != "none",
+           let fused = fusion.stamina {
+            return personalization?.personalizedStamina(fused) ?? fused
+        }
+        if let raw = state.stamina?.value {
+            return personalization?.personalizedStamina(raw) ?? raw
+        }
+        return nil
+    }
+
+    /// 向后兼容：无有效综合分时回退 0（UI 层应优先用 `personalizedDisplayStamina` + 占位符）
     var personalizedStaminaValue: Double {
-        guard let raw = state?.stamina?.value else { return 0 }
-        return personalization?.personalizedStamina(raw) ?? raw
+        personalizedDisplayStamina ?? 0
+    }
+
+    /// 与 `personalizedDisplayStamina` 配套的展示用状态（融合优先）
+    var displayStaminaState: StaminaState {
+        guard let state else { return .focused }
+        if let fusion = state.fusion,
+           fusion.source != "none",
+           fusion.stamina != nil,
+           let s = StaminaState(rawValue: fusion.state) {
+            return s
+        }
+        if let emg = state.stamina, let s = StaminaState(rawValue: emg.state) {
+            return s
+        }
+        return .focused
     }
 
     var baseURL: URL {

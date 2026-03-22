@@ -72,27 +72,44 @@ struct FluxChiApp: App {
                         service?.isConnected = true
                         service?.connectionError = nil
 
-                        if let s = state.stamina {
-                            alertManager?.evaluate(
-                                stamina: s.value,
-                                state: s.state,
-                                continuousWorkMin: s.continuousWorkMin
-                            )
-
-                            liveActivityManager?.updateActivity(
-                                stamina: s.value,
-                                state: s.state,
-                                activity: state.activity,
-                                consistency: s.consistency,
-                                tension: s.tension,
-                                fatigue: s.fatigue
-                            )
-                        }
+                        guard let svc = service,
+                              let stVal = svc.personalizedDisplayStamina else { return }
+                        let stRaw = svc.displayStaminaState.rawValue
+                        let contMin = state.stamina?.continuousWorkMin ?? 0
+                        let emg = state.stamina
+                        alertManager?.evaluate(stamina: stVal, state: stRaw, continuousWorkMin: contMin)
+                        liveActivityManager?.updateActivity(
+                            stamina: stVal,
+                            state: stRaw,
+                            activity: state.activity,
+                            consistency: emg?.consistency ?? 0,
+                            tension: emg?.tension ?? 0,
+                            fatigue: emg?.fatigue ?? 0
+                        )
                     }
                 }
             }
             .onChange(of: bleManager.isConnected) { _, connected in
                 if connected { service.stopPolling() } else { service.startPolling() }
+            }
+            .onChange(of: service.state?.timestamp) { _, _ in
+                guard !bleManager.isConnected, let s = service.state else { return }
+                guard let stVal = service.personalizedDisplayStamina else { return }
+                let stRaw = service.displayStaminaState.rawValue
+                let emg = s.stamina
+                alertManager.evaluate(
+                    stamina: stVal,
+                    state: stRaw,
+                    continuousWorkMin: emg?.continuousWorkMin ?? 0
+                )
+                liveActivityManager.updateActivity(
+                    stamina: stVal,
+                    state: stRaw,
+                    activity: s.activity,
+                    consistency: emg?.consistency ?? 0,
+                    tension: emg?.tension ?? 0,
+                    fatigue: emg?.fatigue ?? 0
+                )
             }
             .alert(alertManager.alertTitle, isPresented: $alertManager.showBreakAlert) {
                 Button("休息一下") { alertManager.dismissAlert() }

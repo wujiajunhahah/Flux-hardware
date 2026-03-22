@@ -15,9 +15,10 @@ private enum BLEConstants {
     static let devicePrefix  = "WL"
     static let emgFlag: UInt8 = 0xAA
     static let imuFlag: UInt8 = 0xBB
-    static let channelCount  = 6
-    /// 脱落检测：RMS 阈值（所有通道低于此值视为极低信号）
-    static let detachRMSThreshold: Double = 0.5
+    /// 与固件一致：最多 8 路 24-bit EMG（µV）；旧版 6 路仍兼容
+    static let channelCount  = 8
+    /// 脱落检测：µV 尺度下全通道 RMS 极低（与 Python 流直读 µV 对齐）
+    static let detachRMSThreshold: Double = 25.0
     /// 脱落检测：需持续低信号的帧数（约 30 秒，50帧/s × 30s ÷ 每50帧检测一次 = 30次）
     static let detachConsecutiveCount = 30
 }
@@ -39,9 +40,9 @@ final class BLEManager: NSObject, ObservableObject {
     @Published var deviceRSSI: [UUID: Int] = [:]
     @Published var connectedDeviceName: String?
     @Published var isScanning = false
-    @Published var latestRMS: [Double] = Array(repeating: 0, count: 6)
+    @Published var latestRMS: [Double] = Array(repeating: 0, count: 8)
     @Published var emgFrameCount: Int = 0
-    @Published var activeChannelCount: Int = 6
+    @Published var activeChannelCount: Int = 8
     @Published var batteryLevel: Int? // 0-100，nil = 未知
 
     var isConnected: Bool { peripheralState == .connected }
@@ -199,7 +200,9 @@ final class BLEManager: NSObject, ObservableObject {
                 totalWorkMin: r.totalWorkMin,
                 suggestedWorkMin: r.suggestedWorkMin,
                 suggestedBreakMin: r.suggestedBreakMin
-            )
+            ),
+            fusion: nil,
+            vision: nil
         )
         onStateUpdate?(state)
     }
@@ -220,10 +223,11 @@ final class BLEManager: NSObject, ObservableObject {
         }
     }
 
+    /// WAVELETECH：24-bit 大端有符号整数，**值即为 µV**（与 `src/stream.py` 一致，不再做 V_ref/Gain 换算）
     private static func decodeSigned24(_ b1: Int, _ b2: Int, _ b3: Int) -> Double {
         var value = (b1 << 16) | (b2 << 8) | b3
         if value & 0x800000 != 0 { value -= 1 << 24 }
-        return Double(value) / 8_388_607.0 * 4.5 / 1200.0 * 1_000_000.0
+        return Double(value)
     }
 }
 
@@ -349,7 +353,7 @@ final class EMGRingBuffer {
     }
 
     var nChannels: Int {
-        buffer.first(where: { !$0.isEmpty })?.count ?? 6
+        buffer.first(where: { !$0.isEmpty })?.count ?? 8
     }
 
     func rms() -> [Double] {

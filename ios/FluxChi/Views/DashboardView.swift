@@ -56,9 +56,8 @@ struct DashboardView: View {
     private var stamina: StaminaData? { service.state?.stamina }
     private var decision: DecisionData? { service.state?.decision }
     private var staminaValue: Double { service.personalizedStaminaValue }
-    private var staminaState: StaminaState {
-        StaminaState(rawValue: stamina?.state ?? "focused") ?? .focused
-    }
+    private var ringStaminaValue: Double? { service.personalizedDisplayStamina }
+    private var staminaState: StaminaState { service.displayStaminaState }
     private var isLive: Bool { service.isConnected || bleManager.isConnected }
 
     private var isCalibratedToday: Bool {
@@ -86,7 +85,7 @@ struct DashboardView: View {
                     }
 
                     if isLive {
-                        StaminaRingView(value: staminaValue, state: staminaState)
+                        StaminaRingView(value: ringStaminaValue, state: staminaState)
                             .drawingGroup()
                             .padding(.vertical, 4)
                     } else {

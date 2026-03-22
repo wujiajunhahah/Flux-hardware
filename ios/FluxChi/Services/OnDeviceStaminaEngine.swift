@@ -161,7 +161,8 @@ final class OnDeviceStaminaEngine {
         // --- D3: Fatigue (MDF spectral decline) ---
         let fat: Double
         if let ch = rawChannels, !ch.isEmpty, ch[0].count >= 32 {
-            fat = d3Fatigue(ch, timestamp)
+            // BLE 有效采样率远低于名义 1kHz；用 ~320Hz 尺度减轻 MDF 频偏（与网关估率同量级）
+            fat = d3Fatigue(ch, timestamp, sampleRate: 320)
         } else {
             let timeFat = totalSec > 0 ? min(totalSec / 60 / 45, 0.8) : 0
             let varianceFat = isCalibrated && baselineVariance > 0
@@ -269,11 +270,11 @@ final class OnDeviceStaminaEngine {
 
     // MARK: - D3 Fatigue (MDF spectral decline)
 
-    private func d3Fatigue(_ channels: [[Double]], _ ts: Double) -> Double {
+    private func d3Fatigue(_ channels: [[Double]], _ ts: Double, sampleRate: Double) -> Double {
         var mdfs = [Double]()
         for ch in channels {
             guard ch.count >= 32 else { continue }
-            let mdf = Self.fftMDF(ch, sampleRate: 1000)
+            let mdf = Self.fftMDF(ch, sampleRate: sampleRate)
             if mdf > 0 { mdfs.append(mdf) }
         }
         guard !mdfs.isEmpty else { return 0 }

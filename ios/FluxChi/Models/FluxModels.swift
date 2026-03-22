@@ -21,15 +21,77 @@ struct FluxState: Decodable, Equatable {
     let emgSampleCount: Int?
     let stamina: StaminaData?
     let decision: DecisionData?
+    /// 与 Web 仪表盘一致：多源融合结果（无手环仅摄像头时尤为关键）
+    let fusion: FusionPayload?
+    /// 视觉快照 + `stale`（后端注入）
+    let vision: VisionPayload?
 
     enum CodingKeys: String, CodingKey {
         case timestamp, activity, confidence, probabilities, rms
         case emgSampleCount = "emg_sample_count"
-        case stamina, decision
+        case stamina, decision, fusion, vision
     }
 
     static func == (lhs: FluxState, rhs: FluxState) -> Bool {
         lhs.timestamp == rhs.timestamp
+    }
+}
+
+// MARK: - Fusion (matches FusedReading.to_dict snake_case)
+
+struct FusionPayload: Decodable, Equatable {
+    let stamina: Double?
+    let state: String
+    let source: String
+    let alerts: [String]?
+    let emgWeight: Double?
+    let visionWeight: Double?
+    let visionFatigue: Double?
+    let visionQuality: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case stamina, state, source, alerts
+        case emgWeight = "emg_weight"
+        case visionWeight = "vision_weight"
+        case visionFatigue = "vision_fatigue"
+        case visionQuality = "vision_quality"
+    }
+}
+
+// MARK: - Vision snapshot (+ stale)
+
+struct VisionPayload: Decodable, Equatable {
+    let perclos: Double?
+    let blinkRate: Double?
+    let blinkCount: Int?
+    let headPitchMean: Double?
+    let headYawMean: Double?
+    let headNod: Bool?
+    let headDistracted: Bool?
+    let yawnCount: Int?
+    let yawnActive: Bool?
+    let fatigueScore: Double?
+    let alertness: String?
+    let quality: Double?
+    let facePresent: Bool?
+    let frames: Int?
+    let timestamp: TimeInterval?
+    let stale: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case perclos
+        case blinkRate = "blink_rate"
+        case blinkCount = "blink_count"
+        case headPitchMean = "head_pitch_mean"
+        case headYawMean = "head_yaw_mean"
+        case headNod = "head_nod"
+        case headDistracted = "head_distracted"
+        case yawnCount = "yawn_count"
+        case yawnActive = "yawn_active"
+        case fatigueScore = "fatigue_score"
+        case alertness, quality
+        case facePresent = "face_present"
+        case frames, timestamp, stale
     }
 }
 

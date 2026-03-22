@@ -399,6 +399,8 @@ class SSEDelegate: NSObject, URLSessionDataDelegate {
 
 ## iOS Integration Guide
 
+与网页 WebSocket `/ws`、SSE `/api/v1/stream` 使用**同一 `state_update` JSON**。除 `stamina`（EMG）外，网关还可附带 **`fusion`**（多源融合）、**`vision`**（视觉快照 + **`stale`**）。**推荐**：主续航 UI 在 `fusion.source != "none"` 且 `fusion.stamina != nil` 时优先显示 **`fusion.stamina`**，否则回退 **`stamina.value`**；均无则显示占位（如「—」）。不在 iOS 内复刻浏览器摄像头；视觉流仍由网页推至 `/ws/vision`。
+
 ### Data Models (Codable)
 
 ```swift
@@ -411,14 +413,30 @@ struct FluxResponse<T: Codable>: Codable {
 }
 
 struct FluxState: Codable {
-    let type: String
     let timestamp: Double
     let activity: String
     let confidence: Double
-    let probabilities: [String: Double]?
-    let rms: [Double]?
+    let probabilities: [String: Double]
+    let rms: [Double]
+    let emgSampleCount: Int?
     let stamina: StaminaData?
     let decision: DecisionData?
+    let fusion: FusionPayload?
+    let vision: VisionPayload?
+    // 服务端可能含 `type: "state_update"` 等 — 若未声明可忽略或单独解码
+}
+
+struct FusionPayload: Codable {
+    let stamina: Double?
+    let state: String
+    let source: String
+}
+
+struct VisionPayload: Codable {
+    let perclos: Double?
+    let fatigueScore: Double?
+    let stale: Bool?
+    // … 其余见运行实例 JSON / OpenAPI
 }
 
 struct StaminaData: Codable {

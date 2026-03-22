@@ -27,6 +27,12 @@
 
 ## 历史条目
 
+### 2026-03-22 — iOS：融合续航优先、BLE µV 与网关对齐
+
+- **iOS（Wi‑Fi）**：解析 `state_update` 可选字段 **`fusion`** / **`vision`**；主界面续航环优先 **`fusion.stamina`**（`source != "none"`），否则 EMG **`stamina`**；无有效值时显示 **「—」**。Live Activity / 本地提醒使用同一套显示值。
+- **iOS（BLE）**：24-bit EMG 解码改为与 **`src/stream.py`** 一致的 **µV 直读**（去掉旧 V_ref/Gain）；支持帧内 **最多 8 通道**；脱落检测阈值按 µV 尺度调整；本机 CoreML 特征在 **去直流** 后提取，FFT 特征采样率按 ~**320Hz** 量级近似（与 BLE 有效帧率一致）。
+- **契约**：后端 JSON 形状未变，仅客户端消费此前已存在的字段。
+
 ### 2026-03-21 — CI、离线自检、视觉告警单一来源（无 JSON 契约变更）
 
 - **仓库**：GitHub Actions（`.github/workflows/ci.yml`）在 **push / PR** 至 `main` 或 `master` 时执行 `pip install -r requirements.txt` 与 **`python tools/system_sanity_check.py`**（`model/` 未提交时 ONNX 段自动跳过，仍可通过）。

@@ -4,7 +4,7 @@ import Accelerate
 
 /// Extracts 84-dimensional feature vector from raw EMG window for ML inference.
 /// 7 features per channel (MAV, RMS, WL, ZC, SSC, MNF, MDF) × 8 channels + 28 pair correlations.
-/// For BLE mode (6 channels), channels 7-8 are zero-filled.
+/// For BLE mode（常见 6 路），不足 8 路时零填充；每通道特征在 **去直流** 后计算（对齐 Python `remove_dc`）。
 final class EMGFeatureExtractor {
 
     static let channelCount = 8
@@ -54,9 +54,16 @@ final class EMGFeatureExtractor {
 
     // MARK: - Per-channel features (7)
 
+    private func removeDC(_ values: [Double]) -> [Double] {
+        guard !values.isEmpty else { return values }
+        let m = values.reduce(0, +) / Double(values.count)
+        return values.map { $0 - m }
+    }
+
     private func channelFeatures(_ values: [Double]) -> [Double] {
         guard !values.isEmpty else { return [Double](repeating: 0, count: Self.featuresPerChannel) }
 
+        let values = removeDC(values)
         let mav = values.reduce(0) { $0 + abs($1) } / Double(values.count)
         let rms = sqrt(values.reduce(0) { $0 + $1 * $1 } / Double(values.count))
         let wl = zip(values.dropFirst(), values).reduce(0.0) { $0 + abs($1.0 - $1.1) }
@@ -179,7 +186,8 @@ final class EMGActivityInference {
     static let classes = ["finger_movement", "rest", "wrist_extend", "wrist_flex", "wrist_movement"]
 
     private var model: MLModel?
-    private let extractor = EMGFeatureExtractor()
+    /// BLE 有效帧率远低于 1kHz；与 OnDeviceStaminaEngine 的 MDF 尺度一致
+    private let extractor = EMGFeatureExtractor(sampleRate: 320, zcThreshold: 20)
 
     init() { loadModel() }
 
@@ -189,7 +197,7 @@ final class EMGActivityInference {
         let probabilities: [String: Double]
     }
 
-    /// Run inference on raw EMG channels (6 from BLE → zero-fills to 8).
+    /// Run inference on raw EMG channels（BLE 常见 6 路 → 零填充到 8）。
     func predict(channels: [[Double]]) -> Prediction? {
         guard let model else { return nil }
         let features = extractor.extract(channels: channels)

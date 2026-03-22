@@ -1,11 +1,15 @@
 import SwiftUI
 
 struct StaminaRingView: View {
-    let value: Double
+    /// `nil` 时显示「—」（无 EMG/无有效融合，与 Web 一致）
+    let value: Double?
     let state: StaminaState
     var size: CGFloat = 200
 
-    private var progress: Double { min(max(value / 100, 0), 1) }
+    private var progress: Double {
+        guard let value else { return 0 }
+        return min(max(value / 100, 0), 1)
+    }
     private var ringWidth: CGFloat { size * 0.05 }
     private var ringDiameter: CGFloat { size * 0.85 }
     private var bgDiameter: CGFloat { size * 0.95 }
@@ -42,11 +46,11 @@ struct StaminaRingView: View {
                 .animation(.spring(duration: 0.8), value: progress)
 
             VStack(spacing: 2) {
-                Text("\(Int(value))")
+                Text(value.map { "\(Int($0))" } ?? "—")
                     .font(.system(size: numberSize, weight: .bold, design: .rounded))
                     .foregroundStyle(.primary)
-                    .contentTransition(.numericText(value: value))
-                    .animation(.easeInOut, value: Int(value))
+                    .contentTransition(.numericText(value: value ?? 0))
+                    .animation(.easeInOut, value: value.map(Int.init) ?? -1)
 
                 Text("STAMINA")
                     .font(.system(size: size * 0.045, weight: .semibold, design: .monospaced))
@@ -65,15 +69,16 @@ struct StaminaRingView: View {
         }
         .frame(width: size, height: size)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("续航值 \(Int(value))%，状态 \(state.displayName)")
+        .accessibilityLabel(value.map { "续航值 \(Int($0))%，状态 \(state.displayName)" } ?? "无续航读数，状态 \(state.displayName)")
     }
 }
 
 #Preview {
     VStack(spacing: 40) {
-        StaminaRingView(value: 78, state: .focused)
-        StaminaRingView(value: 42, state: .fading)
-        StaminaRingView(value: 15, state: .depleted)
+        StaminaRingView(value: 78.0, state: .focused)
+        StaminaRingView(value: 42.0, state: .fading)
+        StaminaRingView(value: 15.0, state: .depleted)
+        StaminaRingView(value: nil, state: .focused)
     }
     .padding()
 }

@@ -105,8 +105,8 @@ struct RecorderView: View {
     // MARK: - Live Stamina
 
     private var liveStaminaView: some View {
-        let val = service.state?.stamina?.value ?? 0
-        let st = StaminaState(rawValue: service.state?.stamina?.state ?? "") ?? .focused
+        let val = service.personalizedDisplayStamina
+        let st = service.displayStaminaState
         return StaminaRingView(value: val, state: st)
     }
 

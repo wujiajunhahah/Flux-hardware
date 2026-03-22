@@ -6,8 +6,8 @@
 
 | 端 | 物理通道 | 说明 |
 |----|-----------|------|
-| 电脑 + USB 串口 | 8 | `SerialEMGStream`，与 `CHANNEL_COUNT=8` 一致 |
-| 手机 + BLE | 6 | `BLEManager`，帧内 6 路 RMS；**不在前端补通道** |
+| 电脑 + USB 串口 | 8 | `SerialEMGStream`，与 `CHANNEL_COUNT=8` 一致；24-bit **µV** 直读 |
+| 手机 + BLE | **最多 8**（常见 6） | `BLEManager` 按帧内字节数解析，与网关 **µV** 尺度一致；不足 8 路时 CoreML 特征零填充 |
 
 ## 规范层（Canonical）
 
@@ -28,6 +28,11 @@
 ## 手机网关地址
 
 使用与 Wi‑Fi 模式相同的 UserDefaults：`flux_host`、`flux_port`（默认端口 **8000**）。请填 **运行 `web/app.py` 的电脑局域网 IP**，不要用 `127.0.0.1`（指手机自身）。
+
+## iOS Wi‑Fi：`fusion` / `vision`
+
+- `GET /api/v1/state` 与 SSE `state` 事件与 WebSocket `/ws` 使用**同一 JSON**；含可选 **`fusion`**、**`vision`**（及 **`vision.stale`**）。
+- App 主环续航：**优先 `fusion.stamina`**（且 `fusion.source != "none"`），否则 **EMG `stamina.value`**；皆无则显示 **「—」**（与网页主环语义对齐）。不在 App 内复刻浏览器摄像头管线；视觉仍由网页推 `vision_frame` 至网关。
 
 ## 分析脚本建议
 

@@ -109,7 +109,7 @@ struct GeekDataPanel: View {
             geekRow("Service UUID", "974CBE30-…")
             geekRow("Data Char", "974CBE31-…")
             geekRow("帧格式", "20B (AA/BB)")
-            geekRow("通道数", "6 × 24bit")
+            geekRow("通道数", "最多 8 × 24bit (µV)")
         }
     }
 

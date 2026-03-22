@@ -118,8 +118,18 @@ final class FluxSnapshot {
 
     init(from fluxState: FluxState) {
         self.timestamp = Date()
-        self.stamina = fluxState.stamina?.value ?? 0
-        self.stateRaw = fluxState.stamina?.state ?? "focused"
+        if let fusion = fluxState.fusion,
+           fusion.source != "none",
+           let fused = fusion.stamina {
+            self.stamina = fused
+            self.stateRaw = fusion.state
+        } else if let emg = fluxState.stamina {
+            self.stamina = emg.value
+            self.stateRaw = emg.state
+        } else {
+            self.stamina = 0
+            self.stateRaw = "focused"
+        }
         self.consistency = fluxState.stamina?.consistency ?? 0
         self.tension = fluxState.stamina?.tension ?? 0
         self.fatigue = fluxState.stamina?.fatigue ?? 0

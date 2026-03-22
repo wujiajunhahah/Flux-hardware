@@ -41,9 +41,8 @@ struct ActiveSessionView: View {
 
     private var stamina: StaminaData? { service.state?.stamina }
     private var staminaValue: Double { service.personalizedStaminaValue }
-    private var staminaState: StaminaState {
-        StaminaState(rawValue: stamina?.state ?? "focused") ?? .focused
-    }
+    private var ringStaminaValue: Double? { service.personalizedDisplayStamina }
+    private var staminaState: StaminaState { service.displayStaminaState }
 
     // MARK: - Body
 
@@ -128,6 +127,9 @@ struct ActiveSessionView: View {
         }
         .onChange(of: staminaValue) { _, newVal in
             evaluateRestReminder(stamina: newVal)
+        }
+        .onChange(of: ringStaminaValue) { _, newVal in
+            if let newVal { evaluateRestReminder(stamina: newVal) }
         }
         .alert("休息结束", isPresented: $showRestEndDialog) {
             Button("继续专注") { exitRestMode(endSession: false) }
@@ -234,7 +236,7 @@ struct ActiveSessionView: View {
                 .scaleEffect(breatheScale)
 
             StaminaRingView(
-                value: staminaValue,
+                value: ringStaminaValue,
                 state: staminaState,
                 size: 280
             )
@@ -308,7 +310,7 @@ struct ActiveSessionView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Flux.Colors.success)
 
-            Text("续航 \(Int(staminaValue))")
+            Text(ringStaminaValue.map { "续航 \(Int($0))" } ?? "续航 —")
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(.secondary)
         }
