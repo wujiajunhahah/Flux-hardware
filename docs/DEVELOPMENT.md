@@ -35,6 +35,17 @@ python web/app.py
 
 **交互式接口说明**：服务启动后访问 **`http://127.0.0.1:8000/docs`**（Swagger UI）；机器可读契约为 **`http://127.0.0.1:8000/openapi.json`**。与手写 [API.md](./API.md) 不一致时，**以运行中的 JSON 为准**，并欢迎提 PR 更新 `API.md`。
 
+**离线系统自检（无串口/摄像头/HTTP）**：合成 `vision_frame` 与 EMG 窗口，覆盖 VisionEngine / FusionEngine / StaminaEngine / `remove_dc`，可选冒烟 ONNX。
+
+```bash
+source .venv/bin/activate
+python tools/system_sanity_check.py        # 简要
+python tools/system_sanity_check.py -v     # 含 ONNX shape 等提示
+```
+
+失败时每条会打印 `FAIL` 与原因，便于 CI 或提交前回归。  
+**GitHub**：对 `main` / `master` 的 push 与 PR 会运行同一命令（见仓库根目录 `.github/workflows/ci.yml`）。
+
 ---
 
 ## 3. 桌面手势训练（与 Web 无关）
@@ -70,6 +81,7 @@ python app.py --port /dev/cu.usbserial-0001 --baud 921600 --fs 1000
 | iOS 源码 | `ios/FluxChi/` |
 | Widget / Live Activity | `ios/FluxChiLive/` |
 | ONNX 与配置 | `model/` |
+| 离线管线自检脚本 | `tools/system_sanity_check.py` |
 | 接口人类文档 | `docs/API.md` |
 | 接口索引与废弃说明 | `docs/API-OVERVIEW.md` |
 

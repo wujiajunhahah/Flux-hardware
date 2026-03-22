@@ -28,6 +28,7 @@ from typing import Deque, List, Optional, Tuple
 import numpy as np
 
 from .fatigue import FatigueEstimator, FatigueReading
+from .features import remove_dc
 from .stream import CHANNEL_COUNT
 
 WORK_ACTIVITIES = {
@@ -118,6 +119,16 @@ class StaminaEngine:
         # Smoothed drain/recovery rate for display
         self._recent_drain: float = self.base_drain
         self._recent_recovery: float = self.base_recovery
+        self._eff_sr_applied: Optional[int] = None
+
+    def set_effective_sample_rate(self, sr: float) -> None:
+        """按实际采样间隔更新 Fatigue/频谱尺度 (避免名义 1000Hz 与 ~300Hz 实测不一致)。"""
+        sr_i = int(round(float(np.clip(sr, 50.0, 4000.0))))
+        if self._eff_sr_applied == sr_i:
+            return
+        self._eff_sr_applied = sr_i
+        self.sample_rate = sr_i
+        self._fatigue.sample_rate = sr_i
 
     def update(
         self,
@@ -129,9 +140,11 @@ class StaminaEngine:
 
         if emg_window.ndim == 2 and emg_window.shape[0] == CHANNEL_COUNT and emg_window.shape[1] != CHANNEL_COUNT:
             emg_window = emg_window.T
+        if emg_window.ndim == 2:
+            emg_window = remove_dc(np.asarray(emg_window, dtype=np.float64))
         n_ch = min(emg_window.shape[1], CHANNEL_COUNT) if emg_window.ndim == 2 else 1
 
-        # --- Compute RMS across channels ---
+        # --- Compute RMS across channels (AC component after DC removal) ---
         rms_per_ch = np.sqrt(np.mean(emg_window ** 2, axis=0))
         mean_rms = float(np.mean(rms_per_ch[:n_ch]))
 

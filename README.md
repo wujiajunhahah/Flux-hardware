@@ -47,6 +47,12 @@ python web/app.py --demo
 
 Open `http://localhost:8000` in your browser.
 
+**Offline regression** (no hardware, no server):
+
+```bash
+python tools/system_sanity_check.py
+```
+
 ## Documentation
 
 | Doc | Purpose |

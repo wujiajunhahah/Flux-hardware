@@ -58,20 +58,22 @@ class FrameStats:
     total_frames: int = 0
     emg_frames: int = 0
     imu_frames: int = 0
-    dropped_frames: int = 0
-    last_sequence: Optional[int] = None
+    dropped_frames: int = 0        # 仅 EMG 帧丢包
+    last_sequence: Optional[int] = None        # 全局 sequence (向后兼容)
+    last_emg_sequence: Optional[int] = None    # EMG 独立 sequence 追踪
+    last_imu_sequence: Optional[int] = None    # IMU 独立 sequence 追踪
 
 
 def _decode_signed24(b1: int, b2: int, b3: int) -> float:
+    """Decode 3-byte big-endian signed integer.
+
+    Per WAVELETECH manual: the 24-bit value is already in microvolts (µV).
+    No V_ref/Gain conversion needed — the firmware handles ADC scaling internally.
+    """
     value = (b1 << 16) | (b2 << 8) | b3
     if value & 0x800000:
         value -= 1 << 24
-
-    # Convert to volts then microvolts
-    # V_ref = 4.5V, Gain = 1200
-    volts = (value / 8388607.0) * 4.5
-    micro_volts = (volts / 1200.0) * 1_000_000.0
-    return float(micro_volts)
+    return float(value)
 
 
 def normalize_serial_device(path: str) -> str:
@@ -188,15 +190,22 @@ class SerialEMGStream(BaseEMGStream):
         frame_type = frame[3]
         sequence = frame[4]
 
-        if stats.last_sequence is not None and frame_type == EMG_FLAG:
+        # 丢包检测: 设备使用全局 sequence counter (EMG+IMU 共享)
+        # 只要全局序号不连续即为真丢包
+        if stats.last_sequence is not None:
             expected = (stats.last_sequence + 1) & 0xFF
             if sequence != expected:
                 delta = (sequence - expected) & 0xFF
                 if delta <= 0:
                     delta = 1
                 stats.dropped_frames += delta
+        stats.last_sequence = sequence
+
+        # 按类型追踪 (诊断用)
         if frame_type == EMG_FLAG:
-            stats.last_sequence = sequence
+            stats.last_emg_sequence = sequence
+        elif frame_type == IMU_FLAG:
+            stats.last_imu_sequence = sequence
 
         if frame_type == EMG_FLAG:
             stats.emg_frames += 1
@@ -210,15 +219,19 @@ class SerialEMGStream(BaseEMGStream):
                 self._queue.append(EMGSample(time.perf_counter(), values))
         elif frame_type == IMU_FLAG:
             stats.imu_frames += 1
+            # Per WAVELETECH manual: IMU is big-endian, layout is gyro(3x2) then accel(3x2)
+            # Scale factors: gyro × 0.0012 → rad/s, accel × 0.0005978 → m/s²
             payload = frame[5 : 5 + 12]
             accel = np.zeros(3, dtype=float)
             gyro = np.zeros(3, dtype=float)
             for idx in range(3):
                 start = idx * 2
-                accel[idx] = int.from_bytes(payload[start : start + 2], "little", signed=True)
+                raw = int.from_bytes(payload[start : start + 2], "big", signed=True)
+                gyro[idx] = raw * 0.0012  # rad/s
             for idx in range(3):
-                start = 3 * 2 + idx * 2
-                gyro[idx] = int.from_bytes(payload[start : start + 2], "little", signed=True)
+                start = 6 + idx * 2
+                raw = int.from_bytes(payload[start : start + 2], "big", signed=True)
+                accel[idx] = raw * 0.0005978  # m/s²
 
             sample = IMUSample(time.perf_counter(), accel, gyro)
             with self._imu_lock:
@@ -372,14 +385,17 @@ class BleEMGStream(BaseEMGStream):
         stats = self._stats
         stats.total_frames += 1
 
+        # 全局序号丢包检测 (EMG+IMU 共享计数器)
+        if stats.last_sequence is not None:
+            expected = (stats.last_sequence + 1) & 0xFF
+            if seq != expected:
+                delta = (seq - expected) & 0xFF
+                stats.dropped_frames += max(delta, 1)
+        stats.last_sequence = seq
+
         if frame_type == EMG_FLAG:
             stats.emg_frames += 1
-            if stats.last_sequence is not None:
-                expected = (stats.last_sequence + 1) & 0xFF
-                if seq != expected:
-                    delta = (seq - expected) & 0xFF
-                    stats.dropped_frames += max(delta, 1)
-            stats.last_sequence = seq
+            stats.last_emg_sequence = seq
 
             values = np.zeros(CHANNEL_COUNT, dtype=float)
             payload = data[2:]  # 18 bytes
@@ -393,16 +409,20 @@ class BleEMGStream(BaseEMGStream):
 
         elif frame_type == IMU_FLAG:
             stats.imu_frames += 1
+            stats.last_imu_sequence = seq
+            # Per WAVELETECH manual: IMU big-endian, gyro(3x2) then accel(3x2)
             payload = data[2:]
             if len(payload) >= 12:
                 accel = np.zeros(3, dtype=float)
                 gyro = np.zeros(3, dtype=float)
                 for i in range(3):
                     s = i * 2
-                    accel[i] = int.from_bytes(payload[s : s + 2], "little", signed=True)
+                    raw = int.from_bytes(payload[s : s + 2], "big", signed=True)
+                    gyro[i] = raw * 0.0012  # rad/s
                 for i in range(3):
                     s = 6 + i * 2
-                    gyro[i] = int.from_bytes(payload[s : s + 2], "little", signed=True)
+                    raw = int.from_bytes(payload[s : s + 2], "big", signed=True)
+                    accel[i] = raw * 0.0005978  # m/s²
                 with self._imu_lock:
                     self._imu_queue.append(IMUSample(time.perf_counter(), accel, gyro))
 

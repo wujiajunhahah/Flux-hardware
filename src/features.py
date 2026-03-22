@@ -9,6 +9,21 @@ import numpy as np
 
 from .stream import CHANNEL_COUNT
 
+
+def remove_dc(data: np.ndarray) -> np.ndarray:
+    """Remove DC offset (per-channel mean subtraction).
+
+    WAVELETECH raw data contains large DC offsets (10k-30k units).
+    Standard sEMG preprocessing: subtract per-channel mean before
+    computing any time-domain or frequency-domain features.
+
+    Args:
+        data: shape (samples, channels) or (samples,)
+    Returns:
+        DC-removed copy of the data.
+    """
+    return data - np.mean(data, axis=0)
+
 try:  # pragma: no cover - optional dependency
     from libemg.feature_extractor import FeatureExtractor as LibEMGFeatureExtractor
 except Exception:  # pragma: no cover
@@ -16,9 +31,16 @@ except Exception:  # pragma: no cover
 
 
 def estimate_contact_quality(rms_value: float) -> str:
-    if rms_value < 20:
+    """Assess electrode contact from **AC** RMS (µV), i.e. after per-window DC removal.
+
+    Typical bands (order of magnitude, posture-dependent):
+      weak / poor contact:  < ~400 µV
+      usable rest … active: ~400 … ~80k µV
+      clipping / artifact:   very high RMS
+    """
+    if rms_value < 400:
         return "WEAK"
-    if rms_value < 200:
+    if rms_value < 80_000:
         return "GOOD"
     return "NOISY"
 
@@ -149,6 +171,7 @@ class FeatureExtractor:
     # Manual fallback
     # ------------------------------------------------------------------
     def _fallback_features(self, window: np.ndarray) -> List[float]:
+        window = remove_dc(np.asarray(window, dtype=np.float64))
         feats: List[float] = []
         for idx in range(CHANNEL_COUNT):
             feats.extend(channel_features(window[:, idx], self.threshold))

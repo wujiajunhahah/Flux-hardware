@@ -179,7 +179,9 @@ Level 0 (清醒): 无异常
 改进:  MediaPipe BlendShapes → eyeBlink/jawOpen (0-1) → 层次化决策 → 判断
 ```
 
-**前端改动**: `vision-capture.js` 中 FaceLandmarker 已设 `outputFaceBlendshapes: false`，只需改为 `true`，然后在 vision_frame 中增加 `blendshapes` 字段。
+**前端现状**: `vision-capture.js` 中 FaceLandmarker 已设 **`outputFaceBlendshapes: true`**，`schema: 2` 帧附带疲劳相关 **`blendshapes`** 子集（与 `geometry` 并存）。
+
+**告警单一来源**: 服务端由 **`vision_engine.vision_reading_alerts(VisionReading)`** 生成 `ModuleReading.alerts` 用标签，`web/app.py` 注入融合栈与 **`VisionModule`** 共用，避免与 `fusion_engine` 惩罚表漂移。
 
 ---
 

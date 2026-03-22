@@ -5,6 +5,18 @@
 - Prefer **small, focused PRs** tied to an issue or a clear bugfix/feature.
 - Match existing style in the touched area (Swift / Python / docs).
 
+## Quality checks (Python)
+
+Before opening a PR that touches `src/`, `web/app.py`, or vision/fusion logic:
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+python tools/system_sanity_check.py
+```
+
+CI runs the same command on **push / PR** to `main` / `master` (see `.github/workflows/ci.yml`).
+
 ## Secrets
 
 **Never commit:**

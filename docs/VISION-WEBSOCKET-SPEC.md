@@ -87,6 +87,8 @@ MediaPipe FaceLandmarker 输出的 52 个 BlendShapes 中，仅传输与**疲劳
 | `cheekPuff` | number | 鼓腮（深呼吸/叹气） |
 
 > **并存策略**：`geometry`（EAR/MAR）与 `blendshapes` 在 schema 2 中**同时发送**。后端优先使用 BlendShapes（精度更高、来自预训练模型），当 `blendshapes` 缺失时自动回退到 `geometry` 的几何计算值。这保证了 schema 1 客户端无需任何修改即可继续工作。
+>
+> **部分字段**：仅一侧 `eyeBlinkLeft` / `eyeBlinkRight` 时服务端使用该侧；无 `mouthFunnel` 时仅用 `jawOpen` 会采用**更高**张口阈值，以降低「说话张大嘴」误报哈欠。
 
 **`skin`**（P1 rPPG）
 

@@ -21,7 +21,12 @@ from typing import Any, Dict, List, Optional
 
 from ..context_bus import ContextBus, ContextSignal, SignalTypes
 from ..sensor_module import ModuleReading, SensorModule
-from ..vision_engine import VisionEngine, VisionReading
+from ..vision_engine import (
+    PERCLOS_ALERT_SEVERE,
+    VisionEngine,
+    VisionReading,
+    vision_reading_alerts,
+)
 
 
 class VisionModule(SensorModule):
@@ -108,37 +113,8 @@ class VisionModule(SensorModule):
 
     @staticmethod
     def _collect_alerts(vr: VisionReading) -> List[str]:
-        """从 VisionReading 提取告警。
-
-        层次化告警 (基于 ISO 17488 + FHWA 分级):
-          Level 3 (critical): 微睡眠 / 连续点头 / PERCLOS > 0.40
-          Level 2 (warning):  PERCLOS 0.25-0.40 / 哈欠频繁 / 高眨眼率
-          Level 1 (info):     偶尔走神 / 偶尔哈欠
-        """
-        alerts: List[str] = []
-
-        # Level 3
-        if vr.head_nod_detected:
-            alerts.append("nod_detected")
-        if vr.perclos > 0.40:
-            alerts.append("perclos_severe")
-        # 注: 微睡眠 (闭眼>500ms) 需要 VisionEngine 支持, 暂用 perclos 近似
-
-        # Level 2
-        if vr.perclos > 0.25 and "perclos_severe" not in alerts:
-            alerts.append("perclos_high")
-        if vr.yawn_count_window >= 3:
-            alerts.append("yawn_frequent")
-        if vr.blink_rate > 25:
-            alerts.append("blink_rate_high")
-
-        # Level 1
-        if vr.head_distracted:
-            alerts.append("distracted")
-        if vr.yawn_active:
-            alerts.append("yawning")
-
-        return alerts
+        """从 VisionReading 提取告警（实现为 ``vision_engine.vision_reading_alerts``）。"""
+        return vision_reading_alerts(vr)
 
     # ── 协作信号 ──────────────────────────────────────────
 
@@ -150,7 +126,7 @@ class VisionModule(SensorModule):
         now = vr.timestamp
 
         # 微睡眠 / 严重困倦
-        if vr.perclos > 0.40 or vr.head_nod_detected:
+        if vr.perclos > PERCLOS_ALERT_SEVERE or vr.head_nod_detected:
             self._bus.publish(ContextSignal(
                 source_module=self.module_id,
                 signal_type=SignalTypes.MICROSLEEP,

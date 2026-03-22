@@ -23,6 +23,7 @@ import asyncio
 import json
 import sys
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -44,17 +45,33 @@ from src.stream import (
     normalize_serial_device,
 )
 from src.canonical_signal import CANONICAL_EMG_CHANNELS, canonicalize_export_package, normalize_rms_to_canonical
+from src.features import remove_dc
 from src.session_insight import session_insight_text
 from src.session_store import list_sessions_meta, load_session, save_session_package, session_file_path
 from src.energy import StaminaEngine, StaminaState
 from src.decision import DecisionEngine
 from src.fusion_engine import FusionEngine
-from src.vision_engine import VisionEngine
+from src.vision_engine import VisionEngine, vision_reading_alerts
+from src.sensor_module import ModuleReading
 from src.modules.emg_module import EmgModule
 from src.modules.vision_module import VisionModule
 from src.context_bus import ContextBus
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+@asynccontextmanager
+async def _app_lifespan(_app: FastAPI):
+    _ensure_vision_stack()
+    task = asyncio.create_task(processing_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
 
 app = FastAPI(
     title="FluxChi",
@@ -62,6 +79,7 @@ app = FastAPI(
     description="EMG-based work sustainability API for iOS, Web, and beyond.",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=_app_lifespan,
 )
 
 app.add_middleware(
@@ -134,7 +152,24 @@ class ONNXClassifier:
             x = x[:, :self.n_features]
 
         outputs = self.session.run(None, {self.input_name: x})
-        label = str(outputs[0][0])
+        raw0 = outputs[0]
+        flat0 = np.asarray(raw0).flatten()
+        first = flat0[0] if flat0.size else 0
+        label: str
+        if self.classes and isinstance(first, (np.integer, int, np.int64, np.int32)):
+            idx = int(first)
+            if 0 <= idx < len(self.classes):
+                label = str(self.classes[idx])
+            else:
+                label = str(idx)
+        elif self.classes and isinstance(first, (float, np.floating)) and float(first) == int(first):
+            idx = int(first)
+            if 0 <= idx < len(self.classes):
+                label = str(self.classes[idx])
+            else:
+                label = str(first)
+        else:
+            label = str(first)
         proba_list = outputs[1] if len(outputs) > 1 else None
 
         probabilities = {}
@@ -156,6 +191,7 @@ class ONNXClassifier:
 
 # ─── Feature extraction ─────────────────────────────────────
 def extract_window_features_84(window: np.ndarray, sample_rate: int) -> np.ndarray:
+    window = remove_dc(np.asarray(window, dtype=np.float64))
     feats = []
     n_ch = min(window.shape[1], CHANNEL_COUNT)
     threshold = 20.0
@@ -207,6 +243,31 @@ def extract_window_features_84(window: np.ndarray, sample_rate: int) -> np.ndarr
         feats.extend([0.0] * n_pairs)
 
     return np.array(feats, dtype=np.float64)
+
+
+def _estimate_eff_sample_rate(n_rows: int, ts: np.ndarray) -> float:
+    """用 perf_counter 时间戳估计有效采样率 (Hz)。"""
+    if n_rows < 2 or ts.shape[0] != n_rows:
+        return float(SAMPLE_RATE)
+    span = float(ts[-1] - ts[0])
+    if span <= 1e-9:
+        return float(SAMPLE_RATE)
+    eff = (n_rows - 1) / span
+    return float(np.clip(eff, 50.0, 4000.0))
+
+
+def _emg_ac_quality_from_buffer(emg_buffer: np.ndarray) -> float:
+    """多通道 AC-RMS 平衡启发式 → 0–1，供 fusion quality。"""
+    if emg_buffer.shape[0] < 16:
+        return 0.45
+    seg = remove_dc(np.asarray(emg_buffer[-min(500, len(emg_buffer)):], dtype=np.float64))
+    rms_c = np.sqrt(np.mean(seg**2, axis=0))
+    mean_r = float(np.mean(rms_c))
+    if mean_r < 30.0:
+        return 0.2
+    cv = float(np.std(rms_c) / (mean_r + 1e-9))
+    q = 1.0 - min(cv, 1.2) / 1.2
+    return float(np.clip(q, 0.15, 1.0))
 
 
 # ─── Demo streams ───────────────────────────────────────────
@@ -1066,7 +1127,11 @@ async def websocket_vision(ws: WebSocket):
         vision_ws_connections.discard(ws)
 
 
-def _append_vision_and_fusion(payload: dict, stamina_reading) -> None:
+def _append_vision_and_fusion(
+    payload: dict,
+    stamina_reading,
+    emg_buffer: Optional[np.ndarray] = None,
+) -> None:
     """写入 vision 快照与 EMG+Vision 融合结果。
 
     通过正式的 EmgModule / VisionModule 注入 ModuleReading，
@@ -1077,11 +1142,16 @@ def _append_vision_and_fusion(payload: dict, stamina_reading) -> None:
 
     # ── EMG 侧: 将 StaminaReading 写入 EmgModule ──
     if emg_module is not None and stamina_reading is not None:
-        from src.sensor_module import ModuleReading
+
+        emg_q = (
+            _emg_ac_quality_from_buffer(emg_buffer)
+            if emg_buffer is not None and getattr(emg_buffer, "size", 0) > 0
+            else EmgModule._estimate_quality(stamina_reading)
+        )
         emg_module._set_latest(ModuleReading(
             module_id="emg",
             stamina=stamina_reading.stamina,
-            quality=1.0,
+            quality=emg_q,
             dimensions={
                 "consistency": stamina_reading.consistency,
                 "tension": stamina_reading.tension,
@@ -1109,7 +1179,7 @@ def _append_vision_and_fusion(payload: dict, stamina_reading) -> None:
         payload["vision"] = vd
 
     if vision_module is not None and vr is not None and not vision_stale:
-        from src.sensor_module import ModuleReading
+
         vision_module._set_latest(ModuleReading(
             module_id="vision",
             stamina=(1.0 - vr.fatigue_score) * 100.0,
@@ -1126,7 +1196,7 @@ def _append_vision_and_fusion(payload: dict, stamina_reading) -> None:
                 "head_distracted": vr.head_distracted,
                 "yawn_active": vr.yawn_active,
             },
-            alerts=_collect_vision_alerts(vr),
+            alerts=vision_reading_alerts(vr),
             timestamp=vr.timestamp,
         ))
     elif vision_module is not None:
@@ -1137,31 +1207,10 @@ def _append_vision_and_fusion(payload: dict, stamina_reading) -> None:
         payload["fusion"] = fusion_engine.fuse(now).to_dict()
 
 
-def _collect_vision_alerts(vision) -> list:
-    """从 VisionReading 提取告警列表。"""
-    alerts = []
-    if vision.head_nod_detected:
-        alerts.append("nod_detected")
-    if vision.head_distracted:
-        alerts.append("distracted")
-    if vision.yawn_active:
-        alerts.append("yawning")
-    if vision.yawn_count_window >= 3:
-        alerts.append("yawn_frequent")
-    if vision.perclos > 0.40:
-        alerts.append("perclos_severe")
-    elif vision.perclos > 0.25:
-        alerts.append("perclos_high")
-    if vision.blink_rate > 25:
-        alerts.append("blink_rate_high")
-    return alerts
-
-
 # ─── Processing loop ────────────────────────────────────────
 async def processing_loop():
     global stamina_engine, decision_engine, _emg_buffer_reset_requested, emg_module
 
-    window_samples = int(WINDOW_SEC * SAMPLE_RATE)
     stamina_engine = StaminaEngine(sample_rate=SAMPLE_RATE, speed=speed_multiplier)
     decision_engine = DecisionEngine()
 
@@ -1172,6 +1221,7 @@ async def processing_loop():
         fusion_engine.register(emg_module)
 
     emg_buffer = np.zeros((0, CHANNEL_COUNT))
+    emg_ts = np.array([], dtype=np.float64)
     last_push = time.time()
     total_received = 0
     log_interval = time.time()
@@ -1179,6 +1229,7 @@ async def processing_loop():
     while True:
         if _emg_buffer_reset_requested:
             emg_buffer = np.zeros((0, CHANNEL_COUNT))
+            emg_ts = np.array([], dtype=np.float64)
             total_received = 0
             _emg_buffer_reset_requested = False
 
@@ -1194,7 +1245,7 @@ async def processing_loop():
                 "rms": [0.0] * CHANNEL_COUNT,
                 "emg_sample_count": 0,
             }
-            _append_vision_and_fusion(idle_payload, None)
+            _append_vision_and_fusion(idle_payload, None, None)
             latest_payload.clear()
             latest_payload.update(idle_payload)
             await broadcast(idle_payload)
@@ -1207,15 +1258,19 @@ async def processing_loop():
 
         total_received += len(samples)
         new_data = np.array([s.values for s in samples])
+        new_ts = np.array([s.timestamp for s in samples], dtype=np.float64)
         emg_buffer = np.vstack([emg_buffer, new_data]) if emg_buffer.size else new_data
+        emg_ts = np.concatenate([emg_ts, new_ts]) if emg_ts.size else new_ts
 
         if emg_buffer.shape[0] > SAMPLE_RATE * 10:
             emg_buffer = emg_buffer[-SAMPLE_RATE * 5:]
+            emg_ts = emg_ts[-SAMPLE_RATE * 5:]
 
         now = time.time()
         if now - log_interval >= 5.0:
             stats = stream.frame_stats()
-            rms_now = np.sqrt(np.mean(new_data ** 2, axis=0))
+            _log_seg = remove_dc(np.asarray(new_data, dtype=np.float64))
+            rms_now = np.sqrt(np.mean(_log_seg**2, axis=0))
             print(f"[data] total={total_received}, buffer={emg_buffer.shape[0]}, "
                   f"emg_frames={stats.emg_frames}, dropped={stats.dropped_frames}, "
                   f"rms_ch1={rms_now[0]:.1f}")
@@ -1230,10 +1285,14 @@ async def processing_loop():
         confidence = 0.0
         probabilities = {}
 
+        eff_sr = _estimate_eff_sample_rate(emg_buffer.shape[0], emg_ts)
+        window_samples = max(32, int(WINDOW_SEC * eff_sr))
+        window_samples = min(window_samples, emg_buffer.shape[0])
+
         if onnx_session is not None and emg_buffer.shape[0] >= window_samples:
             window = emg_buffer[-window_samples:]
             try:
-                feats = extract_window_features_84(window, SAMPLE_RATE)
+                feats = extract_window_features_84(window, int(round(eff_sr)))
                 activity, confidence, probabilities = onnx_session.predict(feats)
             except Exception as e:
                 print(f"[inference] {e}")
@@ -1241,6 +1300,7 @@ async def processing_loop():
         stamina_reading = None
         if stamina_engine and emg_buffer.shape[0] >= window_samples:
             try:
+                stamina_engine.set_effective_sample_rate(eff_sr)
                 window = emg_buffer[-window_samples:]
                 stamina_reading = stamina_engine.update(window, activity, now)
             except Exception as e:
@@ -1253,7 +1313,9 @@ async def processing_loop():
             except Exception as e:
                 print(f"[decision] {e}")
 
-        rms_values = np.sqrt(np.mean(emg_buffer[-min(250, len(emg_buffer)):] ** 2, axis=0)).tolist()
+        _rms_seg = emg_buffer[-min(250, len(emg_buffer)) :]
+        _rms_seg = remove_dc(np.asarray(_rms_seg, dtype=np.float64))
+        rms_values = np.sqrt(np.mean(_rms_seg**2, axis=0)).tolist()
 
         payload = {
             "type": "state_update",
@@ -1302,7 +1364,7 @@ async def processing_loop():
                 if len(timeline) > 200:
                     timeline[:] = timeline[-100:]
 
-        _append_vision_and_fusion(payload, stamina_reading)
+        _append_vision_and_fusion(payload, stamina_reading, emg_buffer)
 
         latest_payload.clear()
         latest_payload.update(payload)
@@ -1311,12 +1373,6 @@ async def processing_loop():
 
         await broadcast(payload)
         await asyncio.sleep(0.01)
-
-
-@app.on_event("startup")
-async def startup():
-    _ensure_vision_stack()
-    asyncio.create_task(processing_loop())
 
 
 # ─── Entrypoint ──────────────────────────────────────────────
@@ -1351,10 +1407,14 @@ def main():
                 onnx_session = loaded
                 onnx_config = config
                 onnx_classes = config.get("classes", [])
+                source = config.get("source", "unknown")
                 print(f"[web] Loaded ONNX model: {onnx_path}")
                 print(f"[web]   Classes: {onnx_classes}")
                 print(f"[web]   Features: {config.get('n_features', '?')}")
-                print(f"[web]   Accuracy: {config.get('accuracy', '?')}")
+                print(f"[web]   Accuracy: {config.get('accuracy', '?')} (on {source})")
+                if "ninapro" in source.lower():
+                    print(f"[web]   ** PLACEHOLDER: trained on {source}, NOT on your wristband **")
+                    print(f"[web]   ** Run `python tools/emg_diagnostic.py` to verify signal quality **")
                 break
             except Exception as e:
                 print(f"[web] Failed to load {onnx_path}: {e}")

@@ -11,7 +11,6 @@ N-source 质量加权融合 + 层次化决策 + ContextBus 协作。
 
 向后兼容:
   - FusedReading.to_dict() 保留 emg_weight, vision_weight 等旧字段
-  - fuse_legacy() 兼容旧的 fuse(emg=, vision=) 调用方式
   - payload["fusion"]["source"] 保持 "fused"/"emg_only"/"vision_only"/"none"
 =========================================================
 """
@@ -22,9 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .context_bus import ContextBus, SignalTypes
-from .energy import StaminaReading
 from .sensor_module import ModuleReading, SensorModule
-from .vision_engine import VisionReading
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -33,8 +30,10 @@ from .vision_engine import VisionReading
 
 @dataclass
 class FusionConfig:
-    # 质量门控
-    quality_gate: float = 0.3           # quality < 此值的模块被排除
+    # 质量门控 (按模块; vision 略严，减少低质量视频拖垮融合)
+    quality_gate: float = 0.28        # 未知 module_id 的默认门限
+    quality_gate_emg: float = 0.22
+    quality_gate_vision: float = 0.40
     stale_timeout_sec: float = 5.0      # 超过此时间无更新的模块被排除
 
     # 模块基础权重 (module_id → weight), 未列出的默认 1.0
@@ -171,7 +170,8 @@ class FusionEngine:
             r = module.latest
             if r is None:
                 continue
-            if r.quality < cfg.quality_gate:
+            gate = self._quality_gate_for(r.module_id)
+            if r.quality < gate:
                 continue
             if module.stale_seconds(now) > cfg.stale_timeout_sec:
                 continue
@@ -184,7 +184,8 @@ class FusionEngine:
         raw_weights: Dict[str, float] = {}
         for r in active:
             base_w = cfg.base_weights.get(r.module_id, 1.0)
-            q_factor = self._quality_to_factor(r.quality)
+            gate = self._quality_gate_for(r.module_id)
+            q_factor = self._quality_to_factor(r.quality, gate)
             c_boost = self._context_weight_boost(r.module_id, now)
             raw_weights[r.module_id] = base_w * q_factor * c_boost
 
@@ -238,86 +239,6 @@ class FusionEngine:
         self.latest = reading
         return reading
 
-    # ── 向后兼容入口 (过渡期) ─────────────────────────────
-
-    def fuse_legacy(
-        self,
-        emg: Optional[StaminaReading] = None,
-        vision: Optional[VisionReading] = None,
-    ) -> FusedReading:
-        """兼容旧的 fuse(emg=, vision=) 调用。
-
-        内部: 手动构建 ModuleReading 注入对应模块的 _latest, 再调 fuse()。
-        过渡完成后删除此方法。
-        """
-        now = time.time()
-
-        # 注入 EMG
-        emg_mod = self._modules.get("emg")
-        if emg is not None and emg_mod is not None:
-            emg_mod._latest = ModuleReading(
-                module_id="emg",
-                stamina=emg.stamina,
-                quality=1.0,
-                dimensions={
-                    "consistency": emg.consistency,
-                    "tension": emg.tension,
-                    "fatigue_mdf": emg.fatigue,
-                },
-                metadata={"state": emg.state.value},
-                alerts=[],
-                timestamp=emg.timestamp,
-            )
-        elif emg_mod is not None:
-            emg_mod._latest = None
-
-        # 注入 Vision
-        vis_mod = self._modules.get("vision")
-        if vision is not None and vis_mod is not None:
-            vis_mod._latest = ModuleReading(
-                module_id="vision",
-                stamina=(1.0 - vision.fatigue_score) * 100.0,
-                quality=vision.quality,
-                dimensions={
-                    "perclos": vision.perclos,
-                    "blink_rate": vision.blink_rate,
-                    "fatigue_score": vision.fatigue_score,
-                },
-                metadata={
-                    "alertness_level": vision.alertness_level,
-                    "face_present": vision.face_present,
-                    "head_nod_detected": vision.head_nod_detected,
-                    "head_distracted": vision.head_distracted,
-                    "yawn_active": vision.yawn_active,
-                },
-                alerts=self._collect_vision_alerts(vision),
-                timestamp=vision.timestamp,
-            )
-        elif vis_mod is not None:
-            vis_mod._latest = None
-
-        return self.fuse(now)
-
-    @staticmethod
-    def _collect_vision_alerts(vision: VisionReading) -> List[str]:
-        """从 VisionReading 提取告警 (向后兼容, 旧路径用)。"""
-        alerts: List[str] = []
-        if vision.head_nod_detected:
-            alerts.append("nod_detected")
-        if vision.head_distracted:
-            alerts.append("distracted")
-        if vision.yawn_active:
-            alerts.append("yawning")
-        if vision.yawn_count_window >= 3:
-            alerts.append("yawn_frequent")
-        if vision.perclos > 0.40:
-            alerts.append("perclos_severe")
-        elif vision.perclos > 0.25:
-            alerts.append("perclos_high")
-        if vision.blink_rate > 25:
-            alerts.append("blink_rate_high")
-        return alerts
-
     # ── ContextBus 动态权重调制 ───────────────────────────
 
     def _context_weight_boost(self, module_id: str, now: float) -> float:
@@ -350,9 +271,17 @@ class FusionEngine:
 
     # ── 辅助 ──────────────────────────────────────────────
 
-    def _quality_to_factor(self, quality: float) -> float:
+    def _quality_gate_for(self, module_id: str) -> float:
+        cfg = self.config
+        if module_id == "emg":
+            return cfg.quality_gate_emg
+        if module_id == "vision":
+            return cfg.quality_gate_vision
+        return cfg.quality_gate
+
+    @staticmethod
+    def _quality_to_factor(quality: float, gate: float) -> float:
         """quality → 权重因子。gate 以下为 0, gate 到 1 线性。"""
-        gate = self.config.quality_gate
         if quality <= gate:
             return 0.0
         return (quality - gate) / (1.0 - gate)

@@ -98,12 +98,10 @@ class EmgModule(SensorModule):
 
     @staticmethod
     def _estimate_quality(sr: StaminaReading) -> float:
-        """EMG 信号质量估算。
-
-        V1: 简化为 1.0 (手环连接即视为信号正常)。
-        V2 可根据: 信噪比、电极接触阻抗、RMS 是否在合理范围。
-        """
-        return 1.0
+        """EMG 信号质量估算 (无原始波形时用工况维度代理)。"""
+        c = float(np.clip(sr.consistency, 0.0, 1.0))
+        t = float(np.clip(sr.tension, 0.0, 1.0))
+        return float(np.clip(0.2 + 0.65 * c + 0.15 * (1.0 - t), 0.2, 1.0))
 
     def _publish_context(self, sr: StaminaReading) -> None:
         """向 ContextBus 发布协作信号。"""

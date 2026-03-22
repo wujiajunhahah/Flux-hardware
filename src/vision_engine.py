@@ -25,6 +25,10 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
+# 跨模块告警阈值 (fusion / web / vision_module 共用，避免魔法数漂移)
+PERCLOS_ALERT_HIGH = 0.25
+PERCLOS_ALERT_SEVERE = 0.40
+BLINK_RATE_ALERT_HIGH = 25.0
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  配置 (所有阈值可调, 后续支持个人基线标定)
@@ -43,7 +47,7 @@ class VisionConfig:
 
     # -- 眨眼率 --
     blink_rate_window_sec: float = 60.0     # 眨眼率统计窗口
-    blink_rate_high: float = 25.0           # 次/分钟, 超过视为疲劳加剧
+    blink_rate_high: float = BLINK_RATE_ALERT_HIGH  # 次/分钟, 超过视为疲劳加剧
 
     # -- 头部姿态 --
     head_pitch_nod_deg: float = 20.0        # |pitch| 超过此值视为低头/打瞌睡
@@ -127,6 +131,30 @@ class VisionReading:
             "frames": self.frames_processed,
             "timestamp": self.timestamp,
         }
+
+
+def vision_reading_alerts(vr: VisionReading) -> List[str]:
+    """从 VisionReading 生成 fusion / ModuleReading 用告警 ID（单一真源）。
+
+    顺序: 严重级 (点头、PERCLOS) → 警告级 (哈欠频、高眨眼) → 信息级 (走神、哈欠进行中)。
+    与 ``VisionModule`` 历史分级一致，供 ``web/app.py`` 注入融合栈时复用。
+    """
+    alerts: List[str] = []
+    if vr.head_nod_detected:
+        alerts.append("nod_detected")
+    if vr.perclos > PERCLOS_ALERT_SEVERE:
+        alerts.append("perclos_severe")
+    if vr.perclos > PERCLOS_ALERT_HIGH and "perclos_severe" not in alerts:
+        alerts.append("perclos_high")
+    if vr.yawn_count_window >= 3:
+        alerts.append("yawn_frequent")
+    if vr.blink_rate > BLINK_RATE_ALERT_HIGH:
+        alerts.append("blink_rate_high")
+    if vr.head_distracted:
+        alerts.append("distracted")
+    if vr.yawn_active:
+        alerts.append("yawning")
+    return alerts
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -266,9 +294,18 @@ class VisionEngine:
         # ── 判定闭眼: BlendShapes 优先 ──
         is_closed: Optional[bool] = None
 
-        if cfg.use_blendshapes_for_blink and "eyeBlinkLeft" in bs and "eyeBlinkRight" in bs:
-            # BlendShapes 路径: eyeBlink 0-1, 越高越闭合
-            eye_blink = max(bs["eyeBlinkLeft"], bs["eyeBlinkRight"])
+        if cfg.use_blendshapes_for_blink and (
+            "eyeBlinkLeft" in bs or "eyeBlinkRight" in bs
+        ):
+            # BlendShapes 路径: eyeBlink 0-1, 越高越闭合（单侧缺失时用另一侧）
+            lb = bs.get("eyeBlinkLeft")
+            rb = bs.get("eyeBlinkRight")
+            if lb is not None and rb is not None:
+                eye_blink = max(lb, rb)
+            elif lb is not None:
+                eye_blink = lb
+            else:
+                eye_blink = rb if rb is not None else 0.0
             is_closed = eye_blink > cfg.bs_blink_threshold
             consec_threshold = cfg.bs_blink_consec_frames
         else:
@@ -363,11 +400,13 @@ class VisionEngine:
         min_duration = cfg.mar_yawn_min_duration_sec
 
         if cfg.use_blendshapes_for_yawn and "jawOpen" in bs:
-            # BlendShapes 路径: jawOpen 0-1 + mouthFunnel 辅助区分说话
+            # BlendShapes 路径: jawOpen + mouthFunnel 区分说话；无 funnel 时抬高 jaw 阈值
             jaw = bs["jawOpen"]
-            funnel = bs.get("mouthFunnel", 0.0)
-            # 哈欠: 嘴巴大张 + 嘴型偏圆 (说话时 funnel 低)
-            mouth_open = jaw > cfg.bs_yawn_jaw_threshold and funnel > cfg.bs_yawn_funnel_threshold
+            if "mouthFunnel" in bs:
+                funnel = bs["mouthFunnel"]
+                mouth_open = jaw > cfg.bs_yawn_jaw_threshold and funnel > cfg.bs_yawn_funnel_threshold
+            else:
+                mouth_open = jaw > (cfg.bs_yawn_jaw_threshold + 0.18)
             min_duration = cfg.bs_yawn_min_duration_sec
         else:
             # 几何回退

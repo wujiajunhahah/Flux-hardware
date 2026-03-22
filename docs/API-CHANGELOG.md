@@ -27,6 +27,12 @@
 
 ## 历史条目
 
+### 2026-03-21 — CI、离线自检、视觉告警单一来源（无 JSON 契约变更）
+
+- **仓库**：GitHub Actions（`.github/workflows/ci.yml`）在 **push / PR** 至 `main` 或 `master` 时执行 `pip install -r requirements.txt` 与 **`python tools/system_sanity_check.py`**（`model/` 未提交时 ONNX 段自动跳过，仍可通过）。
+- **开发者**：见 [DEVELOPMENT.md](./DEVELOPMENT.md) §2「离线系统自检」；贡献流程见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
+- **内部实现**：`VisionReading` → 告警 ID 列表由 **`src/vision_engine.vision_reading_alerts`** 统一生成；**不改变** `state_update` / `vision` / `fusion` 对外字段形状。
+
 ### 2026-03-20 — `fusion.stamina` 可空、`vision.stale`、眨眼统计修复
 
 - **Breaking（轻微）**：当 EMG 与 Vision 均不可用于融合时，`state_update` 内 **`fusion.stamina`** 为 **`null`**（不再使用占位 `50`）；`fusion.state` 仍为 **`unknown`**。客户端应用 `source === "none"` 或 `stamina == null` 时勿把主环当作有效 0–100 分。
@@ -42,6 +48,7 @@
 - **Web 主仪表盘**：主续航环与趋势图优先显示 **`fusion.stamina`**；新增「综合续航」卡片（来源、权重、视觉摘要、告警标签）；窄屏样式优化（`max-width: 420px`）。
 - **`GET /api/v1/transport`** / **`GET /api/v1/status`**：增加 **`vision`**（`ws_clients`、`receiving`、`last_frame_age_sec`）与 **`sources_note`**；仪表盘分「手环 EMG」「摄像头」两行，二者可同时启用。
 - **摄像头 UX**：抽取 `web/static/vision-capture.js`；主仪表盘支持**本页**开启摄像头（先 `getUserMedia` 再加载模型与 WS，减少「授权后无反馈」）；`vision.html` 保留为独立调试页并含返回仪表盘链接。
+- **BlendShapes（摄入）**：`vision_frame` 可使用 **`schema: 2`** 并附带疲劳相关 **`blendshapes`** 系数（见 [VISION-WEBSOCKET-SPEC.md](./VISION-WEBSOCKET-SPEC.md) §2.1）。服务端 **`VisionEngine`** 对眨眼/PERCLOS 与哈欠**优先**使用该字段，缺失时回退 **`geometry`** 的 EAR/MAR；`state_update` 里的 **`vision`** 仍为融合后的 **`VisionReading`** 快照（不回传原始 blendshapes）。
 
 ### 2026-03-20 — 会话归档文件名与时间序列
 

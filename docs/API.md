@@ -15,6 +15,8 @@ FluxChi exposes a versioned REST API, an SSE stream, and a WebSocket endpoint. A
 
 `state_update` frames (WebSocket `/ws`, SSE `/api/v1/stream`, `GET /api/v1/state`) may include optional **`vision`** and **`fusion`**. The web dashboard uses **`fusion.stamina`** for the primary ring when **`fusion.source` ≠ `"none"`** and **`fusion.stamina`** is a number; otherwise it falls back to EMG **`stamina.value`**. When there is no EMG and no usable vision, **`fusion.stamina`** may be **`null`** (do not treat as 0–100). When **`vision`** is present, **`vision.stale`** (boolean) indicates whether the snapshot is outside the server’s fresh-frame window (stale vision is omitted from fusion).
 
+The **`vision`** snapshot matches **`VisionReading.to_dict()`** (`perclos`, `blink_rate`, `fatigue_score`, `quality`, …). On the wire into **`/ws/vision`**, **`vision_frame`** may use **`schema: 2`** with an optional fatigue-related **`blendshapes`** map; **`VisionEngine`** then prefers blendshapes for blink/PERCLOS and yawn and falls back to geometry **EAR/MAR** when absent. See [VISION-WEBSOCKET-SPEC.md](./VISION-WEBSOCKET-SPEC.md).
+
 Base URL: `http://<host>:8000`
 
 Interactive docs (live when server is running):
