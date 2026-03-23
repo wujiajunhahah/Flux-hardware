@@ -51,11 +51,13 @@ from src.session_store import list_sessions_meta, load_session, save_session_pac
 from src.energy import StaminaEngine, StaminaState
 from src.decision import DecisionEngine
 from src.fusion_engine import FusionEngine
-from src.vision_engine import VisionEngine, vision_reading_alerts
-from src.sensor_module import ModuleReading
+from src.vision_engine import VisionEngine
 from src.modules.emg_module import EmgModule
 from src.modules.vision_module import VisionModule
 from src.context_bus import ContextBus
+from src.flywheel.store import FlywheelStore, LabelEvent
+from src.vision_openface import OpenFaceAdapter
+from src.vision_rppg import RppgEngine
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -71,6 +73,8 @@ async def _app_lifespan(_app: FastAPI):
             await task
         except asyncio.CancelledError:
             pass
+        if flywheel_store is not None:
+            flywheel_store.close()
 
 
 app = FastAPI(
@@ -107,6 +111,9 @@ fusion_engine: Optional[FusionEngine] = None
 emg_module: Optional[EmgModule] = None
 vision_module: Optional[VisionModule] = None
 context_bus: Optional[ContextBus] = None
+openface_adapter: Optional[OpenFaceAdapter] = None
+rppg_engine: Optional[RppgEngine] = None
+flywheel_store: Optional[FlywheelStore] = None
 vision_ws_connections: Set[WebSocket] = set()
 _last_vision_frame_ts: float = 0.0
 VISION_FRAME_STALE_SEC = 2.5
@@ -531,6 +538,17 @@ class TransportApplyBody(BaseModel):
     address: Optional[str] = Field(None, description="ble 模式：设备地址，留空则自动扫描")
 
 
+class FlywheelLabelBody(BaseModel):
+    label: str = Field(..., description="fatigued | alert")
+    note: str = Field(default="", description="可选备注")
+    kss: Optional[int] = Field(default=None, ge=1, le=9, description="可选 KSS 1-9")
+    window_sec: float = Field(default=300.0, ge=30.0, le=1800.0, description="标注回溯窗口秒数")
+
+
+class VisionBaselineStartBody(BaseModel):
+    duration_sec: float = Field(default=20.0, ge=5.0, le=90.0)
+
+
 def _capture_web_recording_snapshot() -> None:
     """processing_loop 在写入 latest_payload 后调用；500ms 节流。"""
     global web_recording
@@ -610,6 +628,33 @@ def _build_web_session_package(rec: Dict[str, Any]) -> Dict[str, Any]:
             "featureWindow": "aligned_with_ios_export",
         },
     }
+
+
+def _ensure_flywheel_store() -> FlywheelStore:
+    global flywheel_store
+    if flywheel_store is None:
+        flywheel_store = FlywheelStore()
+    return flywheel_store
+
+
+def _save_flywheel_snapshot_from_modules(payload: Dict[str, Any]) -> None:
+    if emg_module is None or fusion_engine is None:
+        return
+    store = _ensure_flywheel_store()
+    readings: Dict[str, Any] = {}
+    if emg_module.latest is not None:
+        readings["emg"] = emg_module.latest
+    if vision_module is not None and vision_module.latest is not None:
+        readings["vision"] = vision_module.latest
+    if not readings:
+        return
+    fu = payload.get("fusion") or {}
+    store.save_snapshot(
+        readings=readings,
+        fused_stamina=fu.get("stamina"),
+        fused_state=fu.get("state"),
+        alerts=fu.get("alerts") or [],
+    )
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -865,6 +910,52 @@ async def v1_model():
     return _ok({"loaded": False, "classes": []})
 
 
+# ── Flywheel ───────────────────────────────────────────────
+@app.post("/api/v1/flywheel/label", tags=["Flywheel"], summary="写入疲劳标注")
+async def v1_flywheel_label(body: FlywheelLabelBody):
+    norm = body.label.strip().lower()
+    mapping = {
+        "fatigued": "fatigued",
+        "alert": "alert",
+        "我很累": "fatigued",
+        "我很清醒": "alert",
+    }
+    if norm not in mapping:
+        return _err("bad_request", f"未知标签: {body.label}")
+    event = LabelEvent(
+        timestamp=time.time(),
+        label=mapping[norm],
+        source="user_button",
+        kss=body.kss,
+        note=body.note.strip(),
+    )
+    store = _ensure_flywheel_store()
+    store.save_label(event, window_sec=body.window_sec)
+    return _ok({"saved": True, "label": event.label, "window_sec": body.window_sec})
+
+
+@app.get("/api/v1/flywheel/stats", tags=["Flywheel"], summary="飞轮数据统计")
+async def v1_flywheel_stats():
+    store = _ensure_flywheel_store()
+    return _ok(store.stats())
+
+
+# ── Vision Baseline ───────────────────────────────────────
+@app.post("/api/v1/vision/baseline/start", tags=["Vision"], summary="开始个人视觉基线校准")
+async def v1_vision_baseline_start(body: VisionBaselineStartBody):
+    _ensure_vision_stack()
+    assert vision_engine is not None
+    vision_engine.start_baseline_calibration(duration_sec=body.duration_sec)
+    return _ok({"started": True, "duration_sec": body.duration_sec})
+
+
+@app.get("/api/v1/vision/baseline", tags=["Vision"], summary="视觉基线校准状态")
+async def v1_vision_baseline():
+    _ensure_vision_stack()
+    assert vision_engine is not None
+    return _ok(vision_engine.calibration_status())
+
+
 # ── Core — Stamina ───────────────────────────────────────────
 @app.get("/api/v1/pulse", tags=["Core"], summary="轻量心跳（iOS 后台用）")
 async def v1_pulse():
@@ -1086,12 +1177,17 @@ async def broadcast(data: dict):
 
 def _ensure_vision_stack() -> None:
     global vision_engine, fusion_engine, vision_module, context_bus
+    global openface_adapter, rppg_engine
     if context_bus is None:
         context_bus = ContextBus()
     if vision_engine is None:
         vision_engine = VisionEngine()
     if vision_module is None:
         vision_module = VisionModule(engine=vision_engine, context_bus=context_bus)
+    if openface_adapter is None:
+        openface_adapter = OpenFaceAdapter()
+    if rppg_engine is None:
+        rppg_engine = RppgEngine()
     if fusion_engine is None:
         fusion_engine = FusionEngine(context_bus=context_bus)
         fusion_engine.register(vision_module)
@@ -1103,7 +1199,7 @@ async def websocket_vision(ws: WebSocket):
     global _last_vision_frame_ts
     await ws.accept()
     _ensure_vision_stack()
-    assert vision_engine is not None
+    assert vision_module is not None
     vision_ws_connections.add(ws)
     try:
         while True:
@@ -1116,7 +1212,11 @@ async def websocket_vision(ws: WebSocket):
             if data.get("type") == "ping":
                 await ws.send_json({"type": "pong"})
                 continue
-            vision_engine.update(data)
+            vision_module.update(data)
+            if openface_adapter is not None:
+                openface_adapter.update(data)
+            if rppg_engine is not None:
+                rppg_engine.update(data)
             if data.get("type") == "vision_frame":
                 _last_vision_frame_ts = time.time()
     except WebSocketDisconnect:
@@ -1127,11 +1227,7 @@ async def websocket_vision(ws: WebSocket):
         vision_ws_connections.discard(ws)
 
 
-def _append_vision_and_fusion(
-    payload: dict,
-    stamina_reading,
-    emg_buffer: Optional[np.ndarray] = None,
-) -> None:
+def _append_vision_and_fusion(payload: dict) -> None:
     """写入 vision 快照与 EMG+Vision 融合结果。
 
     通过正式的 EmgModule / VisionModule 注入 ModuleReading，
@@ -1140,31 +1236,7 @@ def _append_vision_and_fusion(
     _ensure_vision_stack()
     now = time.time()
 
-    # ── EMG 侧: 将 StaminaReading 写入 EmgModule ──
-    if emg_module is not None and stamina_reading is not None:
-
-        emg_q = (
-            _emg_ac_quality_from_buffer(emg_buffer)
-            if emg_buffer is not None and getattr(emg_buffer, "size", 0) > 0
-            else EmgModule._estimate_quality(stamina_reading)
-        )
-        emg_module._set_latest(ModuleReading(
-            module_id="emg",
-            stamina=stamina_reading.stamina,
-            quality=emg_q,
-            dimensions={
-                "consistency": stamina_reading.consistency,
-                "tension": stamina_reading.tension,
-                "fatigue_mdf": stamina_reading.fatigue,
-            },
-            metadata={"state": stamina_reading.state.value},
-            alerts=[],
-            timestamp=stamina_reading.timestamp,
-        ))
-    elif emg_module is not None:
-        emg_module._latest = None
-
-    # ── Vision 侧: 将 VisionReading 写入 VisionModule ──
+    # ── Vision 侧: 读取 VisionModule 最新值（由 /ws/vision 驱动）──
     vr = vision_engine.latest if vision_engine else None
     vision_stale = (
         vr is not None
@@ -1177,30 +1249,13 @@ def _append_vision_and_fusion(
         vd = vr.to_dict()
         vd["stale"] = vision_stale
         payload["vision"] = vd
+        if vision_stale and vision_module is not None:
+            vision_module._latest = None
 
-    if vision_module is not None and vr is not None and not vision_stale:
-
-        vision_module._set_latest(ModuleReading(
-            module_id="vision",
-            stamina=(1.0 - vr.fatigue_score) * 100.0,
-            quality=vr.quality,
-            dimensions={
-                "perclos": vr.perclos,
-                "blink_rate": vr.blink_rate,
-                "fatigue_score": vr.fatigue_score,
-            },
-            metadata={
-                "alertness_level": vr.alertness_level,
-                "face_present": vr.face_present,
-                "head_nod_detected": vr.head_nod_detected,
-                "head_distracted": vr.head_distracted,
-                "yawn_active": vr.yawn_active,
-            },
-            alerts=vision_reading_alerts(vr),
-            timestamp=vr.timestamp,
-        ))
-    elif vision_module is not None:
-        vision_module._latest = None
+    if openface_adapter is not None and openface_adapter.latest is not None:
+        payload["openface"] = openface_adapter.latest.to_dict()
+    if rppg_engine is not None and rppg_engine.latest is not None:
+        payload["rppg"] = rppg_engine.latest.to_dict()
 
     # ── 融合 ──
     if fusion_engine:
@@ -1236,6 +1291,8 @@ async def processing_loop():
         if stream is None:
             await asyncio.sleep(0.2)
             now = time.time()
+            if emg_module is not None:
+                emg_module._latest = None
             idle_payload = {
                 "type": "state_update",
                 "timestamp": now,
@@ -1245,7 +1302,7 @@ async def processing_loop():
                 "rms": [0.0] * CHANNEL_COUNT,
                 "emg_sample_count": 0,
             }
-            _append_vision_and_fusion(idle_payload, None, None)
+            _append_vision_and_fusion(idle_payload)
             latest_payload.clear()
             latest_payload.update(idle_payload)
             await broadcast(idle_payload)
@@ -1298,11 +1355,12 @@ async def processing_loop():
                 print(f"[inference] {e}")
 
         stamina_reading = None
-        if stamina_engine and emg_buffer.shape[0] >= window_samples:
+        if emg_module and stamina_engine and emg_buffer.shape[0] >= window_samples:
             try:
                 stamina_engine.set_effective_sample_rate(eff_sr)
                 window = emg_buffer[-window_samples:]
-                stamina_reading = stamina_engine.update(window, activity, now)
+                emg_module.update(window, activity, now)
+                stamina_reading = emg_module.stamina_reading
             except Exception as e:
                 print(f"[stamina] {e}")
 
@@ -1364,11 +1422,12 @@ async def processing_loop():
                 if len(timeline) > 200:
                     timeline[:] = timeline[-100:]
 
-        _append_vision_and_fusion(payload, stamina_reading, emg_buffer)
+        _append_vision_and_fusion(payload)
 
         latest_payload.clear()
         latest_payload.update(payload)
 
+        _save_flywheel_snapshot_from_modules(payload)
         _capture_web_recording_snapshot()
 
         await broadcast(payload)

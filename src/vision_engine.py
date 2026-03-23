@@ -82,6 +82,32 @@ class VisionConfig:
     w_yawn: float = 0.20
 
 
+@dataclass
+class VisionBaseline:
+    """个人视觉基线参数（开机后或手动触发的一次性初始化校准）。"""
+
+    calibrated_at: float
+    ear_open_mean: Optional[float]
+    blink_bs_open_mean: Optional[float]
+    jaw_open_rest_mean: Optional[float]
+    head_pitch_abs_mean: Optional[float]
+    ear_blink_threshold: float
+    bs_blink_threshold: float
+    head_pitch_nod_deg: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "calibrated_at": self.calibrated_at,
+            "ear_open_mean": self.ear_open_mean,
+            "blink_bs_open_mean": self.blink_bs_open_mean,
+            "jaw_open_rest_mean": self.jaw_open_rest_mean,
+            "head_pitch_abs_mean": self.head_pitch_abs_mean,
+            "ear_blink_threshold": self.ear_blink_threshold,
+            "bs_blink_threshold": self.bs_blink_threshold,
+            "head_pitch_nod_deg": self.head_pitch_nod_deg,
+        }
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  输出数据结构
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -236,6 +262,16 @@ class VisionEngine:
 
         # -- 输出缓存 --
         self.latest: Optional[VisionReading] = None
+        self.baseline: Optional[VisionBaseline] = None
+
+        # -- 个人基线校准 --
+        self._calibrating: bool = False
+        self._calibration_start: Optional[float] = None
+        self._calibration_duration_sec: float = 20.0
+        self._calib_ear: List[float] = []
+        self._calib_blink_bs: List[float] = []
+        self._calib_jaw: List[float] = []
+        self._calib_pitch_abs: List[float] = []
 
     def update(self, frame: Dict[str, Any]) -> Optional[VisionReading]:
         """
@@ -270,6 +306,8 @@ class VisionEngine:
         geometry = frame.get("geometry") or {}
         blendshapes = frame.get("blendshapes") or {}
 
+        self._calibration_update(t, face_present, geometry, blendshapes)
+
         # -- 处理各维度 (blendshapes 优先, 几何回退) --
         self._process_blink(t, geometry, blendshapes, face_present)
         self._process_head_pose(t, geometry, face_present)
@@ -279,6 +317,103 @@ class VisionEngine:
         reading = self._compute_reading(t, face_present, face_confidence)
         self.latest = reading
         return reading
+
+    def start_baseline_calibration(self, duration_sec: float = 20.0) -> None:
+        """启动个人基线校准（EAR/BlendShapes/头姿）。"""
+        self._calibrating = True
+        self._calibration_start = None
+        self._calibration_duration_sec = max(5.0, float(duration_sec))
+        self._calib_ear.clear()
+        self._calib_blink_bs.clear()
+        self._calib_jaw.clear()
+        self._calib_pitch_abs.clear()
+
+    def calibration_status(self, now: Optional[float] = None) -> Dict[str, Any]:
+        now = now or time.time()
+        if not self._calibrating:
+            return {
+                "active": False,
+                "baseline": self.baseline.to_dict() if self.baseline else None,
+            }
+        start = self._calibration_start or now
+        elapsed = max(0.0, now - start)
+        return {
+            "active": True,
+            "elapsed_sec": round(elapsed, 2),
+            "target_sec": self._calibration_duration_sec,
+            "samples": {
+                "ear": len(self._calib_ear),
+                "eye_blink_bs": len(self._calib_blink_bs),
+                "jaw_open": len(self._calib_jaw),
+                "pitch": len(self._calib_pitch_abs),
+            },
+        }
+
+    def _calibration_update(self, t: float, face_present: bool, geo: Dict, bs: Dict) -> None:
+        if not self._calibrating:
+            return
+        if self._calibration_start is None:
+            self._calibration_start = t
+        if face_present:
+            ear = geo.get("ear")
+            if ear is None and geo.get("earLeft") is not None and geo.get("earRight") is not None:
+                ear = min(geo["earLeft"], geo["earRight"])
+            if ear is not None:
+                self._calib_ear.append(float(ear))
+            eye_blink = None
+            if bs.get("eyeBlinkLeft") is not None and bs.get("eyeBlinkRight") is not None:
+                eye_blink = 0.5 * (float(bs["eyeBlinkLeft"]) + float(bs["eyeBlinkRight"]))
+            elif bs.get("eyeBlinkLeft") is not None:
+                eye_blink = float(bs["eyeBlinkLeft"])
+            elif bs.get("eyeBlinkRight") is not None:
+                eye_blink = float(bs["eyeBlinkRight"])
+            if eye_blink is not None:
+                self._calib_blink_bs.append(eye_blink)
+            if bs.get("jawOpen") is not None:
+                self._calib_jaw.append(float(bs["jawOpen"]))
+            pose = geo.get("headPoseDeg") or {}
+            if pose.get("pitch") is not None:
+                self._calib_pitch_abs.append(abs(float(pose["pitch"])))
+        if (t - self._calibration_start) >= self._calibration_duration_sec:
+            self._finish_calibration(t)
+
+    def _finish_calibration(self, t: float) -> None:
+        cfg = self.config
+        ear_mean = float(sum(self._calib_ear) / len(self._calib_ear)) if self._calib_ear else None
+        blink_bs_mean = (
+            float(sum(self._calib_blink_bs) / len(self._calib_blink_bs))
+            if self._calib_blink_bs
+            else None
+        )
+        jaw_mean = float(sum(self._calib_jaw) / len(self._calib_jaw)) if self._calib_jaw else None
+        pitch_mean = (
+            float(sum(self._calib_pitch_abs) / len(self._calib_pitch_abs))
+            if self._calib_pitch_abs
+            else None
+        )
+
+        if ear_mean is not None:
+            cfg.ear_blink_threshold = float(max(0.12, min(0.32, ear_mean * 0.75)))
+        if blink_bs_mean is not None:
+            # baseline 通常在 0.02~0.15，闭眼常 >0.55；这里做个体偏置修正
+            cfg.bs_blink_threshold = float(max(0.35, min(0.80, blink_bs_mean + 0.38)))
+        if pitch_mean is not None:
+            cfg.head_pitch_nod_deg = float(max(14.0, min(35.0, pitch_mean + 16.0)))
+        if jaw_mean is not None:
+            cfg.bs_yawn_jaw_threshold = float(max(0.35, min(0.75, jaw_mean + 0.28)))
+
+        self.baseline = VisionBaseline(
+            calibrated_at=t,
+            ear_open_mean=ear_mean,
+            blink_bs_open_mean=blink_bs_mean,
+            jaw_open_rest_mean=jaw_mean,
+            head_pitch_abs_mean=pitch_mean,
+            ear_blink_threshold=cfg.ear_blink_threshold,
+            bs_blink_threshold=cfg.bs_blink_threshold,
+            head_pitch_nod_deg=cfg.head_pitch_nod_deg,
+        )
+        self._calibrating = False
+        self._calibration_start = None
 
     # ── 眨眼 / PERCLOS ──────────────────────────────────────
 
@@ -551,6 +686,12 @@ class VisionEngine:
         self._last_face_seen = None
         self._face_present_buf.clear()
         self.latest = None
+        self._calibrating = False
+        self._calibration_start = None
+        self._calib_ear.clear()
+        self._calib_blink_bs.clear()
+        self._calib_jaw.clear()
+        self._calib_pitch_abs.clear()
 
     @property
     def dropped_frames(self) -> int:

@@ -636,6 +636,13 @@ a.session-dl { color: var(--green); font-size: 11px; margin-left: 4px; }
   <span class="transport-msg" id="sessionInsightMsg"></span>
 </div>
 
+<div class="transport-bar session-bar">
+  <span class="transport-label">主观标注</span>
+  <button type="button" id="labelFatiguedBtn">我很累</button>
+  <button type="button" id="labelAlertBtn">我很清醒</button>
+  <span class="transport-msg" id="labelMsg"></span>
+</div>
+
 <div class="page">
 
   <div class="sec full">
@@ -1065,6 +1072,38 @@ const chart = new Chart(document.getElementById('trendChart'), {
       insightEl.style.color = 'var(--red)';
     }
   });
+})();
+
+(function flywheelLabelBar(){
+  const fatiguedBtn = document.getElementById('labelFatiguedBtn');
+  const alertBtn = document.getElementById('labelAlertBtn');
+  const msg = document.getElementById('labelMsg');
+
+  async function sendLabel(label) {
+    msg.textContent = '提交中…';
+    msg.style.color = 'var(--dim)';
+    try {
+      const r = await fetch('/api/v1/flywheel/label', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, window_sec: 300 })
+      });
+      const j = await r.json();
+      if (!j.ok) {
+        msg.textContent = j.message || j.error || '提交失败';
+        msg.style.color = 'var(--red)';
+        return;
+      }
+      msg.textContent = `已标注：${label}（回溯5分钟）`;
+      msg.style.color = 'var(--green)';
+    } catch (e) {
+      msg.textContent = e.message || String(e);
+      msg.style.color = 'var(--red)';
+    }
+  }
+
+  fatiguedBtn.addEventListener('click', () => sendLabel('fatigued'));
+  alertBtn.addEventListener('click', () => sendLabel('alert'));
 })();
 
 function connect(){

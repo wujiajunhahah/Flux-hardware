@@ -13,3 +13,7 @@ websockets>=11.0
 skl2onnx>=1.15
 onnxruntime>=1.15
 bleak>=0.21
+xgboost>=2.0
+onnxmltools>=1.12
+# Optional vision stack integrations
+pyVHR>=2.0
