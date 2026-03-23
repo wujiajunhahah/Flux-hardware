@@ -53,6 +53,46 @@ Open `http://localhost:8000` in your browser.
 python tools/system_sanity_check.py
 ```
 
+## Latest release (Mar 2026)
+
+This release adds a complete "fatigue data flywheel" backend loop:
+
+- **Vision stack integration**
+  - OpenFace-compatible per-frame adapter (`AU`, `gaze`, `emotion`)
+  - rPPG adapter from ROI RGB (`HR`, `HRV`)
+  - Personal vision baseline calibration (`EAR` / `BlendShapes` / head pose)
+- **Flywheel APIs**
+  - `POST /api/v1/flywheel/label` (`fatigued` / `alert`)
+  - `GET /api/v1/flywheel/stats`
+  - `POST /api/v1/vision/baseline/start`
+  - `GET /api/v1/vision/baseline`
+- **Pipeline migration**
+  - `web/app.py` processing chain now uses `EmgModule.update()` as the primary path
+- **Training pipeline**
+  - `scripts/train_flywheel_xgboost.py`
+  - Feature export -> XGBoost training -> ONNX export
+
+## Deploy jump page to focux.me (Vercel)
+
+`site/` contains a static "portal page" for `focux.me` that:
+
+- provides one-click links to local FluxChi dashboard/docs
+- probes `http://127.0.0.1:8000/api/v1/status` to show online/offline state
+
+Deploy (from repo root):
+
+```bash
+npx vercel@latest site --prod
+```
+
+Then bind your domain in Vercel:
+
+```bash
+npx vercel@latest domains add focux.me
+```
+
+> Note: Vercel is used here for the **portal page** only. The hardware gateway (`web/app.py`) still runs on your local/server Python environment.
+
 ## Documentation
 
 | Doc | Purpose |
