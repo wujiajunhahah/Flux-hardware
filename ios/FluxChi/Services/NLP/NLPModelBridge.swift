@@ -37,7 +37,7 @@ enum NLPModelBridge {
         Task {
             let session = LanguageModelSession()
             session.prewarm()
-            print("[NLP] Foundation Models prewarm 已请求")
+            FluxLog.nlp.info("Foundation Models prewarm 已请求")
         }
         #endif
     }
@@ -47,8 +47,7 @@ enum NLPModelBridge {
         #if canImport(FoundationModels)
         let model = SystemLanguageModel.default
         guard model.isAvailable else {
-            print("[NLP] Foundation Models 不可用 — isAvailable=false")
-            print("[NLP] 诊断: \(diagnosticInfo)")
+            FluxLog.nlp.warn("Foundation Models 不可用 — isAvailable=false, 诊断: \(diagnosticInfo)")
             return nil
         }
 
@@ -57,22 +56,21 @@ enum NLPModelBridge {
             let session = LanguageModelSession {
                 inst
             }
-            print("[NLP] Foundation Models 开始生成 (persona: \(persona))...")
+            FluxLog.nlp.info("Foundation Models 开始生成 (persona: \(persona))")
             let response = try await session.respond(to: prompt)
             let text = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
             if text.isEmpty {
-                print("[NLP] Foundation Models 返回空内容，降级到模板")
+                FluxLog.nlp.warn("Foundation Models 返回空内容，降级到模板")
                 return nil
             }
-            print("[NLP] Foundation Models 生成成功 (\(text.count) 字符)")
+            FluxLog.nlp.info("Foundation Models 生成成功 (\(text.count) 字符)")
             return text
         } catch {
-            print("[NLP] Foundation Models 错误: \(error.localizedDescription)")
-            print("[NLP] 错误详情: \(error)")
+            FluxLog.nlp.error("Foundation Models 生成失败", error: error)
             return nil
         }
         #else
-        print("[NLP] FoundationModels 框架未编入 (canImport 失败)")
+        FluxLog.nlp.info("FoundationModels 框架未编入 (canImport 失败)")
         return nil
         #endif
     }

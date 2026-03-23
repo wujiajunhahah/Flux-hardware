@@ -3,10 +3,13 @@ import CoreBluetooth
 
 struct OnboardingView: View {
     @EnvironmentObject var bleManager: BLEManager
+    @EnvironmentObject var service: FluxService
     @EnvironmentObject var alertManager: AlertManager
     @Binding var isCompleted: Bool
 
     @State private var currentStep = 0
+    @State private var showCalibrationCover = false
+    @State private var onboardingCalibrationDone = false
 
     var body: some View {
         ZStack {
@@ -196,59 +199,20 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - OB4: 基线校准
-
-    enum CalibrationPhase { case idle, baseline, mvc, done }
-
-    @State private var calibrationPhase: CalibrationPhase = .idle
-    @State private var calibrationProgress: CGFloat = 0
-    @State private var calibrationTimer: Timer?
+    // MARK: - OB4: 基线校准（与 `DailyCalibrationView` 同一套采样与 `EMGCalibrationStore`）
 
     private var calibrationStep: some View {
-        let ringColor: Color = calibrationPhase == .mvc ? Flux.Colors.warning : Flux.Colors.success
-
-        return VStack(spacing: 32) {
+        VStack(spacing: 32) {
             Spacer()
 
-            ZStack {
-                Circle()
-                    .stroke(ringColor.opacity(0.2), lineWidth: 6)
-                    .frame(width: 140, height: 140)
-
-                Circle()
-                    .trim(from: 0, to: calibrationProgress)
-                    .stroke(ringColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: 140, height: 140)
-                    .animation(.linear(duration: 0.1), value: calibrationProgress)
-
-                switch calibrationPhase {
-                case .done:
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 56))
-                        .foregroundStyle(Flux.Colors.success)
-                case .mvc:
-                    Image(systemName: "hand.raised.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(Flux.Colors.warning)
-                        .symbolEffect(.pulse, isActive: true)
-                case .baseline:
-                    Image(systemName: "hand.point.down.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(Flux.Colors.success)
-                        .symbolEffect(.pulse, isActive: true)
-                case .idle:
-                    Image(systemName: "hand.point.down.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.secondary)
-                }
-            }
+            Image(systemName: "tuningfork")
+                .font(.system(size: 64))
+                .foregroundStyle(Color(.systemTeal).gradient)
 
             VStack(spacing: 12) {
-                Text(calibrationTitle)
+                Text("个人校准")
                     .font(.title.bold())
-
-                Text(calibrationSubtitle)
+                Text("约 15 秒：先放松再最大握拳，数据会用于续航估算与圆环归一化。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -258,106 +222,32 @@ struct OnboardingView: View {
 
             stepIndicator(current: 3, total: 4)
 
-            switch calibrationPhase {
-            case .done:
+            if onboardingCalibrationDone {
                 nextButton("开始使用") {
                     isCompleted = true
                 }
-            case .baseline, .mvc:
-                Text(calibrationPhase == .baseline ? "请保持放松…" : "最大力握拳！")
-                    .font(.subheadline)
-                    .foregroundStyle(calibrationPhase == .mvc ? .orange : .secondary)
-                    .padding(.bottom, 50)
-            case .idle:
+            } else {
                 VStack(spacing: 12) {
                     nextButton("开始校准") {
-                        startCalibration()
+                        showCalibrationCover = true
                     }
                     .disabled(!bleManager.isConnected)
 
-                    if !bleManager.isConnected {
-                        Button("跳过校准") {
-                            isCompleted = true
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    Button("跳过校准") {
+                        isCompleted = true
                     }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 }
             }
         }
         .padding(Flux.Spacing.section)
-    }
-
-    private var calibrationTitle: String {
-        switch calibrationPhase {
-        case .idle:     return "基线校准"
-        case .baseline: return "静息基线"
-        case .mvc:      return "最大发力"
-        case .done:     return "校准完成"
-        }
-    }
-
-    private var calibrationSubtitle: String {
-        switch calibrationPhase {
-        case .idle:
-            return "两步校准：放松手臂 10 秒 + 最大握拳 5 秒\nFocuX 将记录你的肌肉基线范围"
-        case .baseline:
-            return "放松手臂，保持自然姿势\n正在记录静息基线…"
-        case .mvc:
-            return "请尽全力握拳并保持 5 秒\n正在记录最大发力值…"
-        case .done:
-            return "已记录静息基线和最大发力值\n开始你的专注旅程吧！"
-        }
-    }
-
-    // MARK: - Calibration Logic
-
-    private func startCalibration() {
-        // Phase 1: 静息基线 10 秒
-        calibrationPhase = .baseline
-        calibrationProgress = 0
-
-        let baselineDuration: TimeInterval = 10
-        let interval: TimeInterval = 0.1
-        let baselineInc = CGFloat(interval / baselineDuration)
-
-        calibrationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
-            Task { @MainActor in
-                calibrationProgress += baselineInc
-                if calibrationProgress >= 1.0 {
-                    timer.invalidate()
-                    calibrationTimer = nil
-                    startMVCPhase()
-                }
-            }
-        }
-    }
-
-    private func startMVCPhase() {
-        // Phase 2: 最大发力 5 秒
-        calibrationPhase = .mvc
-        calibrationProgress = 0
-
-        let mvcDuration: TimeInterval = 5
-        let interval: TimeInterval = 0.1
-        let mvcInc = CGFloat(interval / mvcDuration)
-
-        calibrationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
-            Task { @MainActor in
-                calibrationProgress += mvcInc
-                if calibrationProgress >= 1.0 {
-                    timer.invalidate()
-                    calibrationTimer = nil
-                    calibrationPhase = .done
-
-                    // 存储今日已校准（含 MVC）
-                    UserDefaults.standard.set(
-                        Date().timeIntervalSince1970,
-                        forKey: "flux_last_calibration"
-                    )
-                    UserDefaults.standard.set(true, forKey: "flux_mvc_collected")
-                }
-            }
+        .fullScreenCover(isPresented: $showCalibrationCover) {
+            DailyCalibrationView(onFinished: {
+                onboardingCalibrationDone = true
+            })
+            .environmentObject(service)
+            .environmentObject(bleManager)
         }
     }
 
@@ -411,5 +301,6 @@ struct OnboardingView: View {
 #Preview {
     OnboardingView(isCompleted: .constant(false))
         .environmentObject(BLEManager())
+        .environmentObject(FluxService())
         .environmentObject(AlertManager())
 }

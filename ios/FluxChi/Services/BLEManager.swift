@@ -143,19 +143,21 @@ final class BLEManager: NSObject, ObservableObject {
         emgFrameCount += 1
         onEMGSample?(values)
 
+        if emgFrameCount % 8 == 0 {
+            latestRMS = emgBuffer.rms(window: 24)
+        }
+
         if emgFrameCount % 50 == 0 {
-            latestRMS = emgBuffer.rms()
             checkDetachment()
             buildAndPushState()
 
-            // 采样日志 - 记录每 50 帧的状态
             let rmsPreview = latestRMS.prefix(3).map { String(format: "%.1f", $0) }.joined(separator: ", ")
             FluxLog.ble.debug("Frame \(emgFrameCount) | RMS: [\(rmsPreview), ...] | Channels: \(nCh)")
         }
     }
 
     private func buildAndPushState() {
-        let rms = latestRMS
+        let rms = emgBuffer.rms()
         let now = Date().timeIntervalSince1970
         let rawChannels = emgBuffer.channelTimeSeries()
 
@@ -356,18 +358,25 @@ final class EMGRingBuffer {
         buffer.first(where: { !$0.isEmpty })?.count ?? 8
     }
 
+    /// 全缓冲区 RMS，用于特征提取 / 推理等需要长时序的场景
     func rms() -> [Double] {
+        rms(window: count)
+    }
+
+    /// 短窗口 RMS，用于实时可视化 — 只取最近 `window` 帧，信号响应更灵敏
+    func rms(window: Int) -> [Double] {
         let nCh = nChannels
-        guard count > 0 else { return Array(repeating: 0, count: nCh) }
+        let w = min(max(window, 1), count)
+        guard w > 0 else { return Array(repeating: 0, count: nCh) }
         var sums = [Double](repeating: 0, count: nCh)
-        let start = (head - count + capacity) % capacity
-        for i in 0..<count {
+        let start = (head - w + capacity) % capacity
+        for i in 0..<w {
             let row = buffer[(start + i) % capacity]
             for ch in 0..<min(row.count, nCh) {
                 sums[ch] += row[ch] * row[ch]
             }
         }
-        return sums.map { sqrt($0 / Double(count)) }
+        return sums.map { sqrt($0 / Double(w)) }
     }
 
     func channelTimeSeries() -> [[Double]] {

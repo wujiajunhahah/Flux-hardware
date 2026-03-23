@@ -64,6 +64,7 @@ struct HistoryView: View {
                 }
             }
             .navigationTitle("历史")
+            .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "搜索")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -139,6 +140,7 @@ struct HistoryView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .contentMargins(.top, 0, for: .scrollContent)
     }
 
     // MARK: - History Today Overview (BIOSORA-style metric row)

@@ -70,7 +70,7 @@ final class FluxService: ObservableObject {
     }
 
     var baseURL: URL {
-        URL(string: "http://\(host):\(port)")!
+        URL(string: "http://\(host):\(port)") ?? URL(string: "http://127.0.0.1:8000")!
     }
 
     @Published var host: String {

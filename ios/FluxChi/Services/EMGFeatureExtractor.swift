@@ -25,7 +25,8 @@ final class EMGFeatureExtractor {
     private let sampleRate: Double
     private let zcThreshold: Double
 
-    init(sampleRate: Double = 1000, zcThreshold: Double = 20) {
+    /// 默认 320Hz 与 BLE 帧率一致（WAVELETECH WLS128 实测值）
+    init(sampleRate: Double = 320, zcThreshold: Double = 20) {
         self.sampleRate = sampleRate
         self.zcThreshold = zcThreshold
     }
@@ -178,18 +179,58 @@ final class EMGFeatureExtractor {
     }
 }
 
+// MARK: - Model Config (从 emg_classifier_config.json 驱动，换模型只需更新 JSON)
+
+/// 模型配置：类别、特征数、输出键名等。
+/// 从 bundle 中的 `emg_classifier_config.json` 加载，避免硬编码与模型耦合。
+struct EMGClassifierConfig: Codable {
+    let classes: [String]
+    let n_features: Int
+    let window_seconds: Double?
+    let channels: Int?
+
+    /// 模型导出时的输出键名（sklearn → coremltools 默认生成 "var_20" 等）。
+    /// 若 JSON 未提供，运行时自动探测模型实际输出。
+    var output_key: String?
+
+    static let fallbackClasses = ["finger_movement", "rest", "wrist_extend", "wrist_flex", "wrist_movement"]
+
+    static func loadFromBundle() -> EMGClassifierConfig {
+        guard let url = Bundle.main.url(forResource: "emg_classifier_config", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let config = try? JSONDecoder().decode(EMGClassifierConfig.self, from: data) else {
+            FluxLog.ml.warn("emg_classifier_config.json 未找到或解析失败，使用内置默认值")
+            return EMGClassifierConfig(
+                classes: fallbackClasses,
+                n_features: EMGFeatureExtractor.totalFeatures,
+                window_seconds: 0.25,
+                channels: 8,
+                output_key: nil
+            )
+        }
+        return config
+    }
+}
+
 // MARK: - CoreML Activity Inference Wrapper
 
 @MainActor
 final class EMGActivityInference {
 
-    static let classes = ["finger_movement", "rest", "wrist_extend", "wrist_flex", "wrist_movement"]
-
     private var model: MLModel?
-    /// BLE 有效帧率远低于 1kHz；与 OnDeviceStaminaEngine 的 MDF 尺度一致
-    private let extractor = EMGFeatureExtractor(sampleRate: 320, zcThreshold: 20)
+    private let config: EMGClassifierConfig
+    private let extractor: EMGFeatureExtractor
+    /// 运行时解析出的输出键名（首次推理时探测并缓存）
+    private var resolvedOutputKey: String?
+    private var validationLogged = false
 
-    init() { loadModel() }
+    var classes: [String] { config.classes }
+
+    init() {
+        self.config = EMGClassifierConfig.loadFromBundle()
+        self.extractor = EMGFeatureExtractor(sampleRate: 320, zcThreshold: 20)
+        loadModel()
+    }
 
     struct Prediction {
         let label: String
@@ -197,13 +238,13 @@ final class EMGActivityInference {
         let probabilities: [String: Double]
     }
 
-    /// Run inference on raw EMG channels（BLE 常见 6 路 → 零填充到 8）。
     func predict(channels: [[Double]]) -> Prediction? {
         guard let model else { return nil }
         let features = extractor.extract(channels: channels)
 
-        guard let mlArray = try? MLMultiArray(shape: [1, 84], dataType: .float32) else { return nil }
-        for (i, v) in features.enumerated() {
+        let nFeatures = NSNumber(value: config.n_features)
+        guard let mlArray = try? MLMultiArray(shape: [1, nFeatures], dataType: .float32) else { return nil }
+        for (i, v) in features.enumerated() where i < config.n_features {
             mlArray[[0, i] as [NSNumber]] = NSNumber(value: Float(v))
         }
 
@@ -213,45 +254,108 @@ final class EMGActivityInference {
 
         guard let output = try? model.prediction(from: input) else { return nil }
 
-        let rawOutput = output.featureValue(for: "var_20")?.multiArrayValue
-        guard let logits = rawOutput else { return nil }
+        let outputKey = resolveOutputKey(output: output)
+        guard let logits = output.featureValue(for: outputKey)?.multiArrayValue else {
+            if !validationLogged {
+                validationLogged = true
+                let available = output.featureNames.sorted().joined(separator: ", ")
+                FluxLog.ml.error("模型输出键 \"\(outputKey)\" 不存在 — 可用键: [\(available)]，推理静默失败")
+            }
+            return nil
+        }
 
-        var expVals = [Double](repeating: 0, count: Self.classes.count)
+        return softmaxPrediction(logits: logits)
+    }
+
+    // MARK: - Output Key Resolution
+
+    /// 首次推理时自动探测模型的输出键名，后续使用缓存值。
+    /// 优先级：config.output_key > 自动探测 MultiArray 类型的输出 > "var_20" fallback
+    private func resolveOutputKey(output: MLFeatureProvider) -> String {
+        if let cached = resolvedOutputKey { return cached }
+
+        if let explicit = config.output_key {
+            resolvedOutputKey = explicit
+            FluxLog.ml.info("模型输出键: \"\(explicit)\"（config 指定）")
+            return explicit
+        }
+
+        for name in output.featureNames {
+            if let fv = output.featureValue(for: name), fv.multiArrayValue != nil {
+                resolvedOutputKey = name
+                FluxLog.ml.info("模型输出键: \"\(name)\"（自动探测）— 可用键: \(output.featureNames.sorted())")
+                return name
+            }
+        }
+
+        let fallback = "var_20"
+        resolvedOutputKey = fallback
+        FluxLog.ml.warn("无法自动探测输出键，回退到 \"\(fallback)\" — 可用键: \(output.featureNames.sorted())")
+        return fallback
+    }
+
+    // MARK: - Softmax
+
+    private func softmaxPrediction(logits: MLMultiArray) -> Prediction {
+        let nClasses = config.classes.count
+        var expVals = [Double](repeating: 0, count: nClasses)
         var maxVal = -Double.infinity
-        for i in 0..<Self.classes.count {
+        for i in 0..<nClasses {
             let v = logits[i].doubleValue
             if v > maxVal { maxVal = v }
         }
         var sumExp = 0.0
-        for i in 0..<Self.classes.count {
+        for i in 0..<nClasses {
             expVals[i] = exp(logits[i].doubleValue - maxVal)
             sumExp += expVals[i]
         }
         let probs = expVals.map { $0 / sumExp }
 
         var bestIdx = 0
-        for i in 1..<probs.count {
-            if probs[i] > probs[bestIdx] { bestIdx = i }
-        }
+        for i in 1..<probs.count where probs[i] > probs[bestIdx] { bestIdx = i }
 
         var probDict = [String: Double]()
-        for (i, cls) in Self.classes.enumerated() { probDict[cls] = probs[i] }
+        for (i, cls) in config.classes.enumerated() { probDict[cls] = probs[i] }
 
         return Prediction(
-            label: Self.classes[bestIdx],
+            label: config.classes[bestIdx],
             confidence: probs[bestIdx],
             probabilities: probDict
         )
     }
 
+    // MARK: - Model Loading
+
     private func loadModel() {
         guard let url = Bundle.main.url(forResource: "ActivityClassifier", withExtension: "mlmodelc")
             ?? compileModel() else {
-            print("[ML] ActivityClassifier not found in bundle")
+            FluxLog.ml.error("ActivityClassifier 未在 bundle 中找到 (.mlmodelc / .mlpackage)")
             return
         }
-        model = try? MLModel(contentsOf: url)
-        if model != nil { print("[ML] ActivityClassifier loaded") }
+        do {
+            model = try MLModel(contentsOf: url)
+            validateModelContract()
+        } catch {
+            FluxLog.ml.error("ActivityClassifier 加载失败", error: error)
+        }
+    }
+
+    /// 启动时一次性校验模型契约：输入/输出维度、类别数
+    private func validateModelContract() {
+        guard let model else { return }
+        let desc = model.modelDescription
+
+        if let inputDesc = desc.inputDescriptionsByName["features"],
+           let constraint = inputDesc.multiArrayConstraint {
+            let shape = constraint.shape.map(\.intValue)
+            let expected = config.n_features
+            if !shape.contains(expected) {
+                FluxLog.ml.warn("模型输入维度 \(shape) 与 config.n_features=\(expected) 不一致，推理结果可能异常")
+            }
+        }
+
+        let outputNames = desc.outputDescriptionsByName.keys.sorted()
+        FluxLog.ml.info("ActivityClassifier 已加载 — 输出键: \(outputNames), 类别: \(config.classes.count)个, 特征: \(config.n_features)维")
     }
 
     private func compileModel() -> URL? {

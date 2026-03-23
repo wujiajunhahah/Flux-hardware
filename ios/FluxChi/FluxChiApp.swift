@@ -40,14 +40,13 @@ struct FluxChiApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                // 须保持为首子视图：见 `SessionManagerBootstrapView` 文档
-                SessionManagerBootstrapView()
                 if onboardingDone {
                     mainTabView
                 } else {
                     OnboardingView(isCompleted: $onboardingDone)
                 }
             }
+            .background { SessionManagerBootstrapView() }
             .environmentObject(service)
             .environmentObject(bleManager)
             .environmentObject(sessionManager)
@@ -156,6 +155,7 @@ struct FluxChiApp: App {
     @State private var showSummary = false
     @State private var selectedTab = "dashboard"
     @State private var showConnectionSheet = false
+    @State private var showCalibrationFlowSheet = false
 
     private var isLive: Bool { service.isConnected || bleManager.isConnected }
 
@@ -184,17 +184,30 @@ struct FluxChiApp: App {
                 if let s = finishedSession { SessionSummarySheet(session: s) }
             }
             .alert("今日未校准", isPresented: $showCalibrationAlert) {
+                Button("去校准") { showCalibrationFlowSheet = true }
                 Button("跳过，直接开始") { beginFocusSession() }
                 Button("取消", role: .cancel) {}
             } message: {
                 Text("校准可提高续航值的准确度。建议每天首次专注前完成校准。")
+            }
+            .fullScreenCover(isPresented: $showCalibrationFlowSheet) {
+                DailyCalibrationView()
+                    .environmentObject(service)
+                    .environmentObject(bleManager)
             }
             .sheet(isPresented: $showConnectionSheet) {
                 ConnectionGuideSheet()
             }
     }
 
-    // MARK: - Native TabView + Tab(role: .search)
+    // MARK: - Native TabView（iOS 18+ `Tab` API）
+    //
+    // 结构：每个 Tab 根视图内自带 `NavigationStack`（与 Apple 文档中 Tab + NavigationStack 示例一致）。
+    // 若状态栏下仍出现「空白导航条 + 大标题下移」，多为 **系统级布局问题**，而非 `navigationBarTitleDisplayMode`：
+    // - [TabView](https://developer.apple.com/documentation/swiftui/tabview) / [Tab](https://developer.apple.com/documentation/swiftui/tab)
+    // - 论坛：iOS 18 新 Tab 样式与 Navigation 组合时 toolbar 区域异常空白；18.3 曾缓解、18.4 再出现（Feedback **FB17121625**）
+    //   https://developer.apple.com/forums/thread/759875
+    // 应用侧仅能做结构规避（单 NavigationStack、勿在 Tab 外再套一层）；iPad 上另见 `Flux.Device.isPad` 标题模式与 `TabBarMinimizeModifier`（不启用 onScrollDown）。根治依赖系统更新。
 
     @ViewBuilder
     private var nativeTabView: some View {
@@ -289,6 +302,23 @@ struct FluxChiApp: App {
     }
 }
 
+// MARK: - TabBar Minimize (iOS 26+)
+
+private struct TabBarMinimizeModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            // iPad 浮动 Tab + 大标题时，`onScrollDown` 易与系统预留区叠加出大块顶栏空白；仅 iPhone 启用。
+            if Flux.Device.isPad {
+                content
+            } else {
+                content.tabBarMinimizeBehavior(.onScrollDown)
+            }
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - App Delegate (UNUserNotificationCenterDelegate)
 
 final class FluxChiAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -329,18 +359,6 @@ final class FluxChiAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificat
                     }
                 }
             }
-        }
-    }
-}
-
-// MARK: - TabBar Minimize (iOS 26+)
-
-private struct TabBarMinimizeModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.tabBarMinimizeBehavior(.onScrollDown)
-        } else {
-            content
         }
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import ActivityKit
+import os.log
 import SwiftUI
 
 // MARK: - Live Activity Attributes
@@ -24,10 +25,11 @@ final class LiveActivityManager: ObservableObject {
 
     @Published var isActive = false
     private var activity: Activity<FluxChiLiveAttributes>?
+    private let log = Logger(subsystem: "com.fluxchi", category: "LiveActivity")
 
     func startActivity(title: String) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            print("[LiveActivity] Not authorized")
+            log.info("LiveActivity 未授权")
             return
         }
 
@@ -57,9 +59,9 @@ final class LiveActivityManager: ObservableObject {
             // 注：widgetURL 需要在 Widget Extension 的 View 中设置
             // 这里通过 URL Scheme 支持 App 端处理
             isActive = true
-            print("[LiveActivity] Started: \(activity?.id ?? "nil")")
+            log.info("LiveActivity 已启动: \(self.activity?.id ?? "nil")")
         } catch {
-            print("[LiveActivity] Failed to start: \(error)")
+            log.error("LiveActivity 启动失败: \(error.localizedDescription)")
         }
     }
 

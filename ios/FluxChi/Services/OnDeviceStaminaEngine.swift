@@ -88,10 +88,15 @@ final class OnDeviceStaminaEngine {
     // MARK: - Update
 
     func update(rms: [Double], rawChannels: [[Double]]?, timestamp: Double, classifiedActivity: String? = nil) -> Reading {
+        let profile = EMGCalibrationStore.load()
+        let useProfile = profile?.isUsableForStamina == true
+        let targetCalibrationN = useProfile ? 8 : calibrationN
+        let personalSpan = max(profile?.meanSignalSpan ?? 25, 25)
+
         let activeRMS = rms.filter { $0 > 1 }
         let meanRMS = activeRMS.isEmpty ? 0 : activeRMS.reduce(0, +) / Double(activeRMS.count)
 
-        // --- Adaptive calibration (first ~15 samples = ~7.5 seconds) ---
+        // --- Adaptive calibration（无档案约 15 帧；有每日校准档案约 8 帧并融合安静基线）---
         if !isCalibrated {
             calibrationSamples.append(meanRMS)
             rmsWindow.append(meanRMS)
@@ -100,8 +105,13 @@ final class OnDeviceStaminaEngine {
                 let v = variance(rmsWindow)
                 calibrationVariances.append(v)
             }
-            if calibrationSamples.count >= calibrationN {
-                baselineMeanRMS = calibrationSamples.reduce(0, +) / Double(calibrationSamples.count)
+            if calibrationSamples.count >= targetCalibrationN {
+                let onlineMean = calibrationSamples.reduce(0, +) / Double(calibrationSamples.count)
+                if useProfile, let p = profile {
+                    baselineMeanRMS = onlineMean * 0.35 + p.aggregateRelaxMean * 0.65
+                } else {
+                    baselineMeanRMS = onlineMean
+                }
                 baselineVariance = calibrationVariances.isEmpty ? 1 :
                     calibrationVariances.reduce(0, +) / Double(calibrationVariances.count)
                 restBaseline = baselineMeanRMS
@@ -115,13 +125,15 @@ final class OnDeviceStaminaEngine {
         let currentVariance = rmsWindow.count >= 3 ? variance(rmsWindow) : 0
         let varianceThreshold = max(baselineVariance * 3, 5000)
         let rmsDeviation = abs(meanRMS - baselineMeanRMS) / max(baselineMeanRMS, 1)
+        let rmsExcursion = abs(meanRMS - baselineMeanRMS) / max(personalSpan, 1)
 
         let currentWork: Bool
         if let cls = classifiedActivity,
            cls != "rest" && cls != "idle" {
             currentWork = true
         } else {
-            currentWork = currentVariance > varianceThreshold || rmsDeviation > 0.3
+            let strongDeviation = useProfile ? (rmsExcursion > 0.26) : (rmsDeviation > 0.3)
+            currentWork = currentVariance > varianceThreshold || strongDeviation
         }
 
         activityBuf.append(currentWork)

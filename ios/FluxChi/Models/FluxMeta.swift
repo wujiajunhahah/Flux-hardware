@@ -6,6 +6,7 @@ enum FluxMeta {
     static let version = "1.2"
     static let schemaVersion = 1
     static let snapshotIntervalMs = 500
+    // swiftlint:disable:next force_unwrapping
     static let githubURL = URL(string: "https://github.com/wujiajunhahah/Flux-hardware")!
 }
 

@@ -18,9 +18,8 @@ final class PersonalizationManager: ObservableObject {
     private var compiledModelURL: URL?
 
     private var modelsDir: URL {
-        guard let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            fatalError("Documents directory unavailable")
-        }
+        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
         return base.appendingPathComponent("FluxModels", isDirectory: true)
     }
 
@@ -117,7 +116,7 @@ final class PersonalizationManager: ObservableObject {
             )
             updateTask.resume()
         } catch {
-            print("[ML] Training failed: \(error.localizedDescription)")
+            FluxLog.ml.error("个性化训练失败", error: error)
         }
     }
 

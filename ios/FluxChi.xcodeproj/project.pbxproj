@@ -64,6 +64,9 @@
 		STMPALETTE01BUILDMAIN00001 /* StaminaStatePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = STMPALETTE01FILEREF000001 /* StaminaStatePalette.swift */; };
 		STMPALETTE01BUILDLIVE00002 /* StaminaStatePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = STMPALETTE01FILEREF000001 /* StaminaStatePalette.swift */; };
 		SMBOOTSTRAP01BUILD00000001 /* SessionManagerBootstrapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMBOOTSTRAP01REF000000001 /* SessionManagerBootstrapView.swift */; };
+		EMGCS01BUILD000000000001 /* EMGCalibrationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EMGCS01FILE000000000001 /* EMGCalibrationStore.swift */; };
+		DCALV01BUILD000000000001 /* DailyCalibrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCALV01FILE000000000001 /* DailyCalibrationView.swift */; };
+		FRADG01BUILD000000000001 /* FluxRadialEMGRingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FRADG01FILE000000000001 /* FluxRadialEMGRingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -128,6 +131,9 @@
 		C32BDA8520B5BD858B560924 /* FluxTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxTokens.swift; sourceTree = "<group>"; };
 		STMPALETTE01FILEREF000001 /* StaminaStatePalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaminaStatePalette.swift; sourceTree = "<group>"; };
 		SMBOOTSTRAP01REF000000001 /* SessionManagerBootstrapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManagerBootstrapView.swift; sourceTree = "<group>"; };
+		EMGCS01FILE000000000001 /* EMGCalibrationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EMGCalibrationStore.swift; sourceTree = "<group>"; };
+		DCALV01FILE000000000001 /* DailyCalibrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyCalibrationView.swift; sourceTree = "<group>"; };
+		FRADG01FILE000000000001 /* FluxRadialEMGRingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxRadialEMGRingView.swift; sourceTree = "<group>"; };
 		C4785E01E03B638F651433EC /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
 		C9347838A8E7866E13F8FA2B /* FluxChiLive */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text; path = FluxChiLive; sourceTree = BUILT_PRODUCTS_DIR; };
 		CE36952EACC328036003CF02 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -220,7 +226,9 @@
 				0D2E3F4A5B6C7D8E9F0A1B2C /* GeekDataPanel.swift */,
 				F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */,
 				C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */,
+				DCALV01FILE000000000001 /* DailyCalibrationView.swift */,
 				B304D5891CBDFF2564CBBE02 /* FeedbackView.swift */,
+				FRADG01FILE000000000001 /* FluxRadialEMGRingView.swift */,
 				380BBB1F3FD98322B2060455 /* HistoryView.swift */,
 				A1B2C3D4LOGVIEWERRREF /* LogViewerView.swift */,
 				FA1E2E60D7D16A91E3045405 /* RecorderView.swift */,
@@ -282,6 +290,7 @@
 			children = (
 				2EC8E7B9F0363CDCC7D003AE /* AlertManager.swift */,
 				34C4C08A362F4D9CE7712D17 /* BLEManager.swift */,
+				EMGCS01FILE000000000001 /* EMGCalibrationStore.swift */,
 				23BCD5428E4F4BBD013EC82A /* EMGFeatureExtractor.swift */,
 				2B5C110FA9FAA6244ADABB3C /* ExportManager.swift */,
 				A1B2C3D4LOGGERRREF /* FluxLogger.swift */,
@@ -448,7 +457,10 @@
 				FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */,
 				41EB0AED9E3D37E9D144B449 /* DashboardView.swift in Sources */,
 				C0C0C0C0C0C0C0C0C0C0C002 /* ConnectionGuideSheet.swift in Sources */,
+				DCALV01BUILD000000000001 /* DailyCalibrationView.swift in Sources */,
+				EMGCS01BUILD000000000001 /* EMGCalibrationStore.swift in Sources */,
 				A29B654F2338B5CE0220D51F /* EMGFeatureExtractor.swift in Sources */,
+				FRADG01BUILD000000000001 /* FluxRadialEMGRingView.swift in Sources */,
 				614E45DDEA41D0C4FDC16C92 /* ExportManager.swift in Sources */,
 				6EFF16B400DC0E33C06A07B8 /* FeedbackView.swift in Sources */,
 				37D1B293D85533CBE3726A66 /* FluxChiApp.swift in Sources */,

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Flux Design System
 
@@ -219,6 +220,17 @@ enum Flux {
         let m = (Int(seconds) % 3600) / 60
         if h > 0 { return "\(h) 小时 \(m) 分钟" }
         return "\(m) 分钟"
+    }
+}
+
+// MARK: - Device
+
+extension Flux {
+    enum Device {
+        /// iPad 上浮动 Tab Bar 与 `NavigationStack` 大标题易叠加顶部留白；用于 Tab 根页标题模式等分支。
+        static var isPad: Bool {
+            UIDevice.current.userInterfaceIdiom == .pad
+        }
     }
 }
 

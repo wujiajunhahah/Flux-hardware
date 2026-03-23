@@ -19,6 +19,7 @@ struct DashboardView: View {
     @State private var showFeedback = false
     @State private var showSummary = false   // recordButton 直接结束时用
     @State private var showConnectionSheet = false
+    @State private var showDailyCalibration = false
 
     // Chart interaction
     @State private var selectedSessionDate: Date?
@@ -65,12 +66,6 @@ struct DashboardView: View {
         guard last > 0 else { return false }
         return Calendar.current.isDateInToday(Date(timeIntervalSince1970: last))
     }
-
-    enum DashCalPhase { case idle, baseline, mvc }
-    @State private var calPhase: DashCalPhase = .idle
-    @State private var calibrationProgress: CGFloat = 0
-    @State private var calibrationTimer: Timer?
-    private var isCalibrating: Bool { calPhase != .idle }
 
     // MARK: - Body
 
@@ -119,7 +114,8 @@ struct DashboardView: View {
                 .padding(.bottom, 80)
             }
             .navigationTitle("FocuX")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
+            .contentMargins(.top, 0, for: .scrollContent)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 6) {
@@ -158,99 +154,39 @@ struct DashboardView: View {
             .sheet(isPresented: $showConnectionSheet) {
                 ConnectionGuideSheet()
             }
+            .fullScreenCover(isPresented: $showDailyCalibration) {
+                DailyCalibrationView()
+                    .environmentObject(service)
+                    .environmentObject(bleManager)
+            }
         }
     }
 
     // MARK: - Calibration Banner
 
-    @ViewBuilder
     private var calibrationBanner: some View {
-        if isCalibrating {
-            let ringColor: Color = calPhase == .mvc ? Flux.Colors.warning : Flux.Colors.success
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .stroke(ringColor.opacity(0.2), lineWidth: 3)
-                        .frame(width: 32, height: 32)
-                    Circle()
-                        .trim(from: 0, to: calibrationProgress)
-                        .stroke(ringColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 32, height: 32)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(calPhase == .mvc ? "最大握拳！" : "校准中…请放松手臂")
-                        .font(.subheadline.weight(.medium))
-                    Text(calPhase == .mvc ? "尽全力握拳保持 5 秒" : "保持自然姿势 10 秒")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
+        HStack(spacing: 10) {
+            Image(systemName: "tuningfork")
+                .foregroundStyle(Color(.systemTeal))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("今日未校准")
+                    .font(.subheadline.weight(.medium))
+                Text("校准可提高续航估算准确度")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .padding(12)
-            .background(ringColor.opacity(0.08), in: .rect(cornerRadius: 16))
-        } else {
-            HStack(spacing: 10) {
-                Image(systemName: "tuningfork")
-                    .foregroundStyle(Color(.systemTeal))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("今日未校准")
-                        .font(.subheadline.weight(.medium))
-                    Text("校准可提高续航值准确度")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("去校准") {
-                    startDailyCalibration()
-                }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(.systemTeal), in: Capsule())
+            Spacer()
+            Button("去校准") {
+                showDailyCalibration = true
             }
-            .padding(12)
-            .background(Color(.systemTeal).opacity(0.08), in: .rect(cornerRadius: 16))
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color(.systemTeal), in: Capsule())
         }
-    }
-
-    private func startDailyCalibration() {
-        calPhase = .baseline
-        calibrationProgress = 0
-
-        // Phase 1: 静息基线 10 秒
-        calibrationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
-            Task { @MainActor in
-                calibrationProgress += 0.01
-                if calibrationProgress >= 1.0 {
-                    timer.invalidate()
-                    calibrationTimer = nil
-                    startDailyMVC()
-                }
-            }
-        }
-    }
-
-    private func startDailyMVC() {
-        calPhase = .mvc
-        calibrationProgress = 0
-
-        // Phase 2: 最大握拳 5 秒
-        calibrationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
-            Task { @MainActor in
-                calibrationProgress += 0.02  // 5 秒完成
-                if calibrationProgress >= 1.0 {
-                    timer.invalidate()
-                    calibrationTimer = nil
-                    calPhase = .idle
-                    UserDefaults.standard.set(
-                        Date().timeIntervalSince1970,
-                        forKey: "flux_last_calibration"
-                    )
-                }
-            }
-        }
+        .padding(12)
+        .background(Color(.systemTeal).opacity(0.08), in: .rect(cornerRadius: 16))
     }
 
     // MARK: - Connection Banner (紧凑 Capsule 风格)

@@ -150,14 +150,41 @@ struct RecorderView: View {
 
     @ViewBuilder
     private var liveEMGView: some View {
-        if let rms = service.state?.rms, !rms.isEmpty {
+        if service.isConnected || bleManager.isConnected {
+            let rms = liveRMSVector
             VStack(alignment: .leading, spacing: Flux.Spacing.item) {
-                FluxSectionLabel(title: "EMG 信号", icon: "waveform")
-                FluxEMGBars(rms: rms)
-                    .padding()
-                    .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.medium))
+                FluxSectionLabel(title: "手势与力度", icon: "waveform")
+                FluxRadialEMGRingView(
+                    rms: rms,
+                    activeChannelCount: bleManager.isConnected ? bleManager.activeChannelCount : 8,
+                    barCount: 128,
+                    theme: .light,
+                    calibration: EMGCalibrationStore.load()
+                )
+                .frame(height: 220)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
+                .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.medium))
+                if let raw = service.state?.rms, !raw.isEmpty {
+                    FluxEMGBars(rms: raw)
+                        .padding()
+                        .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.medium))
+                }
             }
         }
+    }
+
+    private var liveRMSVector: [Double] {
+        if let r = service.state?.rms, !r.isEmpty {
+            return padRMS(r)
+        }
+        return padRMS(bleManager.latestRMS)
+    }
+
+    private func padRMS(_ v: [Double]) -> [Double] {
+        var a = Array(v.prefix(8))
+        while a.count < 8 { a.append(0) }
+        return a
     }
 
     // MARK: - Controls

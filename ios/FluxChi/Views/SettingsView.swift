@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var showLogExportOptions = false
     @State private var showClearLogsAlert = false
     @State private var logMinimumLevel: FluxLogLevel = .info
+    @State private var showDailyCalibrationFullScreen = false
     @FocusState private var focusedField: Field?
 
     private enum Field { case host, port }
@@ -22,6 +23,7 @@ struct SettingsView: View {
                 bleSection
                 serverSection
                 statusSection
+                calibrationSection
                 personalizationSection
                 geekDataSection
                 logsSection
@@ -30,7 +32,9 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("设置")
+            .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
+            .contentMargins(.top, 0, for: .scrollContent)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -57,6 +61,39 @@ struct SettingsView: View {
             } message: {
                 Text("将清空所有日志记录，此操作不可撤销")
             }
+            .fullScreenCover(isPresented: $showDailyCalibrationFullScreen) {
+                DailyCalibrationView()
+                    .environmentObject(service)
+                    .environmentObject(bleManager)
+            }
+        }
+    }
+
+    // MARK: - Daily calibration
+
+    private var calibrationSection: some View {
+        Section {
+            Button {
+                showDailyCalibrationFullScreen = true
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("每日校准")
+                            .fontWeight(.medium)
+                            .foregroundStyle(.primary)
+                        Text("放松与握拳两步，圆环随力度变化")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "tuningfork")
+                        .foregroundStyle(Color(.systemTeal))
+                }
+            }
+        } header: {
+            Text("校准")
+        } footer: {
+            Text("建议每天首次专注前完成一次，续航估算会更贴个人幅度")
         }
     }
 
