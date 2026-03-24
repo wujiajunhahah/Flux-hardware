@@ -11,8 +11,6 @@ final class PersonalizationManager: ObservableObject {
 
     private let alpha: Double = 0.3
     private var feedbackPairs: [FeedbackPair] = []
-    /// 已学习过的 session ID，防止同一 session 重复喂入
-    private var learnedSessionIDs: Set<String> = []
 
     /// WiFi 模式下回传反馈给服务端飞轮
     weak var fluxService: FluxService?
@@ -41,19 +39,18 @@ final class PersonalizationManager: ObservableObject {
 
     // MARK: - Feedback Collection
 
-    /// 接收 session 反馈，更新标定偏移。同一 session 只学习一次。
+    /// 接收 session 反馈，更新标定偏移。同一 session 只学习一次（持久化去重）。
     func addTrainingData(session: Session, feedback: UserFeedback) {
         let sid = session.persistentModelID.hashValue.description
-        guard !learnedSessionIDs.contains(sid) else {
+        if feedbackPairs.contains(where: { $0.sessionID == sid }) {
             FluxLog.ml.info("Session \(sid.prefix(8)) 已学习过，跳过重复训练")
             return
         }
-        learnedSessionIDs.insert(sid)
 
         let predicted = session.avgStamina ?? 50
         let actual = feedback.feeling.staminaTarget
 
-        let pair = FeedbackPair(predicted: predicted, actual: actual)
+        let pair = FeedbackPair(sessionID: sid, predicted: predicted, actual: actual)
         feedbackPairs.append(pair)
         trainingCount = feedbackPairs.count
 
@@ -76,6 +73,7 @@ final class PersonalizationManager: ObservableObject {
     /// 将反馈回传服务端数据飞轮，让全局模型也能从用户反馈中学习
     private func postFeedbackToFlywheel(predicted: Double, actual: Double) {
         guard let service = fluxService else { return }
+        let label = actual < 50 ? "fatigued" : "alert"
         let kss: Int
         switch actual {
         case 80...: kss = 2
@@ -87,7 +85,9 @@ final class PersonalizationManager: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 5
         let body: [String: Any] = [
+            "label": label,
             "kss": kss,
             "note": "ios_feedback predicted=\(Int(predicted)) actual=\(Int(actual))"
         ]
@@ -127,6 +127,7 @@ final class PersonalizationManager: ObservableObject {
 }
 
 private struct FeedbackPair: Codable {
+    var sessionID: String = ""
     let predicted: Double
     let actual: Double
 }

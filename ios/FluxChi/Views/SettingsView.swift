@@ -279,7 +279,7 @@ struct SettingsView: View {
         } header: {
             Text("个性化")
         } footer: {
-            Text("每次记录反馈后，模型会自动学习你的个人特征")
+            Text("每次反馈会校准个人偏移；连接服务端时同步至数据飞轮")
         }
     }
 
