@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_load_env.sh"
 
 PORT="${FLUX_PORT:-8000}"
+SERVER_NAME="${FLUX_SERVER_NAME:-_}"
 
 enable_proxy_selinux() {
   if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce)" = "Enforcing" ]; then
@@ -57,8 +58,8 @@ install_nginx_proxy() {
   sudo mkdir -p "$(dirname "${conf_path}")"
   sudo tee "${conf_path}" >/dev/null <<EOF
 server {
-    listen 80;
-    server_name _;
+    listen 80 default_server;
+    server_name ${SERVER_NAME};
     client_max_body_size 10m;
 
     location / {
@@ -74,9 +75,12 @@ EOF
 
   enable_proxy_selinux
   sudo nginx -t
-  sudo systemctl enable --now nginx
-  sudo systemctl restart nginx
-  sudo systemctl status nginx --no-pager -l
+  if pgrep -x nginx >/dev/null 2>&1; then
+    sudo nginx -s reload
+  else
+    sudo nginx
+  fi
+  pgrep -a nginx || true
 }
 
 install_httpd_proxy() {
@@ -88,7 +92,7 @@ install_httpd_proxy() {
 ProxyPreserveHost On
 
 <VirtualHost *:80>
-    ServerName _
+    ServerName ${SERVER_NAME}
 
     ProxyPass / http://127.0.0.1:${PORT}/
     ProxyPassReverse / http://127.0.0.1:${PORT}/
