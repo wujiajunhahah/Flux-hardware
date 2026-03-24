@@ -1,0 +1,164 @@
+from __future__ import annotations
+
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+from uuid import uuid4
+
+
+BASE_URL = os.getenv("FLUX_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+
+
+def request_json(
+    method: str,
+    path: str,
+    payload: dict | None = None,
+    token: str | None = None,
+) -> dict:
+    body = None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        body = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    if token is not None:
+        headers["Authorization"] = f"Bearer {token}"
+
+    request = urllib.request.Request(
+        f"{BASE_URL}{path}",
+        data=body,
+        headers=headers,
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        print(f"HTTP {exc.code} for {method} {path}: {detail}", file=sys.stderr)
+        raise
+
+
+def assert_ok(response: dict, label: str) -> dict:
+    if not response.get("ok"):
+        raise RuntimeError(f"{label} failed: {response}")
+    data = response.get("data")
+    if not isinstance(data, dict):
+        raise RuntimeError(f"{label} returned unexpected envelope: {response}")
+    print(f"ok {label}")
+    return data
+
+
+def main() -> int:
+    suffix = uuid4().hex[:8]
+    provider_token = f"dev:smoke-{suffix}"
+    device_key = f"smoke-device-{suffix}"
+    device_name = f"Smoke Device {suffix}"
+
+    sign_up_payload = {
+        "provider": "apple",
+        "provider_token": provider_token,
+        "device": {
+            "client_device_key": device_key,
+            "platform": "ios",
+            "device_name": device_name,
+            "app_version": "0.1.0",
+            "os_version": "iOS 18.0",
+        },
+    }
+
+    sign_up = assert_ok(request_json("POST", "/v1/auth/sign-up", sign_up_payload), "sign_up")
+    user_id = sign_up["user_id"]
+    device_id = sign_up["device_id"]
+    refresh_token = sign_up["refresh_token"]
+
+    sign_in = assert_ok(request_json("POST", "/v1/auth/sign-in", sign_up_payload), "sign_in")
+    access_token = sign_in["access_token"]
+
+    devices = assert_ok(request_json("GET", "/v1/devices", token=access_token), "list_devices")
+    if not devices.get("items"):
+        raise RuntimeError("list_devices returned no items")
+
+    profile = assert_ok(request_json("GET", "/v1/profile", token=access_token), "get_profile")
+    profile_state = profile["profile_state"]
+
+    updated_profile = assert_ok(
+        request_json(
+            "PUT",
+            "/v1/profile",
+            payload={
+                "base_version": profile_state["version"],
+                "calibration_offset": 1.25,
+                "estimated_accuracy": 92.5,
+                "training_count": 3,
+                "active_model_release_id": None,
+                "summary": {
+                    "retained_feedback_count": 3,
+                    "avg_absolute_error": 4.2,
+                },
+            },
+            token=access_token,
+        ),
+        "update_profile",
+    )
+
+    calibration = assert_ok(
+        request_json(
+            "GET",
+            f"/v1/devices/{device_id}/calibration",
+            token=access_token,
+        ),
+        "get_device_calibration",
+    )
+    device_calibration = calibration["device_calibration"]
+
+    assert_ok(
+        request_json(
+            "PUT",
+            f"/v1/devices/{device_id}/calibration",
+            payload={
+                "base_version": device_calibration["version"],
+                "device_name": device_name,
+                "sensor_profile": {"channels": 8, "sample_rate_hz": 1000},
+                "calibration_offset": 1.5,
+            },
+            token=access_token,
+        ),
+        "update_device_calibration",
+    )
+
+    assert_ok(
+        request_json(
+            "POST",
+            "/v1/auth/refresh",
+            payload={"refresh_token": refresh_token},
+        ),
+        "refresh",
+    )
+
+    assert_ok(
+        request_json(
+            "POST",
+            "/v1/auth/sign-out",
+            payload={"refresh_token": refresh_token},
+        ),
+        "sign_out",
+    )
+
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "base_url": BASE_URL,
+                "user_id": user_id,
+                "device_id": device_id,
+                "profile_version": updated_profile["profile_state"]["version"],
+            }
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

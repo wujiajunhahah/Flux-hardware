@@ -111,6 +111,14 @@ bash server/scripts/run_migrations.sh
 bash server/scripts/run_api.sh
 ```
 
+Setup helpers:
+
+```bash
+bash server/scripts/install_systemd_service.sh
+bash server/scripts/install_nginx_proxy.sh
+.venv/bin/python -m server.scripts.smoke_test
+```
+
 Recommended server bootstrap flow from the repo root:
 
 ```bash
