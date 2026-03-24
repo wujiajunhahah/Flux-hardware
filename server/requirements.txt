@@ -1,0 +1,6 @@
+fastapi>=0.100
+uvicorn[standard]>=0.20
+pydantic-settings>=2.2
+psycopg[binary]>=3.1
+PyJWT>=2.8
+python-dotenv>=1.0

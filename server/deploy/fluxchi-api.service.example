@@ -1,0 +1,16 @@
+[Unit]
+Description=FluxChi Platform API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/fluxchi
+ExecStart=/usr/bin/env bash /home/admin/fluxchi/server/scripts/run_api.sh
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target
