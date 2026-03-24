@@ -17,7 +17,9 @@ enable_proxy_selinux() {
 install_nginx_proxy() {
   local conf_path="/etc/nginx/conf.d/fluxchi-api.conf"
 
-  sudo dnf install -y nginx
+  if ! command -v nginx >/dev/null 2>&1; then
+    sudo dnf install -y nginx
+  fi
 
   sudo tee "${conf_path}" >/dev/null <<EOF
 server {
@@ -69,7 +71,9 @@ EOF
   sudo systemctl status httpd --no-pager -l
 }
 
-if sudo dnf list available nginx >/dev/null 2>&1; then
+if command -v nginx >/dev/null 2>&1; then
+  install_nginx_proxy
+elif sudo dnf list available nginx >/dev/null 2>&1; then
   install_nginx_proxy
 else
   install_httpd_proxy
