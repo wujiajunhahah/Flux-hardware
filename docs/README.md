@@ -5,6 +5,8 @@
 | 文档 | 说明 |
 |------|------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构：三条运行时、iOS 与 Web 的并行/耦合关系 |
+| [ARCHITECTURE-PRODUCTION-V1.md](./ARCHITECTURE-PRODUCTION-V1.md) | 面向真实产品与多用户演进的目标架构、服务边界、数据边界与路线图 |
+| [PLATFORM-CONTRACT-V1.md](./PLATFORM-CONTRACT-V1.md) | 产品化 V1 的 API Contract、数据表、约束与索引，供后端/iOS/算法统一对齐 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 开发环境、最短跑通路径、常见路径索引 |
 | [API-OVERVIEW.md](./API-OVERVIEW.md) | HTTP 端点索引、iOS 最小 API 子集、`/api/v1` vs 无版本路径 |
 | [API-CHANGELOG.md](./API-CHANGELOG.md) | 对外 JSON 契约变更记录（维护约定） |

@@ -98,6 +98,8 @@ npx vercel@latest domains add focux.me
 | Doc | Purpose |
 |-----|---------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design: Web backend, iOS (BLE vs Wi‑Fi), desktop `app.py` |
+| [docs/ARCHITECTURE-PRODUCTION-V1.md](docs/ARCHITECTURE-PRODUCTION-V1.md) | Target production architecture for multi-user cloud sync, storage, training, and model release |
+| [docs/PLATFORM-CONTRACT-V1.md](docs/PLATFORM-CONTRACT-V1.md) | V1 product API contract, data tables, constraints, indexes, and upload/sync semantics |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Setup, run paths, troubleshooting |
 | [docs/API-OVERVIEW.md](docs/API-OVERVIEW.md) | `/api/v1` index, iOS minimal subset, deprecated `/api/*` |
 | [docs/API.md](docs/API.md) | Full REST/SSE reference + Swift examples |
