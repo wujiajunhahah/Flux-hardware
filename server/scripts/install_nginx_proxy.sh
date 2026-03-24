@@ -14,13 +14,47 @@ enable_proxy_selinux() {
   fi
 }
 
+resolve_nginx_conf_path() {
+  local conf_path
+  local prefix
+  local main_conf
+
+  if nginx -V 2>&1 | grep -q -- '--conf-path='; then
+    main_conf="$(nginx -V 2>&1 | sed -n "s/.*--conf-path=\([^ ]*\).*/\1/p" | head -n1)"
+  else
+    prefix="$(nginx -V 2>&1 | sed -n "s/.*--prefix=\([^ ]*\).*/\1/p" | head -n1)"
+    if [ -n "${prefix}" ]; then
+      main_conf="${prefix}/conf/nginx.conf"
+    fi
+  fi
+
+  if [ -n "${main_conf:-}" ] && sudo test -f "${main_conf}"; then
+    conf_path="$(sudo awk '
+      $1 == "include" && $2 ~ /\.conf;$/ && $2 !~ /\/tcp\// {
+        gsub(/;/, "", $2)
+        print $2
+        exit
+      }
+    ' "${main_conf}")"
+    if [ -n "${conf_path}" ]; then
+      conf_path="${conf_path/\*/fluxchi-api}"
+      printf '%s\n' "${conf_path}"
+      return 0
+    fi
+  fi
+
+  printf '/etc/nginx/conf.d/fluxchi-api.conf\n'
+}
+
 install_nginx_proxy() {
-  local conf_path="/etc/nginx/conf.d/fluxchi-api.conf"
+  local conf_path
+  conf_path="$(resolve_nginx_conf_path)"
 
   if ! command -v nginx >/dev/null 2>&1; then
     sudo dnf install -y nginx
   fi
 
+  sudo mkdir -p "$(dirname "${conf_path}")"
   sudo tee "${conf_path}" >/dev/null <<EOF
 server {
     listen 80;
