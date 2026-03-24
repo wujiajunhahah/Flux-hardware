@@ -33,6 +33,7 @@
 		701071DF158BF888B11A340A /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFE6963DF0F6852BB158A0DB /* SessionDetailView.swift */; };
 		7491661A48102D7610F8F1B3 /* SessionChartsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9992B47B1D2369E9BB080354 /* SessionChartsView.swift */; };
 		8136648A6B96AFFAFDF8EFE2 /* PersonalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B14342F8A691567B25C488F /* PersonalizationManager.swift */; };
+		PPROF01BUILD000000000001 /* PersonalizationProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = PPROF01FILEREF0000000001 /* PersonalizationProfile.swift */; };
 		9838B0DD287D1F821E2BC65D /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF4AC423B9AEC154DA04F99B /* LiveActivityManager.swift */; };
 		A29B654F2338B5CE0220D51F /* EMGFeatureExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BCD5428E4F4BBD013EC82A /* EMGFeatureExtractor.swift */; };
 		A9EBB5B316A867AB2285ABE3 /* FluxComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E24A0B2A711EEB09198CB250 /* FluxComponents.swift */; };
@@ -112,6 +113,7 @@
 		380BBB1F3FD98322B2060455 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		3CB0F83592C8DF2E36A992D2 /* model_meta.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = model_meta.json; sourceTree = "<group>"; };
 		5B14342F8A691567B25C488F /* PersonalizationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationManager.swift; sourceTree = "<group>"; };
+		PPROF01FILEREF0000000001 /* PersonalizationProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationProfile.swift; sourceTree = "<group>"; };
 		5CF6C81769725D1F6E224ADE /* ActivityClassifier.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = ActivityClassifier.mlpackage; sourceTree = "<group>"; };
 		6AC773BB66B35AC34CD5E48F /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		6D963C643474157682B7673F /* FluxChiLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FluxChiLiveActivity.swift; sourceTree = "<group>"; };
@@ -267,6 +269,7 @@
 			children = (
 				371B9343B23F955F6F6A51BF /* FluxModels.swift */,
 				META0000002FREF00000000001 /* FluxMeta.swift */,
+				PPROF01FILEREF0000000001 /* PersonalizationProfile.swift */,
 				C4785E01E03B638F651433EC /* Session.swift */,
 			);
 			path = Models;
@@ -474,6 +477,7 @@
 				4E31F1403404087AC5CD20C6 /* HistoryView.swift in Sources */,
 				0E7705B78C0617D5054DCF05 /* OnDeviceStaminaEngine.swift in Sources */,
 				8136648A6B96AFFAFDF8EFE2 /* PersonalizationManager.swift in Sources */,
+				PPROF01BUILD000000000001 /* PersonalizationProfile.swift in Sources */,
 				BE91CA074125C5C5DF3E6233 /* RecorderView.swift in Sources */,
 				353B5A96BB85286952CF2A1A /* Session.swift in Sources */,
 				701071DF158BF888B11A340A /* SessionDetailView.swift in Sources */,

@@ -48,6 +48,7 @@ from src.canonical_signal import CANONICAL_EMG_CHANNELS, canonicalize_export_pac
 from src.features import remove_dc
 from src.session_insight import session_insight_text
 from src.session_store import list_sessions_meta, load_session, save_session_package, session_file_path
+from src.profile_store import load_profile, normalize_updated_at, save_profile, should_replace_profile
 from src.energy import StaminaEngine, StaminaState
 from src.decision import DecisionEngine
 from src.fusion_engine import FusionEngine
@@ -545,6 +546,18 @@ class FlywheelLabelBody(BaseModel):
     window_sec: float = Field(default=300.0, ge=30.0, le=1800.0, description="标注回溯窗口秒数")
 
 
+class PersonalizationProfileBody(BaseModel):
+    schemaVersion: int = Field(default=1, ge=1)
+    profileID: str = Field(..., min_length=1, max_length=128)
+    updatedAt: str = Field(..., description="ISO8601 更新时间")
+    trainingCount: int = Field(default=0, ge=0)
+    estimatedAccuracy: float = Field(default=0.0, ge=0.0, le=100.0)
+    calibrationOffset: float = Field(default=0.0)
+    feedbackSummary: Dict[str, Any] = Field(default_factory=dict)
+    recentFeedbackPairs: List[Dict[str, Any]] = Field(default_factory=list)
+    deviceCalibrations: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+
 class VisionBaselineStartBody(BaseModel):
     duration_sec: float = Field(default=20.0, ge=5.0, le=90.0)
 
@@ -908,6 +921,28 @@ async def v1_model():
             "accuracy": onnx_config.get("accuracy"),
         })
     return _ok({"loaded": False, "classes": []})
+
+
+@app.get("/api/v1/profile", tags=["Personalization"], summary="读取个性化画像")
+async def v1_profile_get():
+    profile = load_profile()
+    return _ok({"exists": profile is not None, "profile": profile})
+
+
+@app.put("/api/v1/profile", tags=["Personalization"], summary="写入个性化画像")
+async def v1_profile_put(body: PersonalizationProfileBody):
+    incoming = body.model_dump() if hasattr(body, "model_dump") else body.dict()
+    try:
+        incoming["updatedAt"] = normalize_updated_at(str(incoming.get("updatedAt") or ""))
+    except ValueError:
+        return _err("bad_request", "updatedAt 必须是 ISO8601 时间")
+
+    current = load_profile()
+    applied = should_replace_profile(incoming, current)
+    if applied:
+        save_profile(incoming)
+        current = incoming
+    return _ok({"applied": applied, "profile": current})
 
 
 # ── Flywheel ───────────────────────────────────────────────

@@ -275,11 +275,46 @@ struct SettingsView: View {
                 }
             }
 
-            
+            HStack {
+                Label("服务器同步", systemImage: "arrow.triangle.2.circlepath")
+                Spacer()
+                if personalization.isSyncing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if let lastSyncAt = personalization.lastSyncAt {
+                    Text(lastSyncAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("未同步")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Button {
+                Task { await personalization.pushProfileToServer() }
+            } label: {
+                Label("上传到服务器", systemImage: "icloud.and.arrow.up")
+            }
+            .disabled(personalization.isSyncing)
+
+            Button {
+                Task { await personalization.pullProfileFromServer() }
+            } label: {
+                Label("从服务器拉取", systemImage: "icloud.and.arrow.down")
+            }
+            .disabled(personalization.isSyncing)
+
+            if let syncStatus = personalization.syncStatusMessage, !syncStatus.isEmpty {
+                Text(syncStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         } header: {
             Text("个性化")
         } footer: {
-            Text("每次反馈会校准个人偏移；连接服务端时同步至数据飞轮")
+            Text("每次反馈会校准个人偏移；可手动同步个人画像到服务器。最近 500 条反馈会随画像一起保留。")
         }
     }
 
