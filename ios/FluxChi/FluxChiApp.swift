@@ -56,6 +56,7 @@ struct FluxChiApp: App {
             .onAppear {
                 PerformanceMonitor.shared.markFirstFrame()
                 service.personalization = personalization
+                personalization.fluxService = service
                 service.startPolling()
                 alertManager.requestPermission()
 

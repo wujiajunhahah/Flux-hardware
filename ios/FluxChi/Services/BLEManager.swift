@@ -276,11 +276,19 @@ extension BLEManager: CBCentralManagerDelegate {
         error: Error?
     ) {
         Task { @MainActor in
-            self.peripheralState = .disconnected
             let deviceName = self.connectedDeviceName ?? peripheral.name ?? "未知设备"
+            self.peripheral = nil
+            self.dataChar = nil
             self.connectedDeviceName = nil
+            self.peripheralState = .disconnected
+            self.emgBuffer.reset()
+            self.emgFrameCount = 0
+            self.lowSignalConsecutive = 0
+            self.detachNotified = false
+            self.latestRMS = Array(repeating: 0, count: 8)
+            self.staminaEngine.reset()
             if let error = error {
-                FluxLog.ble.error("意外断开: \(deviceName)", error: error)
+                FluxLog.ble.error("意外断开: \(deviceName) — 状态已完整重置", error: error)
             } else {
                 FluxLog.ble.info("正常断开: \(deviceName)")
             }
@@ -325,7 +333,7 @@ extension BLEManager: CBPeripheralDelegate {
         didUpdateValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
-        guard let data = characteristic.value else { return }
+        guard let data = characteristic.value, !data.isEmpty else { return }
         if characteristic.uuid == BLEConstants.batteryCharUUID {
             let level = Int(data[0])
             Task { @MainActor in self.batteryLevel = level }
@@ -352,6 +360,12 @@ final class EMGRingBuffer {
         buffer[head] = values
         head = (head + 1) % capacity
         count = min(count + 1, capacity)
+    }
+
+    func reset() {
+        buffer = Array(repeating: [], count: capacity)
+        head = 0
+        count = 0
     }
 
     var nChannels: Int {

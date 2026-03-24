@@ -188,8 +188,11 @@ final class BodyInsightEngine {
 
         // 趋势分析
         if avgStaminas.count >= 2 {
-            let firstHalf = avgStaminas.prefix(avgStaminas.count / 2).reduce(0, +) / Double(max(avgStaminas.count / 2, 1))
-            let secondHalf = avgStaminas.suffix(from: avgStaminas.count / 2).reduce(0, +) / Double(max(avgStaminas.count / 2, 1))
+            let mid = avgStaminas.count / 2
+            let firstSlice = avgStaminas.prefix(mid)
+            let secondSlice = avgStaminas.suffix(from: mid)
+            let firstHalf = firstSlice.reduce(0, +) / Double(max(firstSlice.count, 1))
+            let secondHalf = secondSlice.reduce(0, +) / Double(max(secondSlice.count, 1))
             if secondHalf - firstHalf < -10 {
                 patterns.append(Pattern(
                     type: .earlyDecline,

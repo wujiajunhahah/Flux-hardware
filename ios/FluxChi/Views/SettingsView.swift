@@ -275,25 +275,7 @@ struct SettingsView: View {
                 }
             }
 
-            if let date = personalization.lastTrainedAt {
-                HStack {
-                    Label("上次训练", systemImage: "clock.arrow.circlepath")
-                    Spacer()
-                    Text(date, style: .relative)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if personalization.isTraining {
-                HStack {
-                    ProgressView()
-                    Text("模型训练中…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 8)
-                }
-            }
+            
         } header: {
             Text("个性化")
         } footer: {

@@ -1,53 +1,60 @@
 import Foundation
-import CoreML
 
 @MainActor
 final class PersonalizationManager: ObservableObject {
 
-    @Published var modelVersion: Int = 0
     @Published var trainingCount: Int = 0
-    @Published var lastTrainedAt: Date?
-    @Published var isTraining = false
     @Published var estimatedAccuracy: Double = 0
 
     /// Learned offset applied to raw stamina predictions.
     @Published private(set) var calibrationOffset: Double = 0
 
     private let alpha: Double = 0.3
-    private var feedbackPairs: [(predicted: Double, actual: Double)] = []
-    private var compiledModelURL: URL?
+    private var feedbackPairs: [FeedbackPair] = []
+    /// 已学习过的 session ID，防止同一 session 重复喂入
+    private var learnedSessionIDs: Set<String> = []
 
-    private var modelsDir: URL {
+    /// WiFi 模式下回传反馈给服务端飞轮
+    weak var fluxService: FluxService?
+
+    private var dataDir: URL {
         let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base.appendingPathComponent("FluxModels", isDirectory: true)
     }
 
     private var feedbackDataURL: URL {
-        modelsDir.appendingPathComponent("feedback_pairs.json")
+        dataDir.appendingPathComponent("feedback_pairs.json")
     }
 
     init() {
-        try? FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
         loadState()
         loadFeedbackPairs()
-        compileBaseModel()
     }
 
     // MARK: - Personalized Prediction
 
-    /// Adjust raw engine stamina with learned calibration.
     func personalizedStamina(_ rawValue: Double) -> Double {
         max(0, min(100, rawValue + calibrationOffset))
     }
 
     // MARK: - Feedback Collection
 
+    /// 接收 session 反馈，更新标定偏移。同一 session 只学习一次。
     func addTrainingData(session: Session, feedback: UserFeedback) {
+        let sid = session.persistentModelID.hashValue.description
+        guard !learnedSessionIDs.contains(sid) else {
+            FluxLog.ml.info("Session \(sid.prefix(8)) 已学习过，跳过重复训练")
+            return
+        }
+        learnedSessionIDs.insert(sid)
+
         let predicted = session.avgStamina ?? 50
         let actual = feedback.feeling.staminaTarget
 
-        feedbackPairs.append((predicted: predicted, actual: actual))
+        let pair = FeedbackPair(predicted: predicted, actual: actual)
+        feedbackPairs.append(pair)
         trainingCount = feedbackPairs.count
 
         let error = actual - predicted
@@ -61,124 +68,60 @@ final class PersonalizationManager: ObservableObject {
         saveFeedbackPairs()
         saveState()
 
-        if feedbackPairs.count >= 3 && feedbackPairs.count % 3 == 0 {
-            Task { await trainCoreMLModel() }
-        }
+        postFeedbackToFlywheel(predicted: predicted, actual: actual)
     }
 
-    // MARK: - CoreML (Optional)
+    // MARK: - Flywheel Integration
 
-    private func compileBaseModel() {
-        if let bundled = Bundle.main.url(forResource: "FluxStamina", withExtension: "mlmodelc") {
-            compiledModelURL = bundled
-            return
-        }
-        guard let raw = Bundle.main.url(forResource: "FluxStamina", withExtension: "mlmodel") else { return }
-        compiledModelURL = try? MLModel.compileModel(at: raw)
-    }
-
-    func trainCoreMLModel() async {
-        guard let baseURL = activeModelURL() else { return }
-        guard feedbackPairs.count >= 3 else { return }
-
-        isTraining = true
-        defer { isTraining = false }
-
-        do {
-            let batch = try createTrainingBatch()
-
-            let config = MLModelConfiguration()
-            config.computeUnits = .cpuOnly
-
-            let updateTask = try MLUpdateTask(
-                forModelAt: baseURL,
-                trainingData: batch,
-                configuration: config,
-                progressHandlers: MLUpdateProgressHandlers(
-                    forEvents: [.trainingBegin, .epochEnd],
-                    progressHandler: { _ in },
-                    completionHandler: { [weak self] context in
-                        Task { @MainActor [weak self] in
-                            guard let self else { return }
-                            if context.task.error == nil {
-                                let newVersion = self.modelVersion + 1
-                                let dest = self.modelsDir
-                                    .appendingPathComponent("FluxStamina_v\(newVersion).mlmodelc")
-                                try? context.model.write(to: dest)
-                                self.modelVersion = newVersion
-                                self.lastTrainedAt = Date()
-                                self.compiledModelURL = dest
-                                self.saveState()
-                            }
-                        }
-                    }
-                )
-            )
-            updateTask.resume()
-        } catch {
-            FluxLog.ml.error("个性化训练失败", error: error)
-        }
-    }
-
-    private func createTrainingBatch() throws -> MLBatchProvider {
-        let featureCount = 6
-        var providers: [MLFeatureProvider] = []
-
-        for pair in feedbackPairs {
-            let input = try MLMultiArray(shape: [1, NSNumber(value: featureCount)], dataType: .float32)
-            input[0] = NSNumber(value: pair.predicted / 100.0)
-            for i in 1..<featureCount { input[i] = 0 }
-
-            let target = try MLMultiArray(shape: [1], dataType: .float32)
-            target[0] = NSNumber(value: pair.actual / 100.0)
-
-            let provider = try MLDictionaryFeatureProvider(dictionary: [
-                "features": MLFeatureValue(multiArray: input),
-                "stamina_target": MLFeatureValue(multiArray: target)
-            ])
-            providers.append(provider)
+    /// 将反馈回传服务端数据飞轮，让全局模型也能从用户反馈中学习
+    private func postFeedbackToFlywheel(predicted: Double, actual: Double) {
+        guard let service = fluxService else { return }
+        let kss: Int
+        switch actual {
+        case 80...: kss = 2
+        case 50..<80: kss = 5
+        default: kss = 8
         }
 
-        return MLArrayBatchProvider(array: providers)
-    }
+        let url = service.baseURL.appendingPathComponent("api/v1/flywheel/label")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "kss": kss,
+            "note": "ios_feedback predicted=\(Int(predicted)) actual=\(Int(actual))"
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-    private func activeModelURL() -> URL? {
-        if modelVersion > 0 {
-            let url = modelsDir.appendingPathComponent("FluxStamina_v\(modelVersion).mlmodelc")
-            if FileManager.default.fileExists(atPath: url.path) { return url }
+        Task.detached {
+            _ = try? await URLSession.shared.data(for: request)
         }
-        return compiledModelURL
     }
 
     // MARK: - Persistence
 
     private func loadState() {
         let d = UserDefaults.standard
-        modelVersion = d.integer(forKey: "flux_ml_version")
         trainingCount = d.integer(forKey: "flux_ml_count")
         calibrationOffset = d.double(forKey: "flux_ml_offset")
         estimatedAccuracy = d.double(forKey: "flux_ml_accuracy")
-        lastTrainedAt = d.object(forKey: "flux_ml_last_trained") as? Date
     }
 
     private func saveState() {
         let d = UserDefaults.standard
-        d.set(modelVersion, forKey: "flux_ml_version")
         d.set(trainingCount, forKey: "flux_ml_count")
         d.set(calibrationOffset, forKey: "flux_ml_offset")
         d.set(estimatedAccuracy, forKey: "flux_ml_accuracy")
-        d.set(lastTrainedAt, forKey: "flux_ml_last_trained")
     }
 
     private func loadFeedbackPairs() {
         guard let data = try? Data(contentsOf: feedbackDataURL),
               let decoded = try? JSONDecoder().decode([FeedbackPair].self, from: data) else { return }
-        feedbackPairs = decoded.map { (predicted: $0.predicted, actual: $0.actual) }
+        feedbackPairs = decoded
     }
 
     private func saveFeedbackPairs() {
-        let encoded = feedbackPairs.map { FeedbackPair(predicted: $0.predicted, actual: $0.actual) }
-        guard let data = try? JSONEncoder().encode(encoded) else { return }
+        guard let data = try? JSONEncoder().encode(feedbackPairs) else { return }
         try? data.write(to: feedbackDataURL)
     }
 }

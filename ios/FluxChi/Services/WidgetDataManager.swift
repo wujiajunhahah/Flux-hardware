@@ -98,12 +98,18 @@ enum WidgetDataManager {
             let avg = best.value.reduce(0, +) / Double(best.value.count)
             defaults.set(best.key, forKey: Key.bestSlotName)
             defaults.set(avg, forKey: Key.bestSlotAvg)
+        } else {
+            defaults.removeObject(forKey: Key.bestSlotName)
+            defaults.removeObject(forKey: Key.bestSlotAvg)
         }
 
         // 最近一次
         if let last = today.sorted(by: { $0.sessionStartedAt < $1.sessionStartedAt }).last {
             defaults.set(last.sessionStartedAt.timeIntervalSince1970, forKey: Key.lastSessionTime)
             defaults.set(last.sessionAvgStamina ?? 0, forKey: Key.lastSessionStamina)
+        } else {
+            defaults.removeObject(forKey: Key.lastSessionTime)
+            defaults.removeObject(forKey: Key.lastSessionStamina)
         }
 
         // 周数据

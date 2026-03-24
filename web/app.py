@@ -1455,9 +1455,15 @@ def main():
     speed_multiplier = args.speed
 
     model_dir = Path(args.model_dir)
+    flywheel_dir = Path.home() / ".fluxchi"
+
+    # 飞轮产出优先：如果用户训练过个人模型，优先使用（越用越准）
+    flywheel_candidates = sorted(flywheel_dir.glob("flywheel_xgb*.onnx"), key=lambda p: p.stat().st_mtime, reverse=True)
+    search_order = [(p, p.with_suffix("").with_suffix(".json")) for p in flywheel_candidates]
     for prefix in ("activity_classifier", "ninapro_classifier"):
-        onnx_path = model_dir / f"{prefix}.onnx"
-        config_path = model_dir / f"{prefix}_config.json"
+        search_order.append((model_dir / f"{prefix}.onnx", model_dir / f"{prefix}_config.json"))
+
+    for onnx_path, config_path in search_order:
         if onnx_path.exists() and config_path.exists():
             config = json.loads(config_path.read_text())
             try:
@@ -1467,11 +1473,15 @@ def main():
                 onnx_config = config
                 onnx_classes = config.get("classes", [])
                 source = config.get("source", "unknown")
-                print(f"[web] Loaded ONNX model: {onnx_path}")
+                is_flywheel = "flywheel" in onnx_path.name
+                tag = "FLYWHEEL" if is_flywheel else "BUNDLED"
+                print(f"[web] Loaded ONNX model [{tag}]: {onnx_path}")
                 print(f"[web]   Classes: {onnx_classes}")
                 print(f"[web]   Features: {config.get('n_features', '?')}")
                 print(f"[web]   Accuracy: {config.get('accuracy', '?')} (on {source})")
-                if "ninapro" in source.lower():
+                if is_flywheel:
+                    print(f"[web]   ** Personal model from data flywheel — trained on YOUR data **")
+                elif "ninapro" in source.lower():
                     print(f"[web]   ** PLACEHOLDER: trained on {source}, NOT on your wristband **")
                     print(f"[web]   ** Run `python tools/emg_diagnostic.py` to verify signal quality **")
                 break

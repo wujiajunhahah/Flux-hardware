@@ -451,11 +451,6 @@ struct SessionSummarySheet: View {
         guard let fb = session.feedback else { return }
         fb.accuracyRating = rating
         modelContext.saveLogged()
-
-        // 低准确度 (1-2) 时，额外触发一次学习以加大纠正力度
-        if rating <= 2 {
-            personalization.addTrainingData(session: session, feedback: fb)
-        }
     }
 }
 
