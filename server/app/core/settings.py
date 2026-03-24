@@ -31,6 +31,18 @@ def _env(name: str, default: Any = None) -> Any:
     return os.getenv(name, default)
 
 
+def _env_bool(name: str, default: bool | None = None) -> bool | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"invalid boolean for {name}: {raw}")
+
+
 if BaseSettings is not None:
 
     class Settings(BaseSettings):
@@ -68,6 +80,10 @@ if BaseSettings is not None:
             default="fluxchi-platform-api",
             validation_alias="FLUX_ACCESS_TOKEN_AUDIENCE",
         )
+        allow_insecure_provider_tokens: bool | None = Field(
+            default=None,
+            validation_alias="FLUX_ALLOW_INSECURE_PROVIDER_TOKENS",
+        )
 
         model_config = SettingsConfigDict(
             env_file=tuple(str(path) for path in ENV_FILES),
@@ -83,6 +99,12 @@ if BaseSettings is not None:
         @property
         def secret_key_is_default(self) -> bool:
             return self.secret_key == "dev-insecure-change-me"
+
+        @property
+        def insecure_provider_tokens_enabled(self) -> bool:
+            if self.allow_insecure_provider_tokens is not None:
+                return self.allow_insecure_provider_tokens
+            return not self.is_production
 
 else:
     from pydantic import BaseModel
@@ -101,6 +123,7 @@ else:
         access_token_algorithm: str = _env("FLUX_ACCESS_TOKEN_ALGORITHM", "HS256")
         access_token_issuer: str = _env("FLUX_ACCESS_TOKEN_ISSUER", "fluxchi-platform")
         access_token_audience: str = _env("FLUX_ACCESS_TOKEN_AUDIENCE", "fluxchi-platform-api")
+        allow_insecure_provider_tokens: bool | None = _env_bool("FLUX_ALLOW_INSECURE_PROVIDER_TOKENS")
 
         @property
         def is_production(self) -> bool:
@@ -109,6 +132,12 @@ else:
         @property
         def secret_key_is_default(self) -> bool:
             return self.secret_key == "dev-insecure-change-me"
+
+        @property
+        def insecure_provider_tokens_enabled(self) -> bool:
+            if self.allow_insecure_provider_tokens is not None:
+                return self.allow_insecure_provider_tokens
+            return not self.is_production
 
 
 @lru_cache

@@ -35,6 +35,7 @@ def connect(database_url: str | None = None, **kwargs: Any) -> Any:
     # V1 intentionally uses sync psycopg with FastAPI `def` routes. This keeps
     # repository code simple until traffic or p95 latency justifies an async move.
     psycopg = import_psycopg()
+    kwargs.setdefault("row_factory", psycopg.rows.dict_row)
     return psycopg.connect(resolve_database_url(database_url), **kwargs)
 
 

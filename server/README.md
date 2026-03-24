@@ -10,7 +10,10 @@ It does not replace `web/app.py` yet.
 ## Current scope
 
 - Base FastAPI app entry
-- Router skeleton
+- Request ID middleware and uniform API envelope
+- Auth routes: `sign-up`, `sign-in`, `refresh`, `sign-out`
+- Devices routes: list and revoke
+- Profile routes: get/update profile and per-device calibration
 - Environment-driven settings bootstrap
 - Lightweight SQL migration runner with schema tracking
 - Initial Postgres schema migration
@@ -37,6 +40,7 @@ Primary settings:
 - `FLUX_ACCESS_TOKEN_ALGORITHM`
 - `FLUX_ACCESS_TOKEN_ISSUER`
 - `FLUX_ACCESS_TOKEN_AUDIENCE`
+- `FLUX_ALLOW_INSECURE_PROVIDER_TOKENS`
 
 The settings loader checks both repo-root `.env` and `server/.env`.
 
@@ -50,6 +54,21 @@ Default health check:
 
 ```text
 GET /v1/health
+```
+
+Implemented routes:
+
+```text
+POST /v1/auth/sign-up
+POST /v1/auth/sign-in
+POST /v1/auth/refresh
+POST /v1/auth/sign-out
+GET  /v1/devices
+DELETE /v1/devices/{device_id}
+GET  /v1/profile
+PUT  /v1/profile
+GET  /v1/devices/{device_id}/calibration
+PUT  /v1/devices/{device_id}/calibration
 ```
 
 ## Migration strategy
@@ -82,3 +101,7 @@ The runner fails fast if an already-applied migration file is edited and its che
 - The gateway in `web/app.py` remains the current prototype/runtime path.
 - Product API implementation should move into `server/app/` domain by domain.
 - `psycopg` and `PyJWT` are imported lazily in the new infrastructure modules so the app skeleton can still boot before auth and database dependencies are installed.
+- Provider token resolution currently supports two development paths:
+  - decode JWT `sub` without signature verification
+  - fallback passthrough tokens when `FLUX_ALLOW_INSECURE_PROVIDER_TOKENS=true`
+- Production should replace the development fallback with real provider verification.
