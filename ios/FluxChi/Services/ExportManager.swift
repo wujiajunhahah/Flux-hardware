@@ -302,7 +302,7 @@ enum ExportManager {
 
     // MARK: - Helpers
 
-    private static func platformSessionID(for session: Session) -> String {
+    static func platformSessionID(for session: Session) -> String {
         "ses_\(session.id.uuidString.lowercased().replacingOccurrences(of: "-", with: ""))"
     }
 

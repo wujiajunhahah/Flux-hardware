@@ -347,6 +347,50 @@ struct PlatformFinalizeSessionResponse: Decodable {
     let session: PlatformSessionState
 }
 
+struct PlatformCreateFeedbackEventRequest: Encodable {
+    let feedbackEventID: String
+    let deviceID: String
+    let sessionID: String?
+    let predictedStamina: Int
+    let actualStamina: Int
+    let label: String
+    let kss: Int?
+    let note: String?
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case feedbackEventID = "feedback_event_id"
+        case deviceID = "device_id"
+        case sessionID = "session_id"
+        case predictedStamina = "predicted_stamina"
+        case actualStamina = "actual_stamina"
+        case label
+        case kss
+        case note
+        case createdAt = "created_at"
+    }
+}
+
+struct PlatformCreateFeedbackEventResponse: Decodable {
+    let feedbackEvent: PlatformFeedbackEventState
+
+    enum CodingKeys: String, CodingKey {
+        case feedbackEvent = "feedback_event"
+    }
+}
+
+struct PlatformFeedbackEventState: Decodable {
+    let feedbackEventID: String
+    let sessionID: String?
+    let createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case feedbackEventID = "feedback_event_id"
+        case sessionID = "session_id"
+        case createdAt = "created_at"
+    }
+}
+
 // MARK: - State Update (WebSocket / SSE payload)
 
 struct FluxState: Decodable, Equatable {

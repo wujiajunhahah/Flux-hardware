@@ -21,7 +21,7 @@ final class PersonalizationManager: ObservableObject {
     private var deviceID: String = ""
     private var profileUpdatedAt: Date?
 
-    /// WiFi 模式下回传反馈给服务端飞轮
+    /// 平台 API 入口，用于画像同步和 feedback-events 写入。
     weak var fluxService: FluxService?
 
     private static let feedbackDataFileName = "feedback_pairs.json"
@@ -72,31 +72,33 @@ final class PersonalizationManager: ObservableObject {
     /// 接收 session 反馈，更新标定偏移。同一 session 只学习一次（持久化去重）。
     func addTrainingData(session: Session, feedback: UserFeedback) {
         let sid = session.id.uuidString
-        if feedbackPairs.contains(where: { $0.sessionID == sid }) {
-            FluxLog.ml.info("Session \(sid.prefix(8)) 已学习过，跳过重复训练")
-            return
-        }
-
         let predicted = session.avgStamina ?? 50
         let actual = feedback.feeling.staminaTarget
+        let alreadyLearned = feedbackPairs.contains(where: { $0.sessionID == sid })
 
-        let pair = FeedbackPair(sessionID: sid, predicted: predicted, actual: actual, createdAt: Date())
-        feedbackPairs.append(pair)
-        feedbackPairs = Array(feedbackPairs.suffix(retainedFeedbackLimit))
-        trainingCount += 1
+        if alreadyLearned {
+            FluxLog.ml.info("Session \(sid.prefix(8)) 已学习过，跳过重复训练")
+        } else {
+            let pair = FeedbackPair(sessionID: sid, predicted: predicted, actual: actual, createdAt: Date())
+            feedbackPairs.append(pair)
+            feedbackPairs = Array(feedbackPairs.suffix(retainedFeedbackLimit))
+            trainingCount += 1
 
-        let error = actual - predicted
-        calibrationOffset = calibrationOffset * (1 - alpha) + error * alpha
-        profileUpdatedAt = Date()
-        updateCurrentDeviceCalibration(updatedAt: resolvedProfileUpdatedAt())
+            let error = actual - predicted
+            calibrationOffset = calibrationOffset * (1 - alpha) + error * alpha
+            profileUpdatedAt = Date()
+            updateCurrentDeviceCalibration(updatedAt: resolvedProfileUpdatedAt())
 
-        recalculateEstimatedAccuracy()
+            recalculateEstimatedAccuracy()
 
-        saveFeedbackPairs()
-        saveDeviceCalibrations()
-        saveState()
+            saveFeedbackPairs()
+            saveDeviceCalibrations()
+            saveState()
+        }
 
-        postFeedbackToFlywheel(predicted: predicted, actual: actual)
+        Task { @MainActor [weak self] in
+            await self?.postFeedbackEventToPlatform(session: session, feedback: feedback, predicted: predicted, actual: actual)
+        }
     }
 
     // MARK: - Profile Sync
@@ -113,33 +115,61 @@ final class PersonalizationManager: ObservableObject {
         await syncProfile(direction: .pull, silentErrors: true)
     }
 
-    // MARK: - Flywheel Integration
+    // MARK: - Platform Feedback
 
-    /// 将反馈回传服务端数据飞轮，让全局模型也能从用户反馈中学习
-    private func postFeedbackToFlywheel(predicted: Double, actual: Double) {
+    /// 将反馈写入平台 feedback-events；若 session 尚未上传，则降级为不带 session_id 的事件。
+    private func postFeedbackEventToPlatform(
+        session: Session,
+        feedback: UserFeedback,
+        predicted: Double,
+        actual: Double
+    ) async {
         guard let service = fluxService else { return }
-        let label = actual < 50 ? "fatigued" : "alert"
-        let kss: Int
-        switch actual {
-        case 80...: kss = 2
-        case 50..<80: kss = 5
-        default: kss = 8
-        }
 
-        let url = service.baseURL.appendingPathComponent("api/v1/flywheel/label")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 5
-        let body: [String: Any] = [
-            "label": label,
-            "kss": kss,
-            "note": "ios_feedback predicted=\(Int(predicted)) actual=\(Int(actual))"
-        ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        do {
+            let deviceID = try await service.resolvePlatformDeviceID()
+            let eventID = platformFeedbackEventID(for: session)
+            let idempotencyKey = platformFeedbackIdempotencyKey(for: session)
+            let sessionID = ExportManager.platformSessionID(for: session)
+            let predictedValue = Int(max(0, min(100, predicted.rounded())))
+            let actualValue = Int(max(0, min(100, actual.rounded())))
 
-        Task.detached {
-            _ = try? await URLSession.shared.data(for: request)
+            let payload = PlatformCreateFeedbackEventRequest(
+                feedbackEventID: eventID,
+                deviceID: deviceID,
+                sessionID: sessionID,
+                predictedStamina: predictedValue,
+                actualStamina: actualValue,
+                label: platformFeedbackLabel(for: actualValue),
+                kss: platformKSS(for: actualValue),
+                note: normalizedFeedbackNote(feedback.notes),
+                createdAt: feedback.createdAt
+            )
+
+            do {
+                _ = try await service.createPlatformFeedbackEvent(payload, idempotencyKey: idempotencyKey)
+                FluxLog.network.info("feedback-event 已写入平台: \(eventID)")
+            } catch {
+                guard shouldRetryFeedbackWithoutSession(error) else {
+                    throw error
+                }
+
+                let fallbackPayload = PlatformCreateFeedbackEventRequest(
+                    feedbackEventID: eventID,
+                    deviceID: deviceID,
+                    sessionID: nil,
+                    predictedStamina: predictedValue,
+                    actualStamina: actualValue,
+                    label: platformFeedbackLabel(for: actualValue),
+                    kss: platformKSS(for: actualValue),
+                    note: normalizedFeedbackNote(feedback.notes),
+                    createdAt: feedback.createdAt
+                )
+                _ = try await service.createPlatformFeedbackEvent(fallbackPayload, idempotencyKey: idempotencyKey)
+                FluxLog.network.info("feedback-event 已写入平台（无 session 关联）: \(eventID)")
+            }
+        } catch {
+            FluxLog.network.warn("feedback-event 写入平台失败: \(error.localizedDescription)")
         }
     }
 
@@ -387,6 +417,41 @@ final class PersonalizationManager: ObservableObject {
             mvcPeak: calibration?.mvcPeak,
             calibratedAt: calibration?.calibratedAt.map { Date(timeIntervalSince1970: $0) }
         )
+    }
+
+    private func platformFeedbackEventID(for session: Session) -> String {
+        "fbk_\(session.id.uuidString.lowercased().replacingOccurrences(of: "-", with: ""))"
+    }
+
+    private func platformFeedbackIdempotencyKey(for session: Session) -> String {
+        "ios:feedback-upload:\(session.id.uuidString.lowercased())"
+    }
+
+    private func platformFeedbackLabel(for actualStamina: Int) -> String {
+        actualStamina < 50 ? "fatigued" : "alert"
+    }
+
+    private func platformKSS(for actualStamina: Int) -> Int {
+        switch actualStamina {
+        case 80...:
+            return 2
+        case 50..<80:
+            return 5
+        default:
+            return 8
+        }
+    }
+
+    private func normalizedFeedbackNote(_ note: String) -> String? {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func shouldRetryFeedbackWithoutSession(_ error: Error) -> Bool {
+        guard case let FluxServiceError.envelopeFailed(code, _) = error else {
+            return false
+        }
+        return code == "resource_not_found"
     }
 
     private static func makeEncoder() -> JSONEncoder {

@@ -402,6 +402,20 @@ final class FluxService: ObservableObject {
         return try Self.requireData(envelope)
     }
 
+    func createPlatformFeedbackEvent(
+        _ payload: PlatformCreateFeedbackEventRequest,
+        idempotencyKey: String
+    ) async throws -> PlatformCreateFeedbackEventResponse {
+        let body = try Self.makeEncoder().encode(payload)
+        let envelope: FluxResponse<PlatformCreateFeedbackEventResponse> = try await requestPlatformEnvelope(
+            "v1/feedback-events",
+            method: "POST",
+            body: body,
+            headers: ["Idempotency-Key": idempotencyKey]
+        )
+        return try Self.requireData(envelope)
+    }
+
     // MARK: - REST Helpers
 
     private func requestEnvelope<T: Decodable>(
