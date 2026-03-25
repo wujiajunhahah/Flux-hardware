@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 // MARK: - Errors
 
@@ -31,6 +32,7 @@ final class FluxService: ObservableObject {
     @Published var serverStatus: ServerStatus?
     @Published var isConnected = false
     @Published var connectionError: String?
+    @Published private(set) var platformDeviceID: String?
 
     /// 个性化管理器引用，由 App 层注入
     weak var personalization: PersonalizationManager?
@@ -73,11 +75,15 @@ final class FluxService: ObservableObject {
         URL(string: "http://\(host):\(port)") ?? URL(string: "http://127.0.0.1:8000")!
     }
 
+    var currentPlatformDeviceID: String? {
+        platformSessionState?.deviceID
+    }
+
     @Published var host: String {
-        didSet { UserDefaults.standard.set(host, forKey: "flux_host") }
+        didSet { UserDefaults.standard.set(host, forKey: Self.hostDefaultsKey) }
     }
     @Published var port: Int {
-        didSet { UserDefaults.standard.set(port, forKey: "flux_port") }
+        didSet { UserDefaults.standard.set(port, forKey: Self.portDefaultsKey) }
     }
 
     /// 短请求（REST）；长连接用 `streamSession`
@@ -85,10 +91,21 @@ final class FluxService: ObservableObject {
     /// SSE：避免沿用 5s request timeout
     private let streamSession: URLSession
     private var wifiTransportTask: Task<Void, Never>?
+    private var platformSessionState: PlatformAuthSession? {
+        didSet {
+            persistPlatformSession()
+            platformDeviceID = platformSessionState?.deviceID
+        }
+    }
+
+    private static let hostDefaultsKey = "flux_host"
+    private static let portDefaultsKey = "flux_port"
+    private static let platformClientDeviceKeyDefaultsKey = "flux_platform_client_device_key"
+    private static let platformSessionDefaultsKey = "flux_platform_session"
 
     init() {
-        self.host = UserDefaults.standard.string(forKey: "flux_host") ?? "127.0.0.1"
-        self.port = UserDefaults.standard.integer(forKey: "flux_port").nonZero ?? 8000
+        self.host = UserDefaults.standard.string(forKey: Self.hostDefaultsKey) ?? "127.0.0.1"
+        self.port = UserDefaults.standard.integer(forKey: Self.portDefaultsKey).nonZero ?? 8000
 
         let short = URLSessionConfiguration.default
         short.timeoutIntervalForRequest = 5
@@ -100,6 +117,9 @@ final class FluxService: ObservableObject {
         long.timeoutIntervalForResource = 60 * 60 * 24
         long.requestCachePolicy = .reloadIgnoringLocalCacheData
         self.streamSession = URLSession(configuration: long)
+
+        self.platformSessionState = Self.loadPlatformSession()
+        self.platformDeviceID = self.platformSessionState?.deviceID
     }
 
     // MARK: - Wi‑Fi 传输：优先 SSE，失败后轮询
@@ -133,7 +153,7 @@ final class FluxService: ObservableObject {
     }
 
     private func streamUntilSSEEnds() async {
-        let url = baseURL.appendingPathComponent("api/v1/stream")
+        let url = buildURL(path: "api/v1/stream")
         var request = URLRequest(url: url)
         request.timeoutInterval = .infinity
 
@@ -180,7 +200,7 @@ final class FluxService: ObservableObject {
     private func applyStateFromSSEPayload(_ json: String) {
         guard let data = json.data(using: .utf8) else { return }
         do {
-            let decoded = try JSONDecoder().decode(FluxState.self, from: data)
+            let decoded = try Self.makeDecoder().decode(FluxState.self, from: data)
             self.state = decoded
             if !self.isConnected {
                 self.isConnected = true
@@ -242,42 +262,351 @@ final class FluxService: ObservableObject {
         }
     }
 
-    // MARK: - REST 信封
+    // MARK: - Platform API
+
+    func fetchPlatformBootstrap(channel: String = "stable") async throws -> PlatformBootstrapData {
+        let session = try await ensurePlatformSession()
+        let envelope: FluxResponse<PlatformBootstrapData> = try await requestPlatformEnvelope(
+            "v1/sync/bootstrap",
+            queryItems: [
+                URLQueryItem(name: "device_id", value: session.deviceID),
+                URLQueryItem(name: "platform", value: "ios"),
+                URLQueryItem(name: "channel", value: channel),
+            ]
+        )
+        return try Self.requireData(envelope)
+    }
+
+    func updatePlatformProfile(
+        baseVersion: Int,
+        calibrationOffset: Double,
+        estimatedAccuracy: Double,
+        trainingCount: Int,
+        activeModelReleaseID: String?,
+        summary: PlatformProfileSummary
+    ) async throws -> PlatformProfileState {
+        let body = try Self.makeEncoder().encode(
+            PlatformUpdateProfileRequest(
+                baseVersion: baseVersion,
+                calibrationOffset: calibrationOffset,
+                estimatedAccuracy: estimatedAccuracy,
+                trainingCount: trainingCount,
+                activeModelReleaseID: activeModelReleaseID,
+                summary: summary
+            )
+        )
+        let envelope: FluxResponse<PlatformUpdateProfileResponse> = try await requestPlatformEnvelope(
+            "v1/profile",
+            method: "PUT",
+            body: body
+        )
+        return try Self.requireData(envelope).profileState
+    }
+
+    func updatePlatformDeviceCalibration(
+        deviceID: String,
+        baseVersion: Int,
+        deviceName: String,
+        sensorProfile: PlatformSensorProfile,
+        calibrationOffset: Double
+    ) async throws -> PlatformDeviceCalibrationState {
+        let body = try Self.makeEncoder().encode(
+            PlatformUpdateDeviceCalibrationRequest(
+                baseVersion: baseVersion,
+                deviceName: deviceName,
+                sensorProfile: sensorProfile,
+                calibrationOffset: calibrationOffset
+            )
+        )
+        let envelope: FluxResponse<PlatformUpdateDeviceCalibrationResponse> = try await requestPlatformEnvelope(
+            "v1/devices/\(deviceID)/calibration",
+            method: "PUT",
+            body: body
+        )
+        return try Self.requireData(envelope).deviceCalibration
+    }
+
+    // MARK: - REST Helpers
 
     private func requestEnvelope<T: Decodable>(
         _ path: String,
-        method: String = "GET"
+        method: String = "GET",
+        queryItems: [URLQueryItem] = [],
+        body: Data? = nil,
+        headers: [String: String] = [:]
     ) async throws -> FluxResponse<T> {
-        let url = baseURL.appendingPathComponent(path)
+        let url = buildURL(path: path, queryItems: queryItems)
         var req = URLRequest(url: url)
         req.httpMethod = method
+        req.httpBody = body
+        if body != nil {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        for (field, value) in headers {
+            req.setValue(value, forHTTPHeaderField: field)
+        }
+
         let (data, response) = try await session.data(for: req)
-        try Self.validate(data: data, response: response)
+        guard let http = response as? HTTPURLResponse else {
+            throw FluxServiceError.invalidResponse
+        }
+
+        let decodedEnvelope: FluxResponse<T>?
+        let decodeError: Error?
         do {
-            return try JSONDecoder().decode(FluxResponse<T>.self, from: data)
+            decodedEnvelope = try Self.makeDecoder().decode(FluxResponse<T>.self, from: data)
+            decodeError = nil
         } catch {
-            throw FluxServiceError.decodingFailed(underlying: error)
+            decodedEnvelope = nil
+            decodeError = error
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            if let envelope = decodedEnvelope {
+                throw FluxServiceError.envelopeFailed(
+                    code: envelope.resolvedErrorCode,
+                    message: envelope.resolvedErrorMessage
+                )
+            }
+            let preview = String(data: data, encoding: .utf8).map { String($0.prefix(160)) }
+            throw FluxServiceError.httpStatus(code: http.statusCode, bodyPreview: preview)
+        }
+
+        guard let envelope = decodedEnvelope else {
+            throw FluxServiceError.decodingFailed(underlying: decodeError ?? FluxServiceError.invalidResponse)
+        }
+
+        if !envelope.ok {
+            throw FluxServiceError.envelopeFailed(
+                code: envelope.resolvedErrorCode,
+                message: envelope.resolvedErrorMessage
+            )
+        }
+
+        return envelope
+    }
+
+    private func requestPlatformEnvelope<T: Decodable>(
+        _ path: String,
+        method: String = "GET",
+        queryItems: [URLQueryItem] = [],
+        body: Data? = nil,
+        retryOnUnauthorized: Bool = true
+    ) async throws -> FluxResponse<T> {
+        let session = try await ensurePlatformSession()
+        do {
+            return try await requestEnvelope(
+                path,
+                method: method,
+                queryItems: queryItems,
+                body: body,
+                headers: ["Authorization": "Bearer \(session.accessToken)"]
+            )
+        } catch {
+            guard retryOnUnauthorized, Self.isUnauthorized(error) else {
+                throw error
+            }
+            _ = try await ensurePlatformSession(forceRefresh: true)
+            return try await requestPlatformEnvelope(
+                path,
+                method: method,
+                queryItems: queryItems,
+                body: body,
+                retryOnUnauthorized: false
+            )
         }
     }
 
-    /// `ok == false` 时抛出；`ok == true` 且 `data == nil` 时返回 nil（不抛错）。
+    private func ensurePlatformSession(forceRefresh: Bool = false) async throws -> PlatformAuthSession {
+        if !forceRefresh,
+           let session = platformSessionState,
+           session.accessTokenExpiresAt.timeIntervalSinceNow > 60 {
+            return session
+        }
+
+        if let existing = platformSessionState, !existing.refreshToken.isEmpty {
+            do {
+                let refreshed = try await refreshPlatformSession(existing)
+                platformSessionState = refreshed
+                return refreshed
+            } catch {
+                FluxLog.network.warn("平台 token 刷新失败: \(error.localizedDescription)")
+                if forceRefresh || Self.isUnauthorized(error) {
+                    platformSessionState = nil
+                }
+            }
+        }
+
+        let authenticated = try await signInOrSignUpPlatform()
+        platformSessionState = authenticated
+        return authenticated
+    }
+
+    private func signInOrSignUpPlatform() async throws -> PlatformAuthSession {
+        do {
+            return try await authenticatePlatform(createUser: false)
+        } catch {
+            guard Self.errorCode(from: error) == "user_not_found" else {
+                throw error
+            }
+        }
+
+        do {
+            return try await authenticatePlatform(createUser: true)
+        } catch {
+            if Self.errorCode(from: error) == "identity_already_exists" {
+                return try await authenticatePlatform(createUser: false)
+            }
+            throw error
+        }
+    }
+
+    private func authenticatePlatform(createUser: Bool) async throws -> PlatformAuthSession {
+        let payload = makePlatformAuthRequest()
+        let body = try Self.makeEncoder().encode(payload)
+        let path = createUser ? "v1/auth/sign-up" : "v1/auth/sign-in"
+        let envelope: FluxResponse<PlatformAuthData> = try await requestEnvelope(
+            path,
+            method: "POST",
+            body: body
+        )
+        let data = try Self.requireData(envelope)
+        let refreshToken = data.refreshToken ?? platformSessionState?.refreshToken ?? ""
+        guard !refreshToken.isEmpty else {
+            throw FluxServiceError.envelopeFailed(code: "bad_envelope", message: "缺少 refresh token")
+        }
+        return PlatformAuthSession(
+            userID: data.userID,
+            deviceID: data.deviceID,
+            accessToken: data.accessToken,
+            refreshToken: refreshToken,
+            accessTokenExpiresAt: Date().addingTimeInterval(TimeInterval(data.expiresInSec))
+        )
+    }
+
+    private func refreshPlatformSession(_ existing: PlatformAuthSession) async throws -> PlatformAuthSession {
+        let body = try Self.makeEncoder().encode(
+            PlatformRefreshRequest(refreshToken: existing.refreshToken)
+        )
+        let envelope: FluxResponse<PlatformAuthData> = try await requestEnvelope(
+            "v1/auth/refresh",
+            method: "POST",
+            body: body
+        )
+        let data = try Self.requireData(envelope)
+        return PlatformAuthSession(
+            userID: existing.userID,
+            deviceID: existing.deviceID,
+            accessToken: data.accessToken,
+            refreshToken: existing.refreshToken,
+            accessTokenExpiresAt: Date().addingTimeInterval(TimeInterval(data.expiresInSec))
+        )
+    }
+
+    private func makePlatformAuthRequest() -> PlatformAuthRequest {
+        PlatformAuthRequest(
+            provider: "apple",
+            providerToken: platformProviderToken(),
+            device: PlatformAuthDevice(
+                clientDeviceKey: platformClientDeviceKey(),
+                platform: "ios",
+                deviceName: UIDevice.current.name,
+                appVersion: Flux.App.version,
+                osVersion: UIDevice.current.systemVersion
+            )
+        )
+    }
+
+    private func platformClientDeviceKey() -> String {
+        let defaults = UserDefaults.standard
+        if let key = defaults.string(forKey: Self.platformClientDeviceKeyDefaultsKey), !key.isEmpty {
+            return key
+        }
+        let generated = UIDevice.current.identifierForVendor?.uuidString.lowercased()
+            ?? UUID().uuidString.lowercased()
+        defaults.set(generated, forKey: Self.platformClientDeviceKeyDefaultsKey)
+        return generated
+    }
+
+    private func platformProviderToken() -> String {
+        let deviceKey = platformClientDeviceKey()
+        let bundleID = Bundle.main.bundleIdentifier ?? "fluxchi.ios"
+        return "dev:\(bundleID).\(deviceKey)"
+    }
+
+    private func persistPlatformSession() {
+        let defaults = UserDefaults.standard
+        guard let platformSessionState else {
+            defaults.removeObject(forKey: Self.platformSessionDefaultsKey)
+            return
+        }
+        guard let data = try? Self.makeEncoder().encode(platformSessionState) else {
+            return
+        }
+        defaults.set(data, forKey: Self.platformSessionDefaultsKey)
+    }
+
+    private func buildURL(path: String, queryItems: [URLQueryItem] = []) -> URL {
+        var url = baseURL
+        for component in path.split(separator: "/") {
+            url.appendPathComponent(String(component))
+        }
+        guard !queryItems.isEmpty,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+        components.queryItems = queryItems
+        return components.url ?? url
+    }
+
+    private static func loadPlatformSession() -> PlatformAuthSession? {
+        guard let data = UserDefaults.standard.data(forKey: platformSessionDefaultsKey) else {
+            return nil
+        }
+        return try? makeDecoder().decode(PlatformAuthSession.self, from: data)
+    }
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+
+    private static func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
     private static func unwrapEnvelope<T>(_ envelope: FluxResponse<T>) throws -> T? {
         if envelope.ok {
             return envelope.data
         }
-        let code = envelope.error ?? "error"
-        let message = envelope.message ?? envelope.error ?? "请求失败"
-        throw FluxServiceError.envelopeFailed(code: code, message: message)
+        throw FluxServiceError.envelopeFailed(
+            code: envelope.resolvedErrorCode,
+            message: envelope.resolvedErrorMessage
+        )
     }
 
-    private static func validate(data: Data, response: URLResponse) throws {
-        guard let http = response as? HTTPURLResponse else {
-            throw FluxServiceError.invalidResponse
+    private static func requireData<T>(_ envelope: FluxResponse<T>) throws -> T {
+        guard let data = try unwrapEnvelope(envelope) else {
+            throw FluxServiceError.envelopeFailed(code: "bad_envelope", message: "服务返回缺少 data")
         }
-        guard (200...299).contains(http.statusCode) else {
-            let preview = String(data: data, encoding: .utf8).map { String($0.prefix(160)) }
-            throw FluxServiceError.httpStatus(code: http.statusCode, bodyPreview: preview)
+        return data
+    }
+
+    private static func errorCode(from error: Error) -> String? {
+        guard case let FluxServiceError.envelopeFailed(code, _) = error else {
+            return nil
         }
+        return code
+    }
+
+    private static func isUnauthorized(_ error: Error) -> Bool {
+        if case let FluxServiceError.httpStatus(code, _) = error, code == 401 {
+            return true
+        }
+        return errorCode(from: error) == "unauthorized"
     }
 }
 

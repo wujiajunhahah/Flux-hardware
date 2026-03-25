@@ -4,10 +4,265 @@ import Foundation
 
 struct FluxResponse<T: Decodable>: Decodable {
     let ok: Bool
-    let ts: TimeInterval
+    let ts: TimeInterval?
+    let requestID: String?
     let data: T?
-    let error: String?
     let message: String?
+    let errorCode: String?
+    let errorMessage: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case ok
+        case ts
+        case requestID = "request_id"
+        case data
+        case error
+        case message
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ok = try container.decode(Bool.self, forKey: .ok)
+        ts = try container.decodeIfPresent(TimeInterval.self, forKey: .ts)
+        requestID = try container.decodeIfPresent(String.self, forKey: .requestID)
+        data = try? container.decode(T.self, forKey: .data)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+
+        if let detail = try? container.decodeIfPresent(FluxErrorDetail.self, forKey: .error),
+           let detail {
+            errorCode = detail.code
+            errorMessage = detail.message
+        } else if let code = try? container.decodeIfPresent(String.self, forKey: .error),
+                  let code {
+            errorCode = code
+            errorMessage = nil
+        } else {
+            errorCode = nil
+            errorMessage = nil
+        }
+    }
+
+    var resolvedErrorCode: String {
+        errorCode ?? "error"
+    }
+
+    var resolvedErrorMessage: String {
+        if let message, !message.isEmpty { return message }
+        if let errorMessage, !errorMessage.isEmpty { return errorMessage }
+        if let errorCode, !errorCode.isEmpty { return errorCode }
+        return "请求失败"
+    }
+}
+
+private struct FluxErrorDetail: Decodable {
+    let code: String
+    let message: String
+}
+
+// MARK: - Platform API Models
+
+struct PlatformAuthRequest: Encodable {
+    let provider: String
+    let providerToken: String
+    let device: PlatformAuthDevice
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case providerToken = "provider_token"
+        case device
+    }
+}
+
+struct PlatformAuthDevice: Encodable {
+    let clientDeviceKey: String
+    let platform: String
+    let deviceName: String
+    let appVersion: String
+    let osVersion: String
+
+    enum CodingKeys: String, CodingKey {
+        case clientDeviceKey = "client_device_key"
+        case platform
+        case deviceName = "device_name"
+        case appVersion = "app_version"
+        case osVersion = "os_version"
+    }
+}
+
+struct PlatformRefreshRequest: Encodable {
+    let refreshToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case refreshToken = "refresh_token"
+    }
+}
+
+struct PlatformAuthData: Decodable {
+    let userID: String
+    let deviceID: String
+    let accessToken: String
+    let refreshToken: String?
+    let expiresInSec: Int
+
+    enum CodingKeys: String, CodingKey {
+        case userID = "user_id"
+        case deviceID = "device_id"
+        case accessToken = "access_token"
+        case refreshToken = "refresh_token"
+        case expiresInSec = "expires_in_sec"
+    }
+}
+
+struct PlatformAuthSession: Codable {
+    let userID: String
+    let deviceID: String
+    let accessToken: String
+    let refreshToken: String
+    let accessTokenExpiresAt: Date
+}
+
+struct PlatformBootstrapData: Decodable {
+    let serverTime: Date
+    let profileState: PlatformProfileState
+    let deviceCalibrations: [PlatformDeviceCalibrationState]
+    let activeModelManifest: PlatformModelManifest?
+
+    enum CodingKeys: String, CodingKey {
+        case serverTime = "server_time"
+        case profileState = "profile_state"
+        case deviceCalibrations = "device_calibrations"
+        case activeModelManifest = "active_model_manifest"
+    }
+}
+
+struct PlatformProfileState: Decodable {
+    let profileID: String
+    let version: Int
+    let calibrationOffset: Double
+    let estimatedAccuracy: Double
+    let trainingCount: Int
+    let activeModelReleaseID: String?
+    let summary: PlatformProfileSummary
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case profileID = "profile_id"
+        case version
+        case calibrationOffset = "calibration_offset"
+        case estimatedAccuracy = "estimated_accuracy"
+        case trainingCount = "training_count"
+        case activeModelReleaseID = "active_model_release_id"
+        case summary
+        case updatedAt = "updated_at"
+    }
+}
+
+struct PlatformProfileSummary: Codable {
+    let retainedFeedbackCount: Int
+    let avgAbsoluteError: Double?
+    let lastFeedbackAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case retainedFeedbackCount = "retained_feedback_count"
+        case avgAbsoluteError = "avg_absolute_error"
+        case lastFeedbackAt = "last_feedback_at"
+    }
+}
+
+struct PlatformDeviceCalibrationState: Decodable {
+    let deviceID: String
+    let version: Int
+    let deviceName: String
+    let calibrationOffset: Double
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case deviceID = "device_id"
+        case version
+        case deviceName = "device_name"
+        case calibrationOffset = "calibration_offset"
+        case updatedAt = "updated_at"
+    }
+}
+
+struct PlatformModelManifest: Decodable {
+    let modelReleaseID: String
+    let version: String
+    let artifactURL: String?
+    let publishedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case modelReleaseID = "model_release_id"
+        case version
+        case artifactURL = "artifact_url"
+        case publishedAt = "published_at"
+    }
+}
+
+struct PlatformUpdateProfileRequest: Encodable {
+    let baseVersion: Int
+    let calibrationOffset: Double
+    let estimatedAccuracy: Double
+    let trainingCount: Int
+    let activeModelReleaseID: String?
+    let summary: PlatformProfileSummary
+
+    enum CodingKeys: String, CodingKey {
+        case baseVersion = "base_version"
+        case calibrationOffset = "calibration_offset"
+        case estimatedAccuracy = "estimated_accuracy"
+        case trainingCount = "training_count"
+        case activeModelReleaseID = "active_model_release_id"
+        case summary
+    }
+}
+
+struct PlatformUpdateProfileResponse: Decodable {
+    let profileState: PlatformProfileState
+
+    enum CodingKeys: String, CodingKey {
+        case profileState = "profile_state"
+    }
+}
+
+struct PlatformSensorProfile: Codable {
+    let channels: Int
+    let sampleRateHz: Int
+    let quality: Int?
+    let relaxMean: [Double]?
+    let mvcPeak: [Double]?
+    let calibratedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case channels
+        case sampleRateHz = "sample_rate_hz"
+        case quality
+        case relaxMean = "relax_mean"
+        case mvcPeak = "mvc_peak"
+        case calibratedAt = "calibrated_at"
+    }
+}
+
+struct PlatformUpdateDeviceCalibrationRequest: Encodable {
+    let baseVersion: Int
+    let deviceName: String
+    let sensorProfile: PlatformSensorProfile
+    let calibrationOffset: Double
+
+    enum CodingKeys: String, CodingKey {
+        case baseVersion = "base_version"
+        case deviceName = "device_name"
+        case sensorProfile = "sensor_profile"
+        case calibrationOffset = "calibration_offset"
+    }
+}
+
+struct PlatformUpdateDeviceCalibrationResponse: Decodable {
+    let deviceCalibration: PlatformDeviceCalibrationState
+
+    enum CodingKeys: String, CodingKey {
+        case deviceCalibration = "device_calibration"
+    }
 }
 
 // MARK: - State Update (WebSocket / SSE payload)

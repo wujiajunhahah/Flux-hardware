@@ -58,6 +58,7 @@ struct FluxChiApp: App {
                 service.personalization = personalization
                 personalization.fluxService = service
                 service.startPolling()
+                Task { await personalization.bootstrapFromServerSilently() }
                 alertManager.requestPermission()
 
                 if #available(iOS 26.0, *) {

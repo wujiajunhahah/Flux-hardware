@@ -41,35 +41,9 @@ final class PersonalizationManager: ObservableObject {
         dataDir.appendingPathComponent(Self.feedbackDataFileName)
     }
 
-    private static let syncSession: URLSession = {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10
-        config.timeoutIntervalForResource = 30
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: config)
-    }()
-
-    private enum SyncError: LocalizedError {
-        case serviceUnavailable
-        case invalidResponse
-        case httpStatus(Int, String)
-        case badEnvelope
-        case server(String)
-
-        var errorDescription: String? {
-            switch self {
-            case .serviceUnavailable:
-                return "服务器未初始化"
-            case .invalidResponse:
-                return "无效的服务器响应"
-            case .httpStatus(let code, let body):
-                return body.isEmpty ? "HTTP \(code)" : "HTTP \(code): \(body)"
-            case .badEnvelope:
-                return "服务器返回格式异常"
-            case .server(let message):
-                return message.isEmpty ? "服务返回错误" : message
-            }
-        }
+    private enum SyncDirection {
+        case push
+        case pull
     }
 
     init() {
@@ -128,11 +102,15 @@ final class PersonalizationManager: ObservableObject {
     // MARK: - Profile Sync
 
     func pushProfileToServer() async {
-        await syncProfile(direction: .push)
+        await syncProfile(direction: .push, silentErrors: false)
     }
 
     func pullProfileFromServer() async {
-        await syncProfile(direction: .pull)
+        await syncProfile(direction: .pull, silentErrors: false)
+    }
+
+    func bootstrapFromServerSilently() async {
+        await syncProfile(direction: .pull, silentErrors: true)
     }
 
     // MARK: - Flywheel Integration
@@ -259,178 +237,156 @@ final class PersonalizationManager: ObservableObject {
         estimatedAccuracy = max(0, min(100, 100 - avgError))
     }
 
-    private func buildProfile() -> PersonalizationProfile {
-        let updatedAt = resolvedProfileUpdatedAt()
-        updateCurrentDeviceCalibration(updatedAt: updatedAt)
-        let retained = Array(feedbackPairs.suffix(retainedFeedbackLimit))
-        let avgAbsoluteError: Double
-        if retained.isEmpty {
-            avgAbsoluteError = 0
-        } else {
-            avgAbsoluteError = retained.map { abs($0.predicted + calibrationOffset - $0.actual) }
-                .reduce(0, +) / Double(retained.count)
-        }
-        let lastSessionID = retained.reversed().first(where: { !$0.sessionID.isEmpty })?.sessionID
+    // MARK: - Platform Sync
 
-        return PersonalizationProfile(
-            profileID: profileID,
-            updatedAt: updatedAt,
-            trainingCount: trainingCount,
-            estimatedAccuracy: estimatedAccuracy,
-            calibrationOffset: calibrationOffset,
-            feedbackSummary: PersonalizationFeedbackSummary(
-                totalCount: trainingCount,
-                retainedCount: retained.count,
-                avgAbsoluteError: avgAbsoluteError,
-                lastSessionID: lastSessionID
-            ),
-            recentFeedbackPairs: retained,
-            deviceCalibrations: deviceCalibrations
-        )
-    }
-
-    @discardableResult
-    private func applyRemoteProfile(_ profile: PersonalizationProfile, allowOlder: Bool = false) -> Bool {
-        let localUpdatedAt = resolvedProfileUpdatedAt()
-        if !allowOlder && profile.updatedAt < localUpdatedAt {
-            return false
-        }
-
-        profileID = profile.profileID
-        calibrationOffset = profile.calibrationOffset
-        trainingCount = max(profile.trainingCount, profile.recentFeedbackPairs.count)
-        estimatedAccuracy = profile.estimatedAccuracy
-        feedbackPairs = Array(profile.recentFeedbackPairs.suffix(retainedFeedbackLimit))
-        deviceCalibrations = profile.deviceCalibrations
-        profileUpdatedAt = profile.updatedAt
-        updateCurrentDeviceCalibration(updatedAt: profile.updatedAt)
-        if estimatedAccuracy <= 0, !feedbackPairs.isEmpty {
-            recalculateEstimatedAccuracy()
-        }
-
-        saveFeedbackPairs()
-        saveDeviceCalibrations()
-        saveState()
-        return true
-    }
-
-    private enum SyncDirection {
-        case push
-        case pull
-    }
-
-    private func syncProfile(direction: SyncDirection) async {
+    private func syncProfile(direction: SyncDirection, silentErrors: Bool) async {
         guard let service = fluxService else {
-            syncStatusMessage = SyncError.serviceUnavailable.localizedDescription
+            if !silentErrors {
+                syncStatusMessage = "服务器未初始化"
+            }
             return
         }
 
         isSyncing = true
-        syncStatusMessage = direction == .push ? "正在上传个性化数据…" : "正在拉取个性化数据…"
+        if !silentErrors {
+            syncStatusMessage = direction == .push ? "正在上传个性化数据…" : "正在拉取个性化数据…"
+        }
         defer { isSyncing = false }
 
         do {
-            switch direction {
-            case .push:
-                try await pushProfile(baseURL: service.baseURL)
-            case .pull:
-                try await pullProfile(baseURL: service.baseURL)
+            let bootstrap = try await service.fetchPlatformBootstrap()
+            if let platformDeviceID = service.currentPlatformDeviceID, !platformDeviceID.isEmpty {
+                deviceID = platformDeviceID
             }
+
+            switch direction {
+            case .pull:
+                let applied = applyPlatformBootstrap(bootstrap)
+                if !silentErrors {
+                    syncStatusMessage = applied ? "已从平台拉取" : "本地版本更新，已保留本地画像"
+                }
+                FluxLog.network.info("平台 bootstrap 已同步到本地")
+
+            case .push:
+                let updatedProfile = try await service.updatePlatformProfile(
+                    baseVersion: bootstrap.profileState.version,
+                    calibrationOffset: calibrationOffset,
+                    estimatedAccuracy: estimatedAccuracy,
+                    trainingCount: trainingCount,
+                    activeModelReleaseID: bootstrap.profileState.activeModelReleaseID,
+                    summary: buildPlatformSummary()
+                )
+
+                let currentDeviceID = service.currentPlatformDeviceID ?? deviceID
+                guard let currentCalibration = bootstrap.deviceCalibrations.first(where: { $0.deviceID == currentDeviceID }) else {
+                    throw FluxServiceError.envelopeFailed(
+                        code: "device_not_found",
+                        message: "服务器未返回当前设备的校准状态"
+                    )
+                }
+
+                let updatedCalibration = try await service.updatePlatformDeviceCalibration(
+                    deviceID: currentDeviceID,
+                    baseVersion: currentCalibration.version,
+                    deviceName: UIDevice.current.name,
+                    sensorProfile: buildPlatformSensorProfile(),
+                    calibrationOffset: calibrationOffset
+                )
+
+                _ = applyPlatformProfileState(updatedProfile, allowOlder: true)
+                mergePlatformDeviceCalibrations([updatedCalibration], allowOlder: true)
+                if !silentErrors {
+                    syncStatusMessage = "已上传到平台"
+                }
+                FluxLog.network.info("个性化画像已上传到平台")
+            }
+
             lastSyncAt = Date()
+            saveFeedbackPairs()
+            saveDeviceCalibrations()
             saveState()
         } catch {
-            syncStatusMessage = error.localizedDescription
+            if !silentErrors {
+                syncStatusMessage = error.localizedDescription
+            }
             FluxLog.network.warn("个性化同步失败: \(error.localizedDescription)")
         }
     }
 
-    private func pushProfile(baseURL: URL) async throws {
-        let profile = buildProfile()
-        let payload = try Self.makeEncoder().encode(profile)
-        let envelope: FluxResponse<PersonalizationProfilePutData> = try await requestEnvelope(
-            path: "api/v1/profile",
-            method: "PUT",
-            baseURL: baseURL,
-            body: payload
-        )
-        guard envelope.ok else {
-            throw SyncError.server(envelope.message ?? envelope.error ?? "")
-        }
-        guard let data = envelope.data else {
-            throw SyncError.badEnvelope
+    @discardableResult
+    private func applyPlatformBootstrap(_ bootstrap: PlatformBootstrapData) -> Bool {
+        mergePlatformDeviceCalibrations(bootstrap.deviceCalibrations)
+        return applyPlatformProfileState(bootstrap.profileState)
+    }
+
+    @discardableResult
+    private func applyPlatformProfileState(_ state: PlatformProfileState, allowOlder: Bool = false) -> Bool {
+        let localUpdatedAt = resolvedProfileUpdatedAt()
+        if !allowOlder && state.updatedAt < localUpdatedAt {
+            return false
         }
 
-        if data.applied {
-            if let remote = data.profile {
-                _ = applyRemoteProfile(remote, allowOlder: true)
+        profileID = state.profileID
+        calibrationOffset = state.calibrationOffset
+        trainingCount = max(trainingCount, state.trainingCount)
+        estimatedAccuracy = state.estimatedAccuracy
+        profileUpdatedAt = state.updatedAt
+
+        if estimatedAccuracy <= 0, !feedbackPairs.isEmpty {
+            recalculateEstimatedAccuracy()
+        }
+
+        saveState()
+        return true
+    }
+
+    private func mergePlatformDeviceCalibrations(
+        _ remoteCalibrations: [PlatformDeviceCalibrationState],
+        allowOlder: Bool = false
+    ) {
+        for remote in remoteCalibrations {
+            if let existing = deviceCalibrations[remote.deviceID],
+               !allowOlder,
+               remote.updatedAt < existing.updatedAt {
+                continue
             }
-            syncStatusMessage = "已上传到服务器"
-            FluxLog.network.info("个性化画像已上传")
-            return
-        }
-
-        if let remote = data.profile, applyRemoteProfile(remote) {
-            syncStatusMessage = "服务器版本较新，已同步到本地"
-            FluxLog.network.info("服务器画像较新，已覆盖本地")
-        } else {
-            syncStatusMessage = "服务器版本较新，本地未覆盖"
-            FluxLog.network.info("服务器画像较新，本地保持不变")
+            deviceCalibrations[remote.deviceID] = DeviceCalibration(
+                deviceID: remote.deviceID,
+                deviceName: remote.deviceName,
+                calibrationOffset: remote.calibrationOffset,
+                updatedAt: remote.updatedAt
+            )
         }
     }
 
-    private func pullProfile(baseURL: URL) async throws {
-        let envelope: FluxResponse<PersonalizationProfileGetData> = try await requestEnvelope(
-            path: "api/v1/profile",
-            method: "GET",
-            baseURL: baseURL
+    private func buildPlatformSummary() -> PlatformProfileSummary {
+        let retained = Array(feedbackPairs.suffix(retainedFeedbackLimit))
+        let avgAbsoluteError: Double?
+        if retained.isEmpty {
+            avgAbsoluteError = nil
+        } else {
+            avgAbsoluteError = retained
+                .map { abs($0.predicted + calibrationOffset - $0.actual) }
+                .reduce(0, +) / Double(retained.count)
+        }
+
+        return PlatformProfileSummary(
+            retainedFeedbackCount: retained.count,
+            avgAbsoluteError: avgAbsoluteError,
+            lastFeedbackAt: retained.compactMap(\.createdAt).max()
         )
-        guard envelope.ok else {
-            throw SyncError.server(envelope.message ?? envelope.error ?? "")
-        }
-        guard let data = envelope.data else {
-            throw SyncError.badEnvelope
-        }
-        guard data.exists, let profile = data.profile else {
-            syncStatusMessage = "服务器上还没有个性化数据"
-            FluxLog.network.info("服务器上暂无个性化画像")
-            return
-        }
-
-        if applyRemoteProfile(profile) {
-            syncStatusMessage = "已从服务器拉取"
-            FluxLog.network.info("个性化画像已从服务器拉取")
-        } else {
-            syncStatusMessage = "本地版本更新，未覆盖"
-            FluxLog.network.info("远端画像较旧，保留本地版本")
-        }
     }
 
-    private func requestEnvelope<T: Decodable>(
-        path: String,
-        method: String,
-        baseURL: URL,
-        body: Data? = nil
-    ) async throws -> FluxResponse<T> {
-        let url = baseURL.appendingPathComponent(path)
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        if body != nil {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = body
-        }
-
-        let (data, response) = try await Self.syncSession.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw SyncError.invalidResponse
-        }
-        let preview = String(data: data, encoding: .utf8).map { String($0.prefix(200)) } ?? ""
-        guard (200...299).contains(http.statusCode) else {
-            throw SyncError.httpStatus(http.statusCode, preview)
-        }
-        guard let envelope = try? Self.makeDecoder().decode(FluxResponse<T>.self, from: data) else {
-            throw SyncError.badEnvelope
-        }
-        return envelope
+    private func buildPlatformSensorProfile() -> PlatformSensorProfile {
+        let calibration = EMGCalibrationStore.load()
+        return PlatformSensorProfile(
+            channels: EMGCalibrationStore.channelCount,
+            sampleRateHz: 1000,
+            quality: calibration?.quality,
+            relaxMean: calibration?.relaxMean,
+            mvcPeak: calibration?.mvcPeak,
+            calibratedAt: calibration?.calibratedAt.map { Date(timeIntervalSince1970: $0) }
+        )
     }
 
     private static func makeEncoder() -> JSONEncoder {

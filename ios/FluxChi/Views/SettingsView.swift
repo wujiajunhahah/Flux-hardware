@@ -314,7 +314,7 @@ struct SettingsView: View {
         } header: {
             Text("个性化")
         } footer: {
-            Text("每次反馈会校准个人偏移；可手动同步个人画像到服务器。最近 500 条反馈会随画像一起保留。")
+            Text("启动时会拉取平台画像与设备校准；手动上传会写回摘要和当前设备校准。最近 500 条反馈明细仍保存在本地。")
         }
     }
 
@@ -560,6 +560,7 @@ struct SettingsView: View {
             service.port = p
         }
         service.reconnect()
+        Task { await personalization.pullProfileFromServer() }
     }
 
     private func formatUptime(_ seconds: Double) -> String {
