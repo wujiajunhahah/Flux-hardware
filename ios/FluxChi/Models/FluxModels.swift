@@ -28,12 +28,10 @@ struct FluxResponse<T: Decodable>: Decodable {
         data = try? container.decode(T.self, forKey: .data)
         message = try container.decodeIfPresent(String.self, forKey: .message)
 
-        if let detail = try? container.decodeIfPresent(FluxErrorDetail.self, forKey: .error),
-           let detail {
+        if let detail = try? container.decodeIfPresent(FluxErrorDetail.self, forKey: .error) {
             errorCode = detail.code
             errorMessage = detail.message
-        } else if let code = try? container.decodeIfPresent(String.self, forKey: .error),
-                  let code {
+        } else if let code = try? container.decodeIfPresent(String.self, forKey: .error) {
             errorCode = code
             errorMessage = nil
         } else {
