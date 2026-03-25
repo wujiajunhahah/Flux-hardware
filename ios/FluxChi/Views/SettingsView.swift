@@ -204,7 +204,7 @@ struct SettingsView: View {
         } header: {
             Text("WiFi 服务器")
         } footer: {
-            Text("手机和电脑需在同一 WiFi 下")
+            Text("真机不要用 127.0.0.1。本机开发填电脑局域网 IP；ECS 部署填公网 IP 或域名，当前反代端口用 8080。")
         }
     }
 

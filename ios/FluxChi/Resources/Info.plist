@@ -12,6 +12,13 @@
 	<string>FluxChi 需要蓝牙权限以连接 WAVELETECH EMG 手环。</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>FluxChi 需要访问本地网络以连接运行在电脑上的 EMG 数据服务器。</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>

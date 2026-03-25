@@ -97,19 +97,26 @@ FluxChiLive/                        # Widget + Live Activity extension
 
 ## Local network HTTP (ATS)
 
-The app connects to the backend over **plain HTTP** (not HTTPS). iOS App Transport Security may block this on some configurations.
+The app connects to the backend over **plain HTTP** (not HTTPS).
 
-Current status: `Info.plist` includes `NSLocalNetworkUsageDescription`. If you encounter connection failures on a real device:
+Current status: `Info.plist` includes:
 
-1. Add to `Info.plist`:
-   ```xml
-   <key>NSAppTransportSecurity</key>
-   <dict>
-       <key>NSAllowsLocalNetworking</key>
-       <true/>
-   </dict>
-   ```
-2. Or switch the backend to HTTPS with a self-signed cert.
+```xml
+<key>NSAppTransportSecurity</key>
+<dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+</dict>
+```
+
+For real-device testing:
+
+1. Do not use `127.0.0.1` on the phone. That points to the phone itself.
+2. Local dev: use your Mac's LAN IP and the backend port.
+3. ECS deployment: use the server's public IP or domain.
+4. If you are using the Baota/nginx reverse proxy from this repo, use port `8080` unless you later move it behind standard `80/443`.
 
 ## Requirements
 
