@@ -149,6 +149,27 @@ class ProfileRepository:
             cur.execute(sql, (user_id, device_id))
             return cur.fetchone()
 
+    def list_device_calibrations(self, conn: object, *, user_id: str) -> list[dict]:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    user_id,
+                    device_id,
+                    version,
+                    device_name,
+                    sensor_profile_json,
+                    calibration_offset,
+                    updated_at,
+                    created_at
+                FROM device_calibrations
+                WHERE user_id = %s
+                ORDER BY updated_at DESC, device_id DESC
+                """,
+                (user_id,),
+            )
+            return list(cur.fetchall())
+
     def create_device_calibration(
         self,
         conn: object,

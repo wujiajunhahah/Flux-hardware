@@ -170,6 +170,32 @@ def main() -> int:
         "update_device_calibration",
     )
 
+    manifest = assert_ok(
+        request_json(
+            "GET",
+            "/v1/models/manifest?platform=ios&channel=stable&device_class=iphone",
+            token=access_token,
+        ),
+        "get_model_manifest",
+    )
+    if manifest.get("active_model_manifest") is not None:
+        raise RuntimeError("expected no active model manifest in smoke environment")
+
+    bootstrap = assert_ok(
+        request_json(
+            "GET",
+            f"/v1/sync/bootstrap?device_id={device_id}&platform=ios&channel=stable",
+            token=access_token,
+        ),
+        "get_sync_bootstrap",
+    )
+    if bootstrap["profile_state"]["profile_id"] != profile_state["profile_id"]:
+        raise RuntimeError("bootstrap returned unexpected profile_state")
+    if not bootstrap.get("device_calibrations"):
+        raise RuntimeError("bootstrap returned no device_calibrations")
+    if bootstrap.get("active_model_manifest") is not None:
+        raise RuntimeError("expected no active model manifest in bootstrap smoke environment")
+
     session_id = f"ses_{uuid4().hex[:26]}"
     session_blob = {
         "session": {
