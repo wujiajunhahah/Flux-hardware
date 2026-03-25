@@ -5,6 +5,7 @@ struct SessionSummarySheet: View {
     let session: Session
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var service: FluxService
     @EnvironmentObject var personalization: PersonalizationManager
 
     @State private var insight: String?
@@ -13,8 +14,8 @@ struct SessionSummarySheet: View {
     @State private var showCorrection = false
     @State private var accuracyRating: Int = 3
     @State private var appeared = false
-    @State private var gatewaySyncing = false
-    @State private var gatewaySyncMessage: String?
+    @State private var platformSyncing = false
+    @State private var platformSyncMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -36,25 +37,24 @@ struct SessionSummarySheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        gatewaySyncing = true
-                        gatewaySyncMessage = nil
+                        platformSyncing = true
+                        platformSyncMessage = nil
                         Task {
-                            defer { gatewaySyncing = false }
+                            defer { platformSyncing = false }
                             do {
-                                let id = try await ExportManager.uploadSessionToGateway(session: session)
-                                gatewaySyncMessage = "已同步到网关（\(id.prefix(8).uppercased())…）"
+                                try await syncSessionToPlatform()
                             } catch {
-                                gatewaySyncMessage = error.localizedDescription
+                                platformSyncMessage = error.localizedDescription
                             }
                         }
                     } label: {
-                        if gatewaySyncing {
+                        if platformSyncing {
                             ProgressView()
                         } else {
-                            Text("同步到电脑")
+                            Text("上传到平台")
                         }
                     }
-                    .disabled(gatewaySyncing)
+                    .disabled(platformSyncing)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { dismiss() }
@@ -96,7 +96,7 @@ struct SessionSummarySheet: View {
             .padding(.vertical, 8)
 
             insightCard
-            if let g = gatewaySyncMessage {
+            if let g = platformSyncMessage {
                 Text(g)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -452,6 +452,46 @@ struct SessionSummarySheet: View {
         fb.accuracyRating = rating
         modelContext.saveLogged()
     }
+
+    private func syncSessionToPlatform() async throws {
+        let platformDeviceID = try await service.resolvePlatformDeviceID()
+        let bundle = try ExportManager.makePlatformSessionUploadBundle(
+            for: session,
+            platformDeviceID: platformDeviceID
+        )
+
+        let created = try await service.createPlatformSession(
+            bundle.request,
+            idempotencyKey: bundle.idempotencyKey
+        )
+
+        if created.session.status == "ready" {
+            platformSyncMessage = "平台已存在该 session（\(created.session.sessionID.prefix(8).uppercased())…）"
+            return
+        }
+
+        guard let upload = created.upload else {
+            throw FluxServiceError.envelopeFailed(
+                code: "missing_upload_descriptor",
+                message: "平台未返回上传地址"
+            )
+        }
+
+        try await service.uploadPlatformSessionBlob(
+            uploadURL: upload.uploadURL,
+            payload: bundle.blobData,
+            contentType: upload.contentType,
+            method: upload.uploadMethod
+        )
+
+        let finalized = try await service.finalizePlatformSession(
+            sessionID: created.session.sessionID,
+            objectKey: upload.objectKey,
+            sizeBytes: bundle.request.sizeBytes,
+            sha256: bundle.request.sha256
+        )
+        platformSyncMessage = "已上传到平台（\(finalized.session.sessionID.prefix(8).uppercased())…）"
+    }
 }
 
 // MARK: - Mood Enum
@@ -557,5 +597,6 @@ private struct ConfettiParticle {
 
 #Preview {
     SessionSummarySheet(session: Session(title: "测试 Session", source: .wifi))
+        .environmentObject(FluxService())
         .environmentObject(PersonalizationManager())
 }

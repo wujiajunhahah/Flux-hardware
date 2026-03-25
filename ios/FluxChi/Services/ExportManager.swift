@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import CryptoKit
 
 enum ExportManager {
 
@@ -111,6 +112,26 @@ enum ExportManager {
         let staminaThresholds: [String: Double]
         let emgDecoding: String
         let featureWindow: String
+    }
+
+    struct PlatformSessionUploadBundle {
+        let request: PlatformCreateSessionRequest
+        let blobData: Data
+        let idempotencyKey: String
+    }
+
+    enum PlatformUploadPreparationError: LocalizedError {
+        case sessionNotFinished
+        case missingPlatformDeviceID
+
+        var errorDescription: String? {
+            switch self {
+            case .sessionNotFinished:
+                return "当前 session 尚未结束，无法上传"
+            case .missingPlatformDeviceID:
+                return "平台设备身份未初始化，请先确保平台同步成功"
+            }
+        }
     }
 
     // MARK: - Session Export
@@ -244,7 +265,59 @@ enum ExportManager {
         return url
     }
 
+    static func makePlatformSessionUploadBundle(
+        for session: Session,
+        platformDeviceID: String
+    ) throws -> PlatformSessionUploadBundle {
+        guard let endedAt = session.endedAt else {
+            throw PlatformUploadPreparationError.sessionNotFinished
+        }
+        guard !platformDeviceID.isEmpty else {
+            throw PlatformUploadPreparationError.missingPlatformDeviceID
+        }
+
+        let blobData = try export(session: session)
+        let allSnapshots = session.segments.reduce(0) { $0 + $1.snapshots.count }
+        let sessionID = platformSessionID(for: session)
+
+        return PlatformSessionUploadBundle(
+            request: PlatformCreateSessionRequest(
+                sessionID: sessionID,
+                deviceID: platformDeviceID,
+                source: platformSource(for: session.source),
+                title: session.title.isEmpty ? nil : session.title,
+                startedAt: session.startedAt,
+                endedAt: endedAt,
+                durationSec: max(0, Int(session.duration.rounded())),
+                snapshotCount: allSnapshots,
+                schemaVersion: session.schemaVersion,
+                contentType: "application/json",
+                sizeBytes: blobData.count,
+                sha256: sha256Hex(for: blobData)
+            ),
+            blobData: blobData,
+            idempotencyKey: "ios:session-upload:\(session.id.uuidString.lowercased())"
+        )
+    }
+
     // MARK: - Helpers
+
+    private static func platformSessionID(for session: Session) -> String {
+        "ses_\(session.id.uuidString.lowercased().replacingOccurrences(of: "-", with: ""))"
+    }
+
+    private static func platformSource(for source: SessionSource) -> String {
+        switch source {
+        case .ble:
+            return "ios_ble"
+        case .wifi:
+            return "ios_wifi"
+        }
+    }
+
+    private static func sha256Hex(for data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
 
     private static func detectActiveChannels(_ snapshots: [FluxSnapshot]) -> Int {
         guard !snapshots.isEmpty else { return 6 }

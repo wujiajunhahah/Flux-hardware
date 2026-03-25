@@ -265,6 +265,88 @@ struct PlatformUpdateDeviceCalibrationResponse: Decodable {
     }
 }
 
+struct PlatformCreateSessionRequest: Encodable {
+    let sessionID: String
+    let deviceID: String
+    let source: String
+    let title: String?
+    let startedAt: Date
+    let endedAt: Date
+    let durationSec: Int
+    let snapshotCount: Int
+    let schemaVersion: Int
+    let contentType: String
+    let sizeBytes: Int
+    let sha256: String
+
+    enum CodingKeys: String, CodingKey {
+        case sessionID = "session_id"
+        case deviceID = "device_id"
+        case source
+        case title
+        case startedAt = "started_at"
+        case endedAt = "ended_at"
+        case durationSec = "duration_sec"
+        case snapshotCount = "snapshot_count"
+        case schemaVersion = "schema_version"
+        case contentType = "content_type"
+        case sizeBytes = "size_bytes"
+        case sha256
+    }
+}
+
+struct PlatformCreateSessionResponse: Decodable {
+    let session: PlatformSessionState
+    let upload: PlatformSessionUploadDescriptor?
+}
+
+struct PlatformSessionState: Decodable {
+    let sessionID: String
+    let status: String
+    let downloadURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case sessionID = "session_id"
+        case status
+        case downloadURL = "download_url"
+    }
+}
+
+struct PlatformSessionUploadDescriptor: Decodable {
+    let objectKey: String
+    let uploadURL: String
+    let uploadMethod: String
+    let contentType: String
+
+    enum CodingKeys: String, CodingKey {
+        case objectKey = "object_key"
+        case uploadURL = "upload_url"
+        case uploadMethod = "upload_method"
+        case contentType = "content_type"
+    }
+}
+
+struct PlatformFinalizeSessionRequest: Encodable {
+    let status: String
+    let blob: PlatformSessionBlobPayload
+}
+
+struct PlatformSessionBlobPayload: Encodable {
+    let objectKey: String
+    let sizeBytes: Int
+    let sha256: String
+
+    enum CodingKeys: String, CodingKey {
+        case objectKey = "object_key"
+        case sizeBytes = "size_bytes"
+        case sha256
+    }
+}
+
+struct PlatformFinalizeSessionResponse: Decodable {
+    let session: PlatformSessionState
+}
+
 // MARK: - State Update (WebSocket / SSE payload)
 
 struct FluxState: Decodable, Equatable {

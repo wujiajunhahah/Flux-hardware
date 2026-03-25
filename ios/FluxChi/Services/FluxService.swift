@@ -88,6 +88,8 @@ final class FluxService: ObservableObject {
 
     /// 短请求（REST）；长连接用 `streamSession`
     private let session: URLSession
+    /// Blob 上传使用更宽松的超时，避免长 session JSON 在弱网下被 5s request timeout 误杀。
+    private let uploadSession: URLSession
     /// SSE：避免沿用 5s request timeout
     private let streamSession: URLSession
     private var wifiTransportTask: Task<Void, Never>?
@@ -111,6 +113,12 @@ final class FluxService: ObservableObject {
         short.timeoutIntervalForRequest = 5
         short.requestCachePolicy = .reloadIgnoringLocalCacheData
         self.session = URLSession(configuration: short)
+
+        let upload = URLSessionConfiguration.default
+        upload.timeoutIntervalForRequest = 60
+        upload.timeoutIntervalForResource = 300
+        upload.requestCachePolicy = .reloadIgnoringLocalCacheData
+        self.uploadSession = URLSession(configuration: upload)
 
         let long = URLSessionConfiguration.default
         long.timeoutIntervalForRequest = 0
@@ -277,6 +285,10 @@ final class FluxService: ObservableObject {
         return try Self.requireData(envelope)
     }
 
+    func resolvePlatformDeviceID() async throws -> String {
+        try await ensurePlatformSession().deviceID
+    }
+
     func updatePlatformProfile(
         baseVersion: Int,
         calibrationOffset: Double,
@@ -324,6 +336,70 @@ final class FluxService: ObservableObject {
             body: body
         )
         return try Self.requireData(envelope).deviceCalibration
+    }
+
+    func createPlatformSession(
+        _ payload: PlatformCreateSessionRequest,
+        idempotencyKey: String
+    ) async throws -> PlatformCreateSessionResponse {
+        let body = try Self.makeEncoder().encode(payload)
+        let envelope: FluxResponse<PlatformCreateSessionResponse> = try await requestPlatformEnvelope(
+            "v1/sessions",
+            method: "POST",
+            body: body,
+            headers: ["Idempotency-Key": idempotencyKey]
+        )
+        return try Self.requireData(envelope)
+    }
+
+    func uploadPlatformSessionBlob(
+        uploadURL: String,
+        payload: Data,
+        contentType: String,
+        method: String = "PUT"
+    ) async throws {
+        guard let url = URL(string: uploadURL) else {
+            throw FluxServiceError.envelopeFailed(code: "invalid_upload_url", message: "上传地址无效")
+        }
+        guard method.uppercased() == "PUT" else {
+            throw FluxServiceError.envelopeFailed(code: "unsupported_upload_method", message: "平台返回了不支持的上传方法")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method.uppercased()
+        request.httpBody = payload
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+
+        let (_, response) = try await uploadSession.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw FluxServiceError.invalidResponse
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw FluxServiceError.httpStatus(code: http.statusCode, bodyPreview: nil)
+        }
+    }
+
+    func finalizePlatformSession(
+        sessionID: String,
+        objectKey: String,
+        sizeBytes: Int,
+        sha256: String
+    ) async throws -> PlatformFinalizeSessionResponse {
+        let body = try Self.makeEncoder().encode(
+            PlatformFinalizeSessionRequest(
+                status: "ready",
+                blob: PlatformSessionBlobPayload(
+                    objectKey: objectKey,
+                    sizeBytes: sizeBytes,
+                    sha256: sha256
+                )
+            )
+        )
+        let envelope: FluxResponse<PlatformFinalizeSessionResponse> = try await requestPlatformEnvelope(
+            "v1/sessions/\(sessionID)",
+            method: "PATCH",
+            body: body
+        )
+        return try Self.requireData(envelope)
     }
 
     // MARK: - REST Helpers
@@ -391,16 +467,19 @@ final class FluxService: ObservableObject {
         method: String = "GET",
         queryItems: [URLQueryItem] = [],
         body: Data? = nil,
+        headers: [String: String] = [:],
         retryOnUnauthorized: Bool = true
     ) async throws -> FluxResponse<T> {
         let session = try await ensurePlatformSession()
         do {
+            var authorizedHeaders = headers
+            authorizedHeaders["Authorization"] = "Bearer \(session.accessToken)"
             return try await requestEnvelope(
                 path,
                 method: method,
                 queryItems: queryItems,
                 body: body,
-                headers: ["Authorization": "Bearer \(session.accessToken)"]
+                headers: authorizedHeaders
             )
         } catch {
             guard retryOnUnauthorized, Self.isUnauthorized(error) else {
@@ -412,6 +491,7 @@ final class FluxService: ObservableObject {
                 method: method,
                 queryItems: queryItems,
                 body: body,
+                headers: headers,
                 retryOnUnauthorized: false
             )
         }
