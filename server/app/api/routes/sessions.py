@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 
 from ...core.auth import AuthPrincipal, require_principal
 from ...core.errors import ok
+from ...core.public_url import public_url_for
 from ...domain.session import CreateSessionRequest, FinalizeSessionRequest
 from ...services.session_service import SessionService
 
@@ -26,12 +27,14 @@ def create_session(
     if isinstance(upload, dict) and "upload_token" in upload:
         token = upload.pop("upload_token")
         upload["upload_url"] = str(
-            request.url_for("put_session_blob", session_id=data["session"]["session_id"]).include_query_params(token=token)
+            public_url_for(request, "put_session_blob", session_id=data["session"]["session_id"]).include_query_params(
+                token=token
+            )
         )
     session = data.get("session")
     if isinstance(session, dict) and "download_token" in session:
         session.pop("download_token")
-        session["download_url"] = str(request.url_for("get_session_download_url", session_id=session["session_id"]))
+        session["download_url"] = str(public_url_for(request, "get_session_download_url", session_id=session["session_id"]))
     return ok(request, data)
 
 
@@ -60,7 +63,7 @@ def finalize_session(
 ):
     data = service.finalize_session(principal, session_id, payload)
     data["session"].pop("download_token")
-    data["session"]["download_url"] = str(request.url_for("get_session_download_url", session_id=session_id))
+    data["session"]["download_url"] = str(public_url_for(request, "get_session_download_url", session_id=session_id))
     return ok(request, data)
 
 
@@ -96,7 +99,7 @@ def get_session_download_url(
     data = service.get_download_url(principal, session_id)
     token = data.pop("download_token")
     data["download_url"] = str(
-        request.url_for("get_session_blob", session_id=session_id).include_query_params(token=token)
+        public_url_for(request, "get_session_blob", session_id=session_id).include_query_params(token=token)
     )
     return ok(request, data)
 

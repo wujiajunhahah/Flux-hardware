@@ -67,6 +67,7 @@ if BaseSettings is not None:
             default=900,
             validation_alias="FLUX_UPLOAD_URL_TTL_SEC",
         )
+        public_base_url: str | None = Field(default=None, validation_alias="FLUX_PUBLIC_BASE_URL")
         device_limit: int = Field(default=5, validation_alias="FLUX_DEVICE_LIMIT")
         access_token_algorithm: str = Field(
             default="HS256",
@@ -119,6 +120,7 @@ else:
         access_token_ttl_sec: int = int(_env("FLUX_ACCESS_TOKEN_TTL_SEC", 3600))
         refresh_token_ttl_sec: int = int(_env("FLUX_REFRESH_TOKEN_TTL_SEC", 60 * 60 * 24 * 30))
         upload_url_ttl_sec: int = int(_env("FLUX_UPLOAD_URL_TTL_SEC", 900))
+        public_base_url: str | None = _env("FLUX_PUBLIC_BASE_URL")
         device_limit: int = int(_env("FLUX_DEVICE_LIMIT", 5))
         access_token_algorithm: str = _env("FLUX_ACCESS_TOKEN_ALGORITHM", "HS256")
         access_token_issuer: str = _env("FLUX_ACCESS_TOKEN_ISSUER", "fluxchi-platform")

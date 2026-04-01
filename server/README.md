@@ -130,10 +130,13 @@ Example `~/fluxchi-app.env`:
 ```text
 FLUX_ENV=production
 FLUX_SECRET_KEY=replace-with-a-random-secret
+FLUX_PUBLIC_BASE_URL=https://api.focux.me
 FLUX_BIND_HOST=127.0.0.1
 FLUX_PORT=8000
 FLUX_ALLOW_INSECURE_PROVIDER_TOKENS=false
 ```
+
+Set `FLUX_PUBLIC_BASE_URL` whenever the API sits behind an HTTPS reverse proxy and the upstream app still listens on local plain HTTP. This makes generated absolute URLs such as `upload_url`, `download_url`, and model artifact URLs stable even if the proxy headers are incomplete.
 
 If the current client is still using development passthrough provider tokens instead of real provider JWT verification, set `FLUX_ALLOW_INSECURE_PROVIDER_TOKENS=true` temporarily during bring-up.
 

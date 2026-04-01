@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 
 from ...core.auth import AuthPrincipal, require_principal
 from ...core.errors import ok
+from ...core.public_url import public_url_for
 from ...services.sync_service import SyncService
 
 router = APIRouter()
@@ -25,6 +26,10 @@ def get_sync_bootstrap(
         device_id=device_id,
         platform=platform,
         channel=channel,
-        build_model_url=lambda route_name, **params: request.url_for(route_name, release_id=params["release_id"]).include_query_params(token=params["token"]),
+        build_model_url=lambda route_name, **params: public_url_for(
+            request,
+            route_name,
+            release_id=params["release_id"],
+        ).include_query_params(token=params["token"]),
     )
     return ok(request, data)
