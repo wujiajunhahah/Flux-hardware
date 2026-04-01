@@ -119,6 +119,125 @@ bash server/scripts/install_nginx_proxy.sh
 .venv/bin/python -m server.scripts.smoke_test
 ```
 
+## Contract Harness
+
+The server now also includes a staging-first contract regression harness for the platform chain.
+
+Install dev dependencies:
+
+```bash
+python3 -m pip install -r server/requirements-dev.txt
+```
+
+Run the core regression gate:
+
+```bash
+python3 -m server.scripts.run_contract_cases --target staging --tag core
+```
+
+Run the unified platform check entrypoint for the default staging-core gate:
+
+```bash
+python3 -m server.scripts.run_platform_checks
+```
+
+Run a single regression case:
+
+```bash
+python3 -m server.scripts.run_contract_cases --target staging --case session_upload_requires_https_url_v1
+```
+
+Read-only production shadow checks use the `shadow` tag and a live targets file with read-only auth material:
+
+```bash
+cp server/cases/targets.example.json server/cases/targets.local.json
+python3 -m server.scripts.prepare_shadow_target \
+  --target production \
+  --targets-path server/cases/targets.local.json \
+  --provider-token dev:shadow-production
+python3 -m server.scripts.run_contract_cases --target production --tag shadow --targets-path server/cases/targets.local.json
+```
+
+Or run the same production shadow check through the unified entrypoint:
+
+```bash
+python3 -m server.scripts.run_platform_checks \
+  --skip-staging-core \
+  --production-shadow \
+  --targets-path server/cases/targets.local.json
+```
+
+## GitHub Actions Setup
+
+The contract workflow lives at `.github/workflows/contract-cases.yml`.
+
+Required repository variables:
+
+- `FLUX_CONTRACT_STAGING_ENABLED=true` to enable the staging core gate on push and pull request
+- `FLUX_CONTRACT_PRODUCTION_SHADOW_ENABLED=true` to enable scheduled or manual production shadow checks
+
+Required repository secret:
+
+- `FLUX_CONTRACT_TARGETS_JSON`
+  - must be one JSON object containing every target profile the workflow needs
+  - staging CI needs a writable `staging` profile
+  - production shadow needs a read-only `production` profile
+
+Recommended production shadow secret:
+
+- `FLUX_CONTRACT_PRODUCTION_PROVIDER_TOKEN`
+  - if present, the workflow refreshes production shadow `Authorization` and `device_id` automatically by running `python3 -m server.scripts.prepare_shadow_target`
+  - this avoids storing a short-lived `access_token` directly in GitHub secrets
+
+Minimal CI secret shape:
+
+```json
+{
+  "staging": {
+    "base_url": "https://staging.api.focux.me",
+    "allow_writes": true,
+    "allow_capture": true,
+    "allow_shadow_read": false
+  },
+  "production": {
+    "base_url": "https://api.focux.me",
+    "allow_writes": false,
+    "allow_capture": false,
+    "allow_shadow_read": true,
+    "default_headers": {
+      "Authorization": "Bearer <fallback-read-only-token>"
+    },
+    "seed_variables": {
+      "device_id": "dev_replace_me"
+    }
+  }
+}
+```
+
+If `FLUX_CONTRACT_PRODUCTION_PROVIDER_TOKEN` is configured, the workflow overwrites the production `Authorization` and `seed_variables.device_id` fields at runtime before running the shadow check.
+
+`server/cases/targets.local.json` is gitignored and is the recommended handoff path for live target config during local or server-side runs.
+
+The checked-in case registry and capture workflow are documented in `server/cases/README.md`.
+
+Artifacts land under `artifacts/contracts/<run_id>/`.
+
+If you have a sanitized production failure bundle, convert it into a disabled captured case with:
+
+```bash
+python3 -m server.scripts.capture_contract_failure \
+  --input /path/to/failure-bundle.json \
+  --output-dir server/cases/captured
+```
+
+The old smoke script still exists for bring-up:
+
+```bash
+python3 -m server.scripts.smoke_test
+```
+
+Use the smoke script only for quick bring-up of auth, device/profile, calibration, model manifest, and bootstrap. Use contract cases for session upload, blob download, feedback, and release-gating regression coverage.
+
 Recommended server bootstrap flow from the repo root:
 
 ```bash

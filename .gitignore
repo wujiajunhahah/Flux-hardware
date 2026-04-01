@@ -6,6 +6,7 @@ __pycache__/
 .DS_Store
 datasets/
 screenshots/
+artifacts/
 *.pyc
 game/doom_clone/
 game/three-arena/
@@ -16,3 +17,4 @@ ios/FluxChi.xcodeproj/xcuserdata/
 *.p8
 *.env
 keys.*
+server/cases/targets.local.json

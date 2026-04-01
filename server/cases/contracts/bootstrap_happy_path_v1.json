@@ -1,0 +1,58 @@
+{
+  "case_id": "bootstrap_happy_path_v1",
+  "title": "Bootstrap happy path",
+  "kind": "bootstrap",
+  "source": "manual",
+  "enabled": true,
+  "tags": ["core", "happy_path", "platform"],
+  "target_profile": "staging",
+  "seed": {
+    "user_suffix": "happy01"
+  },
+  "fixtures": {
+    "provider": "apple",
+    "provider_token_template": "dev:{user_suffix}",
+    "device": {
+      "client_device_key_template": "case-device-{user_suffix}",
+      "platform": "ios",
+      "device_name": "Contract Case Device {user_suffix}",
+      "app_version": "0.1.0",
+      "os_version": "iOS 18.0"
+    }
+  },
+  "steps": [
+    {
+      "step_id": "sign_up",
+      "operation": "auth.sign_up",
+      "input": {},
+      "extract": {
+        "device_id": "$.data.device_id",
+        "refresh_token": "$.data.refresh_token"
+      }
+    },
+    {
+      "step_id": "sign_in",
+      "operation": "auth.sign_in",
+      "input": {},
+      "extract": {
+        "access_token": "$.data.access_token"
+      }
+    },
+    {
+      "step_id": "bootstrap",
+      "operation": "sync.bootstrap",
+      "input": {
+        "platform": "ios",
+        "channel": "stable"
+      },
+      "expect": {
+        "ok": true,
+        "status": 200
+      }
+    }
+  ],
+  "artifact_policy": {
+    "on_fail": ["http", "step_trace"],
+    "on_pass": ["summary"]
+  }
+}

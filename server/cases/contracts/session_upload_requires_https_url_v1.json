@@ -1,0 +1,76 @@
+{
+  "case_id": "session_upload_requires_https_url_v1",
+  "title": "Session upload URL must use HTTPS",
+  "kind": "session_upload",
+  "source": "manual",
+  "enabled": true,
+  "tags": ["core", "regression", "platform"],
+  "target_profile": "staging",
+  "seed": {
+    "user_suffix": "https01",
+    "session_suffix": "https01"
+  },
+  "fixtures": {
+    "provider": "apple",
+    "provider_token_template": "dev:{user_suffix}",
+    "device": {
+      "client_device_key_template": "case-device-{user_suffix}",
+      "platform": "ios",
+      "device_name": "Contract Case Device {user_suffix}",
+      "app_version": "0.1.0",
+      "os_version": "iOS 18.0"
+    },
+    "session_blob_ref": "fixtures/session_blob_minimal.json"
+  },
+  "steps": [
+    {
+      "step_id": "sign_up",
+      "operation": "auth.sign_up",
+      "extract": {
+        "device_id": "$.data.device_id",
+        "refresh_token": "$.data.refresh_token"
+      }
+    },
+    {
+      "step_id": "sign_in",
+      "operation": "auth.sign_in",
+      "extract": {
+        "access_token": "$.data.access_token"
+      }
+    },
+    {
+      "step_id": "create_session",
+      "operation": "sessions.create",
+      "input": {
+        "session_id": "ses_contract_{session_suffix}",
+        "source": "ios_ble",
+        "title": "HTTPS Session {session_suffix}",
+        "started_at": "2026-03-24T10:00:00Z",
+        "ended_at": "2026-03-24T10:10:00Z",
+        "duration_sec": 600,
+        "snapshot_count": 12,
+        "schema_version": 1,
+        "content_type": "application/json"
+      },
+      "expect": {
+        "ok": true,
+        "status": 200,
+        "json_paths": [
+          {
+            "path": "$.data.upload.upload_url",
+            "scheme": "https"
+          }
+        ]
+      },
+      "extract": {
+        "session_id": "$.data.session.session_id",
+        "upload_url": "$.data.upload.upload_url",
+        "object_key": "$.data.upload.object_key"
+      }
+    }
+  ],
+  "artifact_policy": {
+    "on_fail": ["http", "step_trace"],
+    "on_pass": ["summary"]
+  }
+}

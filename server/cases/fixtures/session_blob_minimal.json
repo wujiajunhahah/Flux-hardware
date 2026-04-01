@@ -1,0 +1,10 @@
+{
+  "session": {
+    "id": "ses_fixture_minimal",
+    "title": "Minimal Session Blob",
+    "source": "ios_ble"
+  },
+  "signalMeta": {
+    "snapshotCount": 12
+  }
+}

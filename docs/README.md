@@ -8,6 +8,7 @@
 | [ARCHITECTURE-PRODUCTION-V1.md](./ARCHITECTURE-PRODUCTION-V1.md) | 面向真实产品与多用户演进的目标架构、服务边界、数据边界与路线图 |
 | [PLATFORM-CONTRACT-V1.md](./PLATFORM-CONTRACT-V1.md) | 产品化 V1 的 API Contract、数据表、约束与索引，供后端/iOS/算法统一对齐 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 开发环境、最短跑通路径、常见路径索引 |
+| [PLATFORM-BACKEND-DEVELOPMENT.md](./PLATFORM-BACKEND-DEVELOPMENT.md) | 多端共用平台后端的维护手册：platform checks、shadow、CI、targets、排障顺序 |
 | [API-OVERVIEW.md](./API-OVERVIEW.md) | HTTP 端点索引、iOS 最小 API 子集、`/api/v1` vs 无版本路径 |
 | [API-CHANGELOG.md](./API-CHANGELOG.md) | 对外 JSON 契约变更记录（维护约定） |
 | [API.md](./API.md) | REST / SSE 详解与 Swift 示例（与运行中 `/docs`、`openapi.json` 对照） |

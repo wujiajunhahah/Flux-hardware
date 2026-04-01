@@ -27,6 +27,29 @@
 
 ## 历史条目
 
+### 2026-04-01 — Platform contract harness、HTTPS upload URL regression gate、captured failure intake
+
+### Added
+
+- 新增 `server/app/testing/` 下的 contract harness：target profile、case loader、operation registry、expectation evaluator、event stream、artifact writer、runner。
+- 新增命令：
+  - `python3 -m server.scripts.run_contract_cases --target staging --tag core`
+  - `python3 -m server.scripts.capture_contract_failure --input ... --output-dir server/cases/captured`
+- 新增 checked-in contract cases，覆盖 `bootstrap -> session upload -> feedback` 主链路。
+- 新增 `shadow` 标签的只读生产影子检查入口，依赖 target profile 提供只读认证头与 `device_id` seed variable。
+
+### Fixed
+
+- `session_upload_requires_https_url_v1` 把 `upload_url` 必须为 `https` 变成显式回归断言，后续若再次退化为 `http` 将被 harness 直接拦下。
+
+### Operational
+
+- CI 增加 `contract-cases.yml`，拆分为 unit、staging core、production shadow 三层。
+- `server/scripts/smoke_test.py` 收口为 bring-up 检查，只保留 `auth -> device/profile -> calibration -> manifest/bootstrap -> refresh/sign-out`；`session upload/download` 与 `feedback` 回归责任转移到 checked-in contract cases。
+- 新增 `python3 -m server.scripts.prepare_shadow_target ...`，把 production shadow 所需的 `Authorization` 和 `device_id` 自动写回 live targets 文件，减少手工 token 搬运。
+- 新增 `python3 -m server.scripts.run_platform_checks ...`，把 staging core 和可选 production shadow 收到一个统一的平台验证入口里，便于多端接入前复用同一套后端检查。
+- production shadow workflow 现可选使用 `FLUX_CONTRACT_PRODUCTION_PROVIDER_TOKEN` 在 CI 运行时刷新只读 auth material，避免长期依赖会过期的 `access_token` secret。
+
 ### 2026-03-22 — iOS：融合续航优先、BLE µV 与网关对齐
 
 - **iOS（Wi‑Fi）**：解析 `state_update` 可选字段 **`fusion`** / **`vision`**；主界面续航环优先 **`fusion.stamina`**（`source != "none"`），否则 EMG **`stamina`**；无有效值时显示 **「—」**。Live Activity / 本地提醒使用同一套显示值。

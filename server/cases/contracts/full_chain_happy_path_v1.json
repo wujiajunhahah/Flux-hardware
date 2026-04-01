@@ -1,0 +1,163 @@
+{
+  "case_id": "full_chain_happy_path_v1",
+  "title": "Bootstrap, session upload, and feedback happy path",
+  "kind": "full_chain",
+  "source": "manual",
+  "enabled": true,
+  "tags": ["core", "happy_path", "platform"],
+  "target_profile": "staging",
+  "seed": {
+    "user_suffix": "happy01",
+    "session_suffix": "happy01"
+  },
+  "fixtures": {
+    "provider": "apple",
+    "provider_token_template": "dev:{user_suffix}",
+    "device": {
+      "client_device_key_template": "case-device-{user_suffix}",
+      "platform": "ios",
+      "device_name": "Contract Case Device {user_suffix}",
+      "app_version": "0.1.0",
+      "os_version": "iOS 18.0"
+    },
+    "session_blob_ref": "fixtures/session_blob_minimal.json",
+    "feedback": {
+      "feedback_event_id": "fbk_full_chain_happy01",
+      "predicted_stamina": 61,
+      "actual_stamina": 35,
+      "label": "fatigued",
+      "kss": 8,
+      "note": "contract case feedback",
+      "created_at": "2026-03-24T12:00:00Z"
+    }
+  },
+  "steps": [
+    {
+      "step_id": "sign_up",
+      "operation": "auth.sign_up",
+      "extract": {
+        "device_id": "$.data.device_id",
+        "refresh_token": "$.data.refresh_token"
+      }
+    },
+    {
+      "step_id": "sign_in",
+      "operation": "auth.sign_in",
+      "extract": {
+        "access_token": "$.data.access_token"
+      }
+    },
+    {
+      "step_id": "bootstrap",
+      "operation": "sync.bootstrap",
+      "input": {
+        "platform": "ios",
+        "channel": "stable"
+      },
+      "expect": {
+        "ok": true,
+        "status": 200
+      }
+    },
+    {
+      "step_id": "create_session",
+      "operation": "sessions.create",
+      "input": {
+        "session_id": "ses_contract_{session_suffix}",
+        "source": "ios_ble",
+        "title": "Contract Session {session_suffix}",
+        "started_at": "2026-03-24T10:00:00Z",
+        "ended_at": "2026-03-24T10:10:00Z",
+        "duration_sec": 600,
+        "snapshot_count": 12,
+        "schema_version": 1,
+        "content_type": "application/json"
+      },
+      "expect": {
+        "ok": true,
+        "status": 200,
+        "json_paths": [
+          {
+            "path": "$.data.upload.upload_url",
+            "scheme": "https"
+          }
+        ]
+      },
+      "extract": {
+        "session_id": "$.data.session.session_id",
+        "upload_url": "$.data.upload.upload_url",
+        "object_key": "$.data.upload.object_key"
+      }
+    },
+    {
+      "step_id": "upload_blob",
+      "operation": "sessions.upload_blob",
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "step_id": "finalize_session",
+      "operation": "sessions.finalize",
+      "input": {
+        "status": "ready"
+      },
+      "expect": {
+        "ok": true,
+        "status": 200
+      }
+    },
+    {
+      "step_id": "get_session",
+      "operation": "sessions.get",
+      "expect": {
+        "ok": true,
+        "status": 200
+      }
+    },
+    {
+      "step_id": "download_blob",
+      "operation": "sessions.download",
+      "expect": {
+        "status": 200,
+        "blob_fixture_ref": "downloaded_blob"
+      }
+    },
+    {
+      "step_id": "create_feedback",
+      "operation": "feedback.create",
+      "expect": {
+        "ok": true,
+        "status": 200
+      }
+    },
+    {
+      "step_id": "list_feedback",
+      "operation": "feedback.list",
+      "expect": {
+        "ok": true,
+        "status": 200
+      }
+    },
+    {
+      "step_id": "refresh_access",
+      "operation": "auth.refresh",
+      "expect": {
+        "ok": true,
+        "status": 200
+      }
+    },
+    {
+      "step_id": "sign_out",
+      "operation": "auth.sign_out",
+      "expect": {
+        "ok": true,
+        "status": 200
+      }
+    }
+  ],
+  "artifact_policy": {
+    "on_fail": ["http", "domain_payloads", "blob_copy", "step_trace"],
+    "on_pass": ["summary"]
+  }
+}

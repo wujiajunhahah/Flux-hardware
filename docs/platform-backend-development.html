@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FluxChi 平台后端开发手册</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --line: #2d333b;
+    --text: #e6edf3;
+    --muted: #9da7b3;
+    --accent: #2f81f7;
+    --ok: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(900px 500px at 10% 0%, rgba(47,129,247,0.18), transparent 55%),
+      linear-gradient(180deg, #0b0f14 0%, var(--bg) 100%);
+    color: var(--text);
+    padding: 32px 20px 60px;
+  }
+  .wrap { width: min(1080px, 100%); margin: 0 auto; }
+  .hero, .panel {
+    background: rgba(22,27,34,0.92);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.28);
+  }
+  .hero { padding: 28px; }
+  .hero h1 { margin: 0 0 10px; font-size: clamp(30px, 5vw, 48px); line-height: 1.06; }
+  .hero p { margin: 0; color: var(--muted); line-height: 1.7; max-width: 840px; }
+  .actions {
+    margin-top: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    text-decoration: none;
+    color: var(--text);
+    background: #11161c;
+  }
+  .btn.primary {
+    background: linear-gradient(180deg, #1f6feb 0%, #1158c7 100%);
+    border-color: #1f6feb;
+  }
+  .grid {
+    margin-top: 20px;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  .panel { padding: 18px; }
+  h2 { margin: 0 0 12px; font-size: 18px; }
+  h3 { margin: 0 0 8px; font-size: 15px; color: #f0f6fc; }
+  p, li { color: var(--muted); line-height: 1.7; }
+  ul, ol { margin: 0; padding-left: 18px; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  code {
+    background: #0d131a;
+    border: 1px solid #222a33;
+    border-radius: 6px;
+    padding: 2px 6px;
+    color: #f0f6fc;
+  }
+  pre {
+    margin: 12px 0 0;
+    background: #0d131a;
+    border: 1px solid #222a33;
+    border-radius: 12px;
+    padding: 14px;
+    overflow: auto;
+    color: #dce7f3;
+  }
+  .tag {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .status {
+    margin-top: 20px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px dashed var(--line);
+    color: var(--muted);
+  }
+  .ok { color: var(--ok); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <h1>平台后端开发手册</h1>
+    <p>这页是 FluxChi 多端共用后端的长期维护入口。权威文本来源是仓库内 <code>docs/PLATFORM-BACKEND-DEVELOPMENT.md</code>，这里提供浏览器可读版本，方便后续持续维护、排障和交接。</p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/wujiajunhahah/Flux-hardware/blob/main/docs/PLATFORM-BACKEND-DEVELOPMENT.md" target="_blank" rel="noopener noreferrer">打开 Markdown 权威文档</a>
+      <a class="btn" href="https://github.com/wujiajunhahah/Flux-hardware/blob/main/.github/workflows/contract-cases.yml" target="_blank" rel="noopener noreferrer">打开 CI Workflow</a>
+      <a class="btn" href="https://github.com/wujiajunhahah/Flux-hardware" target="_blank" rel="noopener noreferrer">打开 GitHub 仓库</a>
+    </div>
+    <div class="status"><span class="ok">当前建议入口</span>：本地先跑 <code>smoke_test</code>，再跑 <code>run_platform_checks</code>，最后看 <code>artifacts/contracts/</code>。</div>
+  </section>
+
+  <section class="grid">
+    <article class="panel">
+      <h2>当前平台状态</h2>
+      <ul>
+        <li>正式 HTTPS 入口：<code>https://api.focux.me</code></li>
+        <li>bring-up：<code>server/scripts/smoke_test.py</code></li>
+        <li>contract harness：<code>server/scripts/run_contract_cases.py</code></li>
+        <li>shadow auth prep：<code>server/scripts/prepare_shadow_target.py</code></li>
+        <li>统一平台检查：<code>server/scripts/run_platform_checks.py</code></li>
+        <li>CI workflow：<code>.github/workflows/contract-cases.yml</code></li>
+      </ul>
+      <span class="tag">Backend Platform</span>
+    </article>
+
+    <article class="panel">
+      <h2>本地推荐顺序</h2>
+      <pre><code>python3 -m server.scripts.smoke_test
+python3 -m server.scripts.run_platform_checks
+python3 -m pytest server/tests/testing -q</code></pre>
+      <p>这条顺序对应 bring-up、统一平台检查、测试套件三个层级，足够覆盖大多数后端维护动作。</p>
+    </article>
+
+    <article class="panel">
+      <h2>Production Shadow</h2>
+      <pre><code>cp server/cases/targets.example.json server/cases/targets.local.json
+python3 -m server.scripts.prepare_shadow_target \
+  --target production \
+  --targets-path server/cases/targets.local.json \
+  --provider-token dev:shadow-production
+
+python3 -m server.scripts.run_platform_checks \
+  --skip-staging-core \
+  --production-shadow \
+  --targets-path server/cases/targets.local.json</code></pre>
+      <p>默认保持只读。不要把 production shadow 扩成写路径验证。</p>
+    </article>
+
+    <article class="panel">
+      <h2>GitHub Actions 必填项</h2>
+      <h3>Repository variables</h3>
+      <ul>
+        <li><code>FLUX_CONTRACT_STAGING_ENABLED=true</code></li>
+        <li><code>FLUX_CONTRACT_PRODUCTION_SHADOW_ENABLED=true</code></li>
+      </ul>
+      <h3>Repository secrets</h3>
+      <ul>
+        <li><code>FLUX_CONTRACT_TARGETS_JSON</code></li>
+        <li><code>FLUX_CONTRACT_PRODUCTION_PROVIDER_TOKEN</code>（推荐）</li>
+      </ul>
+      <p>如果配置了 provider token，CI 会先刷新 production shadow 的 <code>Authorization</code> 和 <code>device_id</code>，不再长期依赖会过期的 access token。</p>
+    </article>
+
+    <article class="panel">
+      <h2>先看哪里</h2>
+      <ul>
+        <li>本地失败：先看 <code>smoke_test</code>，再看 <code>run_platform_checks</code></li>
+        <li>线上 shadow 失败：先看 <code>artifacts/contracts/&lt;run_id&gt;/events.jsonl</code></li>
+        <li>CI 失败：先确认 vars / secrets 是否齐全，再看 artifact</li>
+        <li>证书链问题：优先处理 CA bundle，不要关闭 TLS 校验</li>
+      </ul>
+    </article>
+
+    <article class="panel">
+      <h2>维护原则</h2>
+      <ol>
+        <li>新增后端能力时，先判断是否应进入 platform checks。</li>
+        <li>新端接入前，先跑统一平台检查，不要只盯客户端表现。</li>
+        <li>出生产问题时，优先沉淀成 contract case 或 captured failure。</li>
+        <li>不要把 <code>smoke_test.py</code> 再扩回完整链路。</li>
+      </ol>
+    </article>
+
+    <article class="panel">
+      <h2>长期维护入口</h2>
+      <p>这页只做展示，不作为唯一真相。后续维护时请优先更新仓库中的：</p>
+      <ul>
+        <li><code>docs/PLATFORM-BACKEND-DEVELOPMENT.md</code></li>
+        <li><code>server/README.md</code></li>
+        <li><code>server/cases/README.md</code></li>
+        <li><code>docs/API-CHANGELOG.md</code></li>
+      </ul>
+      <p>网页页主要负责给未来的你一个“不会忘记打开”的入口。</p>
+    </article>
+  </section>
+</div>
+</body>
+</html>

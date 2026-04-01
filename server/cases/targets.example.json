@@ -1,0 +1,20 @@
+{
+  "local": {
+    "base_url": "http://127.0.0.1:8000",
+    "allow_writes": true,
+    "allow_capture": true,
+    "allow_shadow_read": false
+  },
+  "staging": {
+    "base_url": "https://staging.api.focux.me",
+    "allow_writes": true,
+    "allow_capture": true,
+    "allow_shadow_read": false
+  },
+  "production": {
+    "base_url": "https://api.focux.me",
+    "allow_writes": false,
+    "allow_capture": false,
+    "allow_shadow_read": true
+  }
+}

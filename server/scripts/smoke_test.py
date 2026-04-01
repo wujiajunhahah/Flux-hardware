@@ -51,36 +51,6 @@ def request_json(
         raise
 
 
-
-def request_bytes(
-    method: str,
-    path_or_url: str,
-    payload: bytes | None = None,
-    token: str | None = None,
-    extra_headers: dict[str, str] | None = None,
-) -> bytes:
-    headers: dict[str, str] = {}
-    if token is not None:
-        headers["Authorization"] = f"Bearer {token}"
-    if extra_headers is not None:
-        headers.update(extra_headers)
-
-    request = urllib.request.Request(
-        resolve_url(path_or_url),
-        data=payload,
-        headers=headers,
-        method=method,
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            return response.read()
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        print(f"HTTP {exc.code} for {method} {path_or_url}: {detail}", file=sys.stderr)
-        raise
-
-
-
 def assert_ok(response: dict, label: str) -> dict:
     if not response.get("ok"):
         raise RuntimeError(f"{label} failed: {response}")
@@ -155,7 +125,7 @@ def main() -> int:
     )
     device_calibration = calibration["device_calibration"]
 
-    assert_ok(
+    updated_device_calibration = assert_ok(
         request_json(
             "PUT",
             f"/v1/devices/{device_id}/calibration",
@@ -196,130 +166,6 @@ def main() -> int:
     if bootstrap.get("active_model_manifest") is not None:
         raise RuntimeError("expected no active model manifest in bootstrap smoke environment")
 
-    session_id = f"ses_{uuid4().hex[:26]}"
-    session_blob = {
-        "session": {
-            "id": session_id,
-            "title": "Smoke Session",
-            "source": "ios_ble",
-        },
-        "signalMeta": {
-            "snapshotCount": 12,
-        },
-    }
-    session_blob_bytes = json.dumps(session_blob).encode("utf-8")
-    session_sha256 = __import__("hashlib").sha256(session_blob_bytes).hexdigest()
-
-    create_session = assert_ok(
-        request_json(
-            "POST",
-            "/v1/sessions",
-            payload={
-                "session_id": session_id,
-                "device_id": device_id,
-                "source": "ios_ble",
-                "title": "Smoke Session",
-                "started_at": "2026-03-24T10:00:00Z",
-                "ended_at": "2026-03-24T10:10:00Z",
-                "duration_sec": 600,
-                "snapshot_count": 12,
-                "schema_version": 1,
-                "content_type": "application/json",
-                "size_bytes": len(session_blob_bytes),
-                "sha256": session_sha256,
-            },
-            token=access_token,
-            extra_headers={"Idempotency-Key": f"smoke:{session_id}:upload_v1"},
-        ),
-        "create_session",
-    )
-    upload = create_session["upload"]
-    request_bytes(
-        "PUT",
-        upload["upload_url"],
-        payload=session_blob_bytes,
-        extra_headers={"Content-Type": upload["content_type"]},
-    )
-    print("ok upload_session_blob")
-
-    finalized = assert_ok(
-        request_json(
-            "PATCH",
-            f"/v1/sessions/{session_id}",
-            payload={
-                "status": "ready",
-                "blob": {
-                    "object_key": upload["object_key"],
-                    "size_bytes": len(session_blob_bytes),
-                    "sha256": session_sha256,
-                },
-            },
-            token=access_token,
-        ),
-        "finalize_session",
-    )
-
-    sessions = assert_ok(request_json("GET", "/v1/sessions", token=access_token), "list_sessions")
-    if not sessions.get("items"):
-        raise RuntimeError("list_sessions returned no items")
-
-    assert_ok(
-        request_json(
-            "GET",
-            f"/v1/sessions/{session_id}",
-            token=access_token,
-        ),
-        "get_session",
-    )
-
-    download_meta = assert_ok(
-        request_json(
-            "GET",
-            f"/v1/sessions/{session_id}/download",
-            token=access_token,
-        ),
-        "get_session_download_url",
-    )
-    downloaded_blob = request_bytes("GET", download_meta["download_url"])
-    if downloaded_blob != session_blob_bytes:
-        raise RuntimeError("downloaded session blob does not match uploaded payload")
-    print("ok download_session_blob")
-
-    feedback_event_id = f"fbk_{uuid4().hex[:26]}"
-    feedback = assert_ok(
-        request_json(
-            "POST",
-            "/v1/feedback-events",
-            payload={
-                "feedback_event_id": feedback_event_id,
-                "device_id": device_id,
-                "session_id": session_id,
-                "predicted_stamina": 61,
-                "actual_stamina": 35,
-                "label": "fatigued",
-                "kss": 8,
-                "note": "smoke test feedback",
-                "created_at": "2026-03-24T12:00:00Z",
-            },
-            token=access_token,
-            extra_headers={"Idempotency-Key": f"smoke:{session_id}:feedback_v1"},
-        ),
-        "create_feedback_event",
-    )
-    if feedback["feedback_event"]["feedback_event_id"] != feedback_event_id:
-        raise RuntimeError("unexpected feedback_event_id")
-
-    feedback_events = assert_ok(
-        request_json(
-            "GET",
-            f"/v1/feedback-events?session_id={session_id}",
-            token=access_token,
-        ),
-        "list_feedback_events",
-    )
-    if not feedback_events.get("items"):
-        raise RuntimeError("list_feedback_events returned no items")
-
     assert_ok(
         request_json(
             "POST",
@@ -346,9 +192,10 @@ def main() -> int:
                 "user_id": user_id,
                 "device_id": device_id,
                 "profile_version": updated_profile["profile_state"]["version"],
-                "session_id": session_id,
-                "feedback_event_id": feedback_event_id,
-                "download_url": finalized["session"]["download_url"],
+                "device_calibration_version": updated_device_calibration["device_calibration"]["version"],
+                "bootstrap_profile_id": bootstrap["profile_state"]["profile_id"],
+                "bootstrap_device_calibration_count": len(bootstrap["device_calibrations"]),
+                "active_model_manifest_present": manifest.get("active_model_manifest") is not None,
             }
         )
     )

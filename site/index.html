@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FluxChi · FocuX Portal</title>
+  <title>FluxChi · FocuX Progress</title>
   <style>
     :root {
       --bg: #0b0b0c;
@@ -26,7 +26,7 @@
       padding: 24px;
     }
     .card {
-      width: min(760px, 100%);
+      width: min(900px, 100%);
       background: linear-gradient(180deg, #17171c 0%, var(--panel) 100%);
       border: 1px solid var(--line);
       border-radius: 16px;
@@ -36,6 +36,39 @@
     h1 { margin: 0 0 6px; font-size: 28px; }
     p { margin: 0; color: var(--muted); line-height: 1.6; }
     .row { margin-top: 18px; display: grid; gap: 10px; }
+    .grid {
+      margin-top: 18px;
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+    .panel {
+      background: #1a1a20;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .panel h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      color: #f2f2f5;
+    }
+    .panel ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+    .tag {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 10px;
+    }
     .btn {
       display: inline-block;
       border: 1px solid var(--line);
@@ -68,8 +101,8 @@
 </head>
 <body>
   <main class="card">
-    <h1>FluxChi · FocuX Portal</h1>
-    <p>这是你部署在 <code>focux.me</code> 的跳转入口页，用来快速打开本机 FluxChi 网关与项目资源。</p>
+    <h1>FluxChi · FocuX Progress</h1>
+    <p>这里是项目进度页（持续更新）。你可以从这里看到最新里程碑，并快速打开本机网关与仓库。</p>
 
     <div class="row">
       <a class="btn primary" href="http://127.0.0.1:8000/" target="_blank" rel="noopener noreferrer">
@@ -78,9 +111,58 @@
       <a class="btn" href="http://127.0.0.1:8000/docs" target="_blank" rel="noopener noreferrer">
         打开本机 API Docs
       </a>
+      <a class="btn" href="../docs/platform-backend-development.html" target="_blank" rel="noopener noreferrer">
+        打开平台后端开发手册
+      </a>
       <a class="btn" href="https://github.com/wujiajunhahah/Flux-hardware" target="_blank" rel="noopener noreferrer">
         打开 GitHub 仓库
       </a>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h3>本周新增（已完成）</h3>
+        <ul>
+          <li>OpenFace per-frame 接入（AU / gaze / emotion）</li>
+          <li>rPPG 心率链路（ROI RGB -> HR / HRV）</li>
+          <li>前端主观标注按钮（我很累 / 我很清醒）</li>
+          <li>飞轮训练管线（XGBoost -> ONNX）</li>
+        </ul>
+        <span class="tag">Backend + Flywheel</span>
+      </section>
+
+      <section class="panel">
+        <h3>系统状态</h3>
+        <ul>
+          <li>EMG + Vision 融合链路可用</li>
+          <li>个人基线标定接口已上线</li>
+          <li>本地 SQLite 飞轮闭环已打通</li>
+          <li>可端到端联调并导出模型</li>
+        </ul>
+        <span class="tag">Realtime + Model</span>
+      </section>
+
+      <section class="panel">
+        <h3>下一步计划</h3>
+        <ul>
+          <li>启用统一平台检查的 GitHub Actions vars / secrets</li>
+          <li>让 staging core 成为合并前固定门禁</li>
+          <li>继续把 iOS / Web / 硬件 接入同一平台回归节奏</li>
+          <li>把生产失败持续沉淀为 contract case 或 captured failure</li>
+        </ul>
+        <span class="tag">Platform Roadmap</span>
+      </section>
+
+      <section class="panel">
+        <h3>平台后端新增（已完成）</h3>
+        <ul>
+          <li>contract harness + production shadow</li>
+          <li>shadow target 自动 auth 准备</li>
+          <li>统一平台检查入口 <code>run_platform_checks</code></li>
+          <li>CI workflow 复用同一平台检查命令</li>
+        </ul>
+        <span class="tag">Unified Backend Entry</span>
+      </section>
     </div>
 
     <div id="status" class="status">正在检测本机网关状态...</div>

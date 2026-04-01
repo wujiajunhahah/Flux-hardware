@@ -1,0 +1,28 @@
+{
+  "case_id": "bootstrap_shadow_read_v1",
+  "title": "Bootstrap read-only shadow check",
+  "kind": "bootstrap",
+  "source": "manual",
+  "enabled": true,
+  "tags": ["shadow", "platform"],
+  "target_profile": "production",
+  "fixtures": {},
+  "steps": [
+    {
+      "step_id": "bootstrap",
+      "operation": "sync.bootstrap",
+      "input": {
+        "platform": "ios",
+        "channel": "stable"
+      },
+      "expect": {
+        "ok": true,
+        "status": 200
+      }
+    }
+  ],
+  "artifact_policy": {
+    "on_fail": ["http", "step_trace"],
+    "on_pass": ["summary"]
+  }
+}

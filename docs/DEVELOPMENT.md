@@ -97,3 +97,18 @@ python app.py --port /dev/cu.usbserial-0001 --baud 921600 --fs 1000
 ## 7. 架构总览
 
 见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
+
+---
+
+## 8. 平台后端专项维护
+
+如果你当前维护的是 **统一平台后端**，而不是旧 Web 网关本身，直接读：
+
+- [PLATFORM-BACKEND-DEVELOPMENT.md](./PLATFORM-BACKEND-DEVELOPMENT.md)
+
+这份专项手册覆盖：
+
+- staging core / production shadow 的统一检查入口
+- `targets.local.json` 与 shadow auth material 的准备方式
+- GitHub Actions 所需 vars / secrets
+- contract harness / smoke / CI 的推荐顺序

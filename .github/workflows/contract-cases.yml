@@ -1,0 +1,110 @@
+name: Contract Cases
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  contract-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install -r server/requirements-dev.txt
+
+      - name: Run contract harness unit tests
+        run: python -m pytest server/tests/testing -q
+
+  contract-staging-core:
+    runs-on: ubuntu-latest
+    needs: contract-unit
+    if: ${{ vars.FLUX_CONTRACT_STAGING_ENABLED == 'true' }}
+    env:
+      FLUX_CONTRACT_TARGETS_JSON: ${{ secrets.FLUX_CONTRACT_TARGETS_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install -r server/requirements-dev.txt
+
+      - name: Materialize live targets file
+        run: |
+          test -n "$FLUX_CONTRACT_TARGETS_JSON"
+          printf '%s' "$FLUX_CONTRACT_TARGETS_JSON" > /tmp/flux-contract-targets.json
+
+      - name: Run staging core platform checks
+        run: |
+          python -m server.scripts.run_platform_checks \
+            --targets-path /tmp/flux-contract-targets.json
+
+      - name: Upload contract artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-staging-artifacts
+          path: artifacts/contracts/
+
+  contract-production-shadow:
+    runs-on: ubuntu-latest
+    needs: contract-unit
+    if: ${{ vars.FLUX_CONTRACT_PRODUCTION_SHADOW_ENABLED == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    continue-on-error: true
+    env:
+      FLUX_CONTRACT_TARGETS_JSON: ${{ secrets.FLUX_CONTRACT_TARGETS_JSON }}
+      FLUX_CONTRACT_PRODUCTION_PROVIDER_TOKEN: ${{ secrets.FLUX_CONTRACT_PRODUCTION_PROVIDER_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test dependencies
+        run: python -m pip install -r server/requirements-dev.txt
+
+      - name: Materialize live targets file
+        run: |
+          test -n "$FLUX_CONTRACT_TARGETS_JSON"
+          printf '%s' "$FLUX_CONTRACT_TARGETS_JSON" > /tmp/flux-contract-targets.json
+
+      - name: Refresh production shadow auth material when provider token is configured
+        if: ${{ env.FLUX_CONTRACT_PRODUCTION_PROVIDER_TOKEN != '' }}
+        run: |
+          python -m server.scripts.prepare_shadow_target \
+            --target production \
+            --targets-path /tmp/flux-contract-targets.json \
+            --provider-token "$FLUX_CONTRACT_PRODUCTION_PROVIDER_TOKEN"
+
+      - name: Run production shadow platform checks
+        run: |
+          python -m server.scripts.run_platform_checks \
+            --skip-staging-core \
+            --production-shadow \
+            --targets-path /tmp/flux-contract-targets.json
+
+      - name: Upload production shadow artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-production-shadow-artifacts
+          path: artifacts/contracts/
