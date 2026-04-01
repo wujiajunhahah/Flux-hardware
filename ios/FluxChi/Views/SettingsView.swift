@@ -204,7 +204,7 @@ struct SettingsView: View {
         } header: {
             Text("WiFi 服务器")
         } footer: {
-            Text("真机不要用 127.0.0.1。本机开发填电脑局域网 IP；ECS 部署填公网 IP 或域名，当前反代端口用 8080。")
+            Text("默认正式入口为 api.focux.me:443。模拟器本地调试可改回 127.0.0.1:8000；如需真机直连本地开发机，建议先挂 HTTPS 反代。")
         }
     }
 
@@ -555,7 +555,9 @@ struct SettingsView: View {
     // MARK: - Helpers
 
     private func applyServerConfig() {
-        service.host = editHost
+        let normalizedHost = FluxService.normalizeHost(editHost)
+        editHost = normalizedHost
+        service.host = normalizedHost
         if let p = Int(editPort), p > 0, p <= 65535 {
             service.port = p
         }

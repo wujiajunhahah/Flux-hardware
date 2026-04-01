@@ -79,44 +79,64 @@ FluxChiLive/                        # Widget + Live Activity extension
 
 ## Usage
 
-### Mode 1: WiFi (via Mac backend)
+### Mode 1: Platform API (production default)
+
+The app now defaults to:
+
+- host: `api.focux.me`
+- port: `443`
+- scheme: `https`
+
+No manual configuration is required for the deployed production API.
+
+### Mode 2: WiFi (via Mac backend)
 
 1. Start backend on Mac: `python web/app.py --ble` or `--port /dev/tty.usbserial-0001`
 2. Connect phone and Mac to the same WiFi
 3. In app Settings, enter your Mac's IP and port (default 8000)
 
-> **Simulator / local**: default address is `127.0.0.1:8000` -- works out of the box.
+> **Simulator / local**: change the address to `127.0.0.1:8000`.
 >
-> **Real device**: you must change the address to your Mac's LAN IP (e.g. `192.168.1.x`). `127.0.0.1` on a real device points to the phone itself.
+> **Real device**: `127.0.0.1` points to the phone itself. For local plain HTTP development on device, use your Mac's LAN IP only if your ATS policy allows it; production should use `https://api.focux.me`.
 
-### Mode 2: BLE direct
+### Mode 3: BLE direct
 
 1. Unplug USB dongle (wristband can only pair with one host)
 2. Open app -> Settings -> Bluetooth -> Scan
 3. Tap `WL EEG-XXXX` to connect
 
-## Local network HTTP (ATS)
+## ATS
 
-The app connects to the backend over **plain HTTP** (not HTTPS).
+Production traffic now uses `https://api.focux.me`.
 
-Current status: `Info.plist` includes:
+Current status: `Info.plist` keeps local-network allowances and only preserves insecure HTTP exceptions for loopback development:
 
 ```xml
 <key>NSAppTransportSecurity</key>
 <dict>
-    <key>NSAllowsArbitraryLoads</key>
-    <true/>
     <key>NSAllowsLocalNetworking</key>
     <true/>
+    <key>NSExceptionDomains</key>
+    <dict>
+        <key>127.0.0.1</key>
+        <dict>
+            <key>NSExceptionAllowsInsecureHTTPLoads</key>
+            <true/>
+        </dict>
+        <key>localhost</key>
+        <dict>
+            <key>NSExceptionAllowsInsecureHTTPLoads</key>
+            <true/>
+        </dict>
+    </dict>
 </dict>
 ```
 
-For real-device testing:
+For deployment / testing:
 
-1. Do not use `127.0.0.1` on the phone. That points to the phone itself.
-2. Local dev: use your Mac's LAN IP and the backend port.
-3. ECS deployment: use the server's public IP or domain.
-4. If you are using the Baota/nginx reverse proxy from this repo, use port `8080` unless you later move it behind standard `80/443`.
+1. Production default is `https://api.focux.me:443`.
+2. Simulator loopback `127.0.0.1:8000` remains allowed for local development.
+3. Real-device local HTTP is no longer the default path; use the production HTTPS endpoint, or provide your own local HTTPS reverse proxy if needed.
 
 ## Requirements
 

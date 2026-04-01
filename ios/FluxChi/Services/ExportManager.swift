@@ -412,14 +412,17 @@ enum ExportManager {
     /// 将导出 JSON POST 到运行 `web/app.py` 的机器；后端统一 8 路 RMS 并生成洞察。
     static func uploadSessionToGateway(session: Session) async throws -> String {
         let data = try export(session: session)
-        let host = UserDefaults.standard.string(forKey: "flux_host") ?? "127.0.0.1"
+        let host = FluxService.normalizeHost(
+            UserDefaults.standard.string(forKey: "flux_host") ?? FluxService.defaultHost
+        )
         var port = UserDefaults.standard.integer(forKey: "flux_port")
-        if port == 0 { port = 8000 }
+        if port == 0 { port = FluxService.defaultPort }
         return try await uploadExportData(data, host: host, port: port)
     }
 
     static func uploadExportData(_ data: Data, host: String, port: Int) async throws -> String {
-        let urlStr = "http://\(host):\(port)/api/v1/sessions/ingest"
+        let scheme = FluxService.scheme(forPort: port)
+        let urlStr = "\(scheme)://\(host):\(port)/api/v1/sessions/ingest"
         guard let url = URL(string: urlStr) else { throw GatewaySyncError.invalidURL }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"

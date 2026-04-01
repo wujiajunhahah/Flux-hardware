@@ -27,6 +27,8 @@ enum FluxServiceError: LocalizedError {
 
 @MainActor
 final class FluxService: ObservableObject {
+    nonisolated static let defaultHost = "api.focux.me"
+    nonisolated static let defaultPort = 443
 
     @Published var state: FluxState?
     @Published var serverStatus: ServerStatus?
@@ -72,7 +74,11 @@ final class FluxService: ObservableObject {
     }
 
     var baseURL: URL {
-        URL(string: "http://\(host):\(port)") ?? URL(string: "http://127.0.0.1:8000")!
+        var components = URLComponents()
+        components.scheme = Self.scheme(forPort: port)
+        components.host = host
+        components.port = port
+        return components.url ?? URL(string: "https://\(Self.defaultHost)")!
     }
 
     var currentPlatformDeviceID: String? {
@@ -106,8 +112,9 @@ final class FluxService: ObservableObject {
     private static let platformSessionDefaultsKey = "flux_platform_session"
 
     init() {
-        self.host = UserDefaults.standard.string(forKey: Self.hostDefaultsKey) ?? "127.0.0.1"
-        self.port = UserDefaults.standard.integer(forKey: Self.portDefaultsKey).nonZero ?? 8000
+        let endpoint = Self.loadEndpointDefaults()
+        self.host = endpoint.host
+        self.port = endpoint.port
 
         let short = URLSessionConfiguration.default
         short.timeoutIntervalForRequest = 5
@@ -128,6 +135,28 @@ final class FluxService: ObservableObject {
 
         self.platformSessionState = Self.loadPlatformSession()
         self.platformDeviceID = self.platformSessionState?.deviceID
+    }
+
+    nonisolated static func normalizeHost(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return defaultHost }
+
+        if let components = URLComponents(string: trimmed), let host = components.host, !host.isEmpty {
+            return host
+        }
+
+        let candidates = ["https://\(trimmed)", "http://\(trimmed)"]
+        for candidate in candidates {
+            if let components = URLComponents(string: candidate), let host = components.host, !host.isEmpty {
+                return host
+            }
+        }
+
+        return trimmed
+    }
+
+    nonisolated static func scheme(forPort port: Int) -> String {
+        port == 443 ? "https" : "http"
     }
 
     // MARK: - Wi‑Fi 传输：优先 SSE，失败后轮询
@@ -658,6 +687,38 @@ final class FluxService: ObservableObject {
             return nil
         }
         return try? makeDecoder().decode(PlatformAuthSession.self, from: data)
+    }
+
+    private static func loadEndpointDefaults() -> (host: String, port: Int) {
+        let defaults = UserDefaults.standard
+        let storedHost = defaults.string(forKey: hostDefaultsKey).map(normalizeHost)
+        let storedPort = defaults.integer(forKey: portDefaultsKey).nonZero
+
+        switch (storedHost, storedPort) {
+        case (.none, .none):
+            defaults.set(defaultHost, forKey: hostDefaultsKey)
+            defaults.set(defaultPort, forKey: portDefaultsKey)
+            return (defaultHost, defaultPort)
+        case let (.some(host), .some(port)) where shouldMigrateLegacyEndpoint(host: host, port: port):
+            defaults.set(defaultHost, forKey: hostDefaultsKey)
+            defaults.set(defaultPort, forKey: portDefaultsKey)
+            return (defaultHost, defaultPort)
+        case let (.some(host), .some(port)):
+            return (host, port)
+        case let (.some(host), .none):
+            let port = host == defaultHost ? defaultPort : 8000
+            defaults.set(port, forKey: portDefaultsKey)
+            return (host, port)
+        case let (.none, .some(port)):
+            let host = port == defaultPort ? defaultHost : "127.0.0.1"
+            defaults.set(host, forKey: hostDefaultsKey)
+            return (host, port)
+        }
+    }
+
+    private static func shouldMigrateLegacyEndpoint(host: String, port: Int) -> Bool {
+        (host == "127.0.0.1" && port == 8000)
+        || (host == "47.112.220.97" && port == 8080)
     }
 
     private static func makeDecoder() -> JSONDecoder {

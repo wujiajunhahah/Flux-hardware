@@ -176,7 +176,9 @@ struct ConnectionGuideSheet: View {
                         .background(.regularMaterial, in: .rect(cornerRadius: 8))
 
                     Button {
-                        service.host = editHost
+                        let normalizedHost = FluxService.normalizeHost(editHost)
+                        editHost = normalizedHost
+                        service.host = normalizedHost
                         if let p = Int(editPort), p > 0, p <= 65535 {
                             service.port = p
                         }
