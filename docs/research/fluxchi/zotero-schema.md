@@ -65,6 +65,9 @@ Use flat prefixed tags.
 - `method/longitudinal`
 - `method/ecological`
 - `method/interruption`
+- `method/reflection`
+- `method/jitai`
+- `method/self-experiment`
 
 ### Processing tags
 

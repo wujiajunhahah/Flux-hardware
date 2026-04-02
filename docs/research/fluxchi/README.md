@@ -29,6 +29,10 @@ Priority order:
   - Collections, tags, note template, and operating rules
 - `research-questions.md`
   - Current questions that decide what papers are worth collecting
+- `first-batch-papers.md`
+  - First intake batch for `Multimodal State Detection` and `Intervention Strategy`
+- `second-batch-papers.md`
+  - Second intake batch for `Review & Evidence Design` and the evidence flywheel
 
 ## Operating rule
 
