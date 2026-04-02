@@ -46,6 +46,8 @@ from src.stream import (
 )
 from src.canonical_signal import CANONICAL_EMG_CHANNELS, canonicalize_export_package, normalize_rms_to_canonical
 from src.features import remove_dc
+from src.intervention_policy import InterventionTracker
+from src.session_review import build_session_review
 from src.session_insight import session_insight_text
 from src.session_store import list_sessions_meta, load_session, save_session_package, session_file_path
 from src.profile_store import load_profile, normalize_updated_at, save_profile, should_replace_profile
@@ -118,6 +120,7 @@ flywheel_store: Optional[FlywheelStore] = None
 vision_ws_connections: Set[WebSocket] = set()
 _last_vision_frame_ts: float = 0.0
 VISION_FRAME_STALE_SEC = 2.5
+intervention_tracker: Optional[InterventionTracker] = None
 demo_mode = False
 speed_multiplier = 1.0
 timeline: List[Dict] = []
@@ -910,6 +913,17 @@ async def v1_sessions_insight(session_id: str):
     return _ok({"insight": session_insight_text(pkg)})
 
 
+@app.get("/api/v1/sessions/{session_id}/review", tags=["Sessions"], summary="读取结构化复盘")
+async def v1_sessions_review(session_id: str):
+    try:
+        pkg = load_session(session_id)
+    except ValueError:
+        return _err("bad_request", "非法 session_id")
+    except FileNotFoundError:
+        return _err("not_found", "会话不存在")
+    return _ok(build_session_review(pkg))
+
+
 @app.get("/api/v1/model", tags=["System"], summary="模型信息")
 async def v1_model():
     """返回已加载 ONNX 模型的类别和精度。"""
@@ -1299,10 +1313,11 @@ def _append_vision_and_fusion(payload: dict) -> None:
 
 # ─── Processing loop ────────────────────────────────────────
 async def processing_loop():
-    global stamina_engine, decision_engine, _emg_buffer_reset_requested, emg_module
+    global stamina_engine, decision_engine, _emg_buffer_reset_requested, emg_module, intervention_tracker
 
     stamina_engine = StaminaEngine(sample_rate=SAMPLE_RATE, speed=speed_multiplier)
     decision_engine = DecisionEngine()
+    intervention_tracker = InterventionTracker()
 
     # 注册 EMG 模块到融合引擎
     _ensure_vision_stack()
@@ -1447,17 +1462,16 @@ async def processing_loop():
                 "suggested_work_min": decision.suggested_work_min,
                 "suggested_break_min": decision.suggested_break_min,
             }
-            if decision.urgency >= 0.5:
-                timeline.append({
-                    "time": now,
-                    "type": "alert",
-                    "message": decision.reasons[0] if decision.reasons else "",
-                    "urgency": decision.urgency,
-                })
-                if len(timeline) > 200:
-                    timeline[:] = timeline[-100:]
 
         _append_vision_and_fusion(payload)
+
+        if intervention_tracker is not None:
+            intervention_state, intervention_event = intervention_tracker.update(payload, now=now)
+            payload["intervention"] = intervention_state
+            if intervention_event is not None:
+                timeline.append(intervention_event)
+                if len(timeline) > 200:
+                    timeline[:] = timeline[-100:]
 
         latest_payload.clear()
         latest_payload.update(payload)
