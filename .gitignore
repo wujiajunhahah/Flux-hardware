@@ -18,3 +18,4 @@ ios/FluxChi.xcodeproj/xcuserdata/
 *.env
 keys.*
 server/cases/targets.local.json
+.worktrees/
