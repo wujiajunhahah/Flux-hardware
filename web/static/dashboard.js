@@ -110,6 +110,54 @@ function renderMetricCards(stamina) {
   `;
 }
 
+function formatSignedDegrees(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "--";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}°`;
+}
+
+function renderVisionPanel(vision) {
+  const hasVision = Boolean(vision);
+  const stale = Boolean(vision?.stale);
+  const quality = Math.round((vision?.quality ?? 0) * 100);
+  const blinkRate = hasVision ? `${Number(vision?.blink_rate ?? 0).toFixed(1)}/min` : "--";
+  const perclos = hasVision ? `${Math.round((vision?.perclos ?? 0) * 100)}%` : "--";
+  const yawns = hasVision ? String(vision?.yawn_count ?? 0) : "--";
+
+  let alertness = "waiting";
+  if (hasVision) {
+    alertness = stale ? "stale" : (vision?.alertness || "tracking");
+  }
+
+  let faceState = "等待摄像头授权";
+  if (hasVision) {
+    if (!vision?.face_present) {
+      faceState = stale ? "视觉流已暂停" : "未检测到人脸";
+    } else {
+      faceState = `${stale ? "最近一帧已过期" : "人脸已锁定"} · 质量 ${quality}%`;
+    }
+  }
+
+  let poseState = "pitch -- · yaw --";
+  if (hasVision) {
+    const states = [
+      `pitch ${formatSignedDegrees(vision?.head_pitch_mean)}`,
+      `yaw ${formatSignedDegrees(vision?.head_yaw_mean)}`,
+    ];
+    if (vision?.head_nod) states.push("低头风险");
+    if (vision?.head_distracted) states.push("注意分散");
+    if (vision?.yawn_active) states.push("哈欠进行中");
+    poseState = states.join(" · ");
+  }
+
+  $("visionBlinkRate").textContent = blinkRate;
+  $("visionPerclos").textContent = perclos;
+  $("visionYawns").textContent = yawns;
+  $("visionAlertness").textContent = alertness;
+  $("visionFaceState").textContent = faceState;
+  $("visionPoseState").textContent = poseState;
+  $("visionFrameMeta").textContent = hasVision ? (stale ? "stale" : "live") : "等待摄像头";
+}
+
 function renderSignalSummary(payload) {
   const source = payload?.fusion?.source || "emg_only";
   const activity = payload?.activity || "idle";
@@ -123,6 +171,16 @@ function renderSignalSummary(payload) {
     chips.push(`alerts: ${payload.fusion.alerts.join(", ")}`);
   }
   $("heroChips").innerHTML = chips.map((text) => `<span class="chip">${text}</span>`).join("");
+}
+
+async function refreshLiveState() {
+  try {
+    const stateResp = await fetch("/api/v1/state");
+    const stateBody = await stateResp.json();
+    renderLive(stateBody?.ok ? stateBody.data : {});
+  } catch (_error) {
+    renderLive({});
+  }
 }
 
 function renderLive(payload) {
@@ -150,6 +208,7 @@ function renderLive(payload) {
   renderMetricCards(payload?.stamina);
   renderProtocolRail(stage);
   renderSignalSummary(payload);
+  renderVisionPanel(payload?.vision);
 }
 
 function eventMessage(event) {
@@ -431,6 +490,7 @@ async function initVision() {
       await appState.visionCapture.start();
       video.classList.add("on");
       $("visionMsg").textContent = "摄像头已开启。";
+      await refreshLiveState();
     } catch (error) {
       $("visionMsg").textContent = String(error?.message || error);
     }
@@ -440,6 +500,7 @@ async function initVision() {
     appState.visionCapture.stop();
     video.classList.remove("on");
     $("visionMsg").textContent = "摄像头已停止。";
+    renderVisionPanel(null);
   });
 
   $("openVisionBtn").addEventListener("click", () => {
@@ -477,20 +538,10 @@ async function boot() {
 
   await refreshTransport();
   await Promise.all([loadTimeline(), loadSessions(), loadEvidence(), initVision()]);
-
-  try {
-    const stateResp = await fetch("/api/v1/state");
-    const stateBody = await stateResp.json();
-    if (stateBody?.ok) {
-      renderLive(stateBody.data);
-    } else {
-      renderLive({});
-    }
-  } catch (_error) {
-    renderLive({});
-  }
+  await refreshLiveState();
 
   connectLive();
+  window.setInterval(refreshLiveState, 2000);
   window.setInterval(loadTimeline, 5000);
   window.setInterval(loadEvidence, 10000);
   window.setInterval(refreshTransport, 5000);

@@ -680,7 +680,10 @@ def _save_flywheel_snapshot_from_modules(payload: Dict[str, Any]) -> None:
 # ── Dashboard ────────────────────────────────────────────────
 @app.get("/", include_in_schema=False)
 async def index():
-    return FileResponse(str(STATIC_DIR / "index.html"))
+    return FileResponse(
+        str(STATIC_DIR / "index.html"),
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 # ── System ───────────────────────────────────────────────────

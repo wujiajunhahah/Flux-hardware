@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/dashboard.css">
+  <link rel="stylesheet" href="/static/dashboard.css?v=20260413-livefix">
 </head>
 <body>
   <div class="app-shell">
@@ -86,6 +86,40 @@
               <div class="muted-copy" id="visionWs">Vision WS: 未连接</div>
               <video id="dashCam" class="vision-preview" playsinline muted></video>
               <canvas id="dashProbe" class="hidden-probe" width="640" height="480"></canvas>
+              <div id="visionPanel" class="vision-panel">
+                <div class="vision-panel-head">
+                  <strong>Vision Snapshot</strong>
+                  <span id="visionFrameMeta" class="vision-badge">等待摄像头</span>
+                </div>
+                <div id="visionMetrics" class="vision-metric-grid">
+                  <div class="vision-metric">
+                    <span>Blinks / min</span>
+                    <strong id="visionBlinkRate">--</strong>
+                  </div>
+                  <div class="vision-metric">
+                    <span>PERCLOS</span>
+                    <strong id="visionPerclos">--</strong>
+                  </div>
+                  <div class="vision-metric">
+                    <span>Yawns / 5m</span>
+                    <strong id="visionYawns">--</strong>
+                  </div>
+                  <div class="vision-metric">
+                    <span>Alertness</span>
+                    <strong id="visionAlertness">waiting</strong>
+                  </div>
+                </div>
+                <div class="vision-detail-grid">
+                  <div class="vision-detail">
+                    <span>Face</span>
+                    <strong id="visionFaceState">等待摄像头授权</strong>
+                  </div>
+                  <div class="vision-detail">
+                    <span>Pose</span>
+                    <strong id="visionPoseState">pitch -- · yaw --</strong>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -130,6 +164,6 @@
     </main>
   </div>
 
-  <script type="module" src="/static/dashboard.js"></script>
+  <script type="module" src="/static/dashboard.js?v=20260413-livefix"></script>
 </body>
 </html>
