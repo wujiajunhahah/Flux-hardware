@@ -99,6 +99,7 @@
   "window_seconds": 0.25,
   "overlap": 0.5,
   "channels": 8,
+  "sample_rate_hz": 320,
   "source": "ninapro_db5",
   "accuracy": 0.870723495113739,
   "weighted_f1": 0.861214349291231,
