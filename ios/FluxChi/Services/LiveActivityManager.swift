@@ -27,6 +27,12 @@ final class LiveActivityManager: ObservableObject {
     private var activity: Activity<FluxChiLiveAttributes>?
     private let log = Logger(subsystem: "com.fluxchi", category: "LiveActivity")
 
+    /// 节流到 ≤1Hz：Apple 文档建议 LiveActivity 更新频率不超过 1Hz，否则系统会节流推送、
+    /// 主进程到 ActivityKit 守护进程的 XPC 也会拥塞导致 MainActor 卡顿。
+    /// 上游数据是 5Hz（BLE 直连）或 1-2Hz（REST 轮询），按时间窗合并到 1Hz。
+    private var lastUpdateAt: Date?
+    private let minUpdateInterval: TimeInterval = 1.0
+
     func startActivity(title: String) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             log.info("LiveActivity 未授权")
@@ -59,6 +65,7 @@ final class LiveActivityManager: ObservableObject {
             // 注：widgetURL 需要在 Widget Extension 的 View 中设置
             // 这里通过 URL Scheme 支持 App 端处理
             isActive = true
+            lastUpdateAt = nil  // 重置节流窗口，首帧立即推送
             log.info("LiveActivity 已启动: \(self.activity?.id ?? "nil")")
         } catch {
             log.error("LiveActivity 启动失败: \(error.localizedDescription)")
@@ -70,6 +77,14 @@ final class LiveActivityManager: ObservableObject {
                         tension: Double, fatigue: Double) {
         guard let activity else { return }
 
+        // 1Hz 节流：丢弃距上次推送 < minUpdateInterval 的更新。
+        // 状态变更敏感度不高于 1 秒，UI 视感无差异，但能消除 5Hz × XPC 带来的主线程压力。
+        let now = Date()
+        if let last = lastUpdateAt, now.timeIntervalSince(last) < minUpdateInterval {
+            return
+        }
+        lastUpdateAt = now
+
         let updatedState = FluxChiLiveAttributes.ContentState(
             stamina: stamina,
             state: state,
@@ -79,7 +94,7 @@ final class LiveActivityManager: ObservableObject {
             fatigue: fatigue
         )
 
-        let content = ActivityContent(state: updatedState, staleDate: Date.now.addingTimeInterval(30))
+        let content = ActivityContent(state: updatedState, staleDate: now.addingTimeInterval(30))
 
         Task {
             await activity.update(content)
