@@ -15,11 +15,18 @@ struct FluxChiApp: App {
 
     @AppStorage(Flux.DefaultsKeys.onboardingDone) private var onboardingDone = false
 
+    /// 持久化容器，启用 `FluxMigrationPlan` 迁移路径。若后续 `Session/Segment/FluxSnapshot/UserFeedback`
+    /// 加字段，仅需在 `FluxSchema.swift` 追加 `FluxSchemaV2` + 迁移 stage，无需改动本文件。
+    private let modelContainer: ModelContainer
+
     /// Deep link notification names
     static let showActiveSessionNotification = Notification.Name("FluxChi.showActiveSession")
     static let showRestFromNotification = Notification.Name("FluxChi.showRestFromNotification")
 
     init() {
+        // 必须在调用 self 上的任何方法前完成所有 stored property 初始化
+        // App.init 是 @MainActor，可直接调用 makeShared()
+        modelContainer = FluxModelContainer.makeShared()
         PerformanceMonitor.shared.markAppInit()
         configureLogger()
     }
@@ -122,10 +129,7 @@ struct FluxChiApp: App {
                 handleDeepLink(url)
             }
         }
-        // 迁移计划留在 FluxSchema.swift，等真正要 V2 字段时再切到 FluxModelContainer.makeShared()
-        .modelContainer(for: [
-            Session.self, Segment.self, FluxSnapshot.self, UserFeedback.self
-        ])
+        .modelContainer(modelContainer)
     }
 
     // MARK: - Deep Link

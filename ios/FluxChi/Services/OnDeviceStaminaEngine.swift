@@ -7,9 +7,12 @@ import Accelerate
 /// D3: Sustained Capacity (MDF spectral fatigue indicator)
 ///
 /// Work/rest detection uses RMS variance (movement = variance spike), not ML classifier.
-final class OnDeviceStaminaEngine {
+///
+/// Actor 隔离：所有可变状态（rmsHistory、mdfHistory、calibration 缓冲等）由 actor 串行化，
+/// 调用方 `await update(...)` 时 vDSP FFT 与累积器运算在 actor 域执行，自动离开 MainActor。
+actor OnDeviceStaminaEngine {
 
-    struct Reading {
+    struct Reading: Sendable {
         let stamina: Double
         let state: String
         let consistency: Double

@@ -188,10 +188,16 @@ struct EMGClassifierConfig: Codable {
     let n_features: Int
     let window_seconds: Double?
     let channels: Int?
+    /// 训练数据的采样率（Hz）。决定 FFT 频率步长，影响 MNF/MDF 特征的物理含义。
+    /// 旧版 config 可能缺该字段，加载时 fallback 到 320 维持现有行为。
+    let sample_rate_hz: Double?
 
     /// 模型导出时的输出键名（sklearn → coremltools 默认生成 "var_20" 等）。
     /// 若 JSON 未提供，运行时自动探测模型实际输出。
     var output_key: String?
+
+    /// 用于实例化 EMGFeatureExtractor 的有效采样率。
+    var effectiveSampleRate: Double { sample_rate_hz ?? 320 }
 
     static let fallbackClasses = ["finger_movement", "rest", "wrist_extend", "wrist_flex", "wrist_movement"]
 
@@ -205,6 +211,7 @@ struct EMGClassifierConfig: Codable {
                 n_features: EMGFeatureExtractor.totalFeatures,
                 window_seconds: 0.25,
                 channels: 8,
+                sample_rate_hz: 320,
                 output_key: nil
             )
         }
@@ -214,8 +221,9 @@ struct EMGClassifierConfig: Codable {
 
 // MARK: - CoreML Activity Inference Wrapper
 
-@MainActor
-final class EMGActivityInference {
+/// Actor 隔离：CoreML 推理 + 特征提取（含 vDSP FFT）在 actor 域执行，避开 MainActor。
+/// MLModel.prediction(from:) 本身线程安全，actor 仅串行化 model/cache 字段的访问。
+actor EMGActivityInference {
 
     private var model: MLModel?
     private let config: EMGClassifierConfig
@@ -224,15 +232,17 @@ final class EMGActivityInference {
     private var resolvedOutputKey: String?
     private var validationLogged = false
 
-    var classes: [String] { config.classes }
+    nonisolated var classes: [String] { config.classes }
 
     init() {
-        self.config = EMGClassifierConfig.loadFromBundle()
-        self.extractor = EMGFeatureExtractor(sampleRate: 320, zcThreshold: 20)
+        let cfg = EMGClassifierConfig.loadFromBundle()
+        self.config = cfg
+        // 采样率从 config 读取（默认 320），保证 FFT 频率步长与训练数据对齐
+        self.extractor = EMGFeatureExtractor(sampleRate: cfg.effectiveSampleRate, zcThreshold: 20)
         loadModel()
     }
 
-    struct Prediction {
+    struct Prediction: Sendable {
         let label: String
         let confidence: Double
         let probabilities: [String: Double]

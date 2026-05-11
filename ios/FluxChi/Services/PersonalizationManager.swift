@@ -21,6 +21,10 @@ final class PersonalizationManager: ObservableObject {
     private var deviceID: String = ""
     private var profileUpdatedAt: Date?
 
+    /// 串行化所有 syncProfile 调用，避免并发 push/pull 在 await 点交错导致 version 冲突或旧数据覆盖新数据。
+    /// 使用 Task chain 而非 actor —— 保留 @MainActor 隔离的同时让多次调用按顺序排队。
+    private var syncTask: Task<Void, Never>?
+
     /// 平台 API 入口，用于画像同步和 feedback-events 写入。
     weak var fluxService: FluxService?
 
@@ -99,15 +103,26 @@ final class PersonalizationManager: ObservableObject {
     // MARK: - Profile Sync
 
     func pushProfileToServer() async {
-        await syncProfile(direction: .push, silentErrors: false)
+        await enqueueSync(direction: .push, silentErrors: false)
     }
 
     func pullProfileFromServer() async {
-        await syncProfile(direction: .pull, silentErrors: false)
+        await enqueueSync(direction: .pull, silentErrors: false)
     }
 
     func bootstrapFromServerSilently() async {
-        await syncProfile(direction: .pull, silentErrors: true)
+        await enqueueSync(direction: .pull, silentErrors: true)
+    }
+
+    /// 将一次 sync 操作排到 syncTask 末尾，等前面的全部完成再执行；保证 push/pull 不会交错。
+    private func enqueueSync(direction: SyncDirection, silentErrors: Bool) async {
+        let previous = syncTask
+        let task = Task { @MainActor [weak self] in
+            await previous?.value
+            await self?.syncProfile(direction: direction, silentErrors: silentErrors)
+        }
+        syncTask = task
+        await task.value
     }
 
     // MARK: - Platform Feedback

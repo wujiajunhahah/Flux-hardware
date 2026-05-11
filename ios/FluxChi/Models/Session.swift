@@ -127,8 +127,11 @@ final class FluxSnapshot {
             self.stamina = emg.value
             self.stateRaw = emg.state
         } else {
+            // 数据降级：后端既无 fusion 也无 emg.stamina，使用安全占位
+            // FluxSnapshot 在录制中每 500ms 创建一次，节流到 30s 一条避免日志风暴
             self.stamina = 0
             self.stateRaw = "focused"
+            FluxSnapshotFallbackTracker.shared.report()
         }
         self.consistency = fluxState.stamina?.consistency ?? 0
         self.tension = fluxState.stamina?.tension ?? 0
@@ -265,5 +268,33 @@ enum UserFeeling: String, Codable, CaseIterable, Identifiable {
         case .tired:     return 35
         case .exhausted: return 10
         }
+    }
+}
+
+// MARK: - Fallback Telemetry
+
+/// 节流记录 FluxSnapshot 数据降级事件。
+/// FluxSnapshot.init 在录制中每 500ms 创建一次，若进入 fallback 分支高频会触发日志风暴；
+/// 这里限制 30s 内只记一条，让用户在 LogViewer 能看到信号但不会被淹没。
+final class FluxSnapshotFallbackTracker: @unchecked Sendable {
+    static let shared = FluxSnapshotFallbackTracker()
+
+    private let lock = NSLock()
+    private var lastLoggedAt: TimeInterval = 0
+    private let throttleInterval: TimeInterval = 30
+
+    private init() {}
+
+    func report() {
+        let now = Date().timeIntervalSince1970
+        lock.lock()
+        let shouldLog = now - lastLoggedAt >= throttleInterval
+        if shouldLog { lastLoggedAt = now }
+        lock.unlock()
+
+        guard shouldLog else { return }
+        FluxLog.session.warn(
+            "FluxSnapshot fallback: 后端 fusion/emg stamina 均为 nil，已使用 stamina=0/state=focused 占位（30s 节流）"
+        )
     }
 }
