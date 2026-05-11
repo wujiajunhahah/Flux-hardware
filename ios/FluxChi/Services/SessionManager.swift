@@ -15,6 +15,13 @@ final class SessionManager: ObservableObject {
     private var snapshotTimer: Timer?
     private var elapsedTimer: Timer?
 
+    /// SwiftData save 的最小间隔。`ctx.saveLogged()` 同步在 MainActor 执行，
+    /// session 跑 1 小时后 dirty graph 内有数千个 FluxSnapshot，频繁 save 会卡主线程。
+    /// 30s 保存一次：crash 最多丢 30s 数据，但每次 save 之间的主线程窗口大得多。
+    /// 关键 lifecycle（start/pause/resume/end/addSegment）仍走立即 save，保证关键状态落盘。
+    private var lastSnapshotSaveAt: Date?
+    private let snapshotSaveInterval: TimeInterval = 30
+
     /// 累计已暂停的时长（秒）；在 elapsed/duration 显示时扣除，使"已暂停"期间时间不再增长。
     private var totalPausedSec: TimeInterval = 0
     /// 当前暂停区间起点；resume 或 end 时合入 `totalPausedSec`。
@@ -53,6 +60,7 @@ final class SessionManager: ObservableObject {
         isPaused = false
         totalPausedSec = 0
         pausedAt = nil
+        lastSnapshotSaveAt = nil
 
         startTimers()
         ctx.saveLogged()
@@ -156,9 +164,14 @@ final class SessionManager: ObservableObject {
         segment.snapshots.append(snapshot)
         ctx.insert(snapshot)
 
-        if segment.snapshots.count % 10 == 0 {
-            ctx.saveLogged()
+        // 时间窗 save：30s 触发一次，避免每 5s 卡顿一下。
+        // session 结束/暂停/分段时仍立即 save，关键状态不丢。
+        let now = Date()
+        if let last = lastSnapshotSaveAt, now.timeIntervalSince(last) < snapshotSaveInterval {
+            return
         }
+        lastSnapshotSaveAt = now
+        ctx.saveLogged()
     }
 
     // MARK: - Title Generation
