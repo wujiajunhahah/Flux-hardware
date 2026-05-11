@@ -214,8 +214,9 @@ struct EMGClassifierConfig: Codable {
 
 // MARK: - CoreML Activity Inference Wrapper
 
-@MainActor
-final class EMGActivityInference {
+/// Actor 隔离：CoreML 推理 + 特征提取（含 vDSP FFT）在 actor 域执行，避开 MainActor。
+/// MLModel.prediction(from:) 本身线程安全，actor 仅串行化 model/cache 字段的访问。
+actor EMGActivityInference {
 
     private var model: MLModel?
     private let config: EMGClassifierConfig
@@ -224,7 +225,7 @@ final class EMGActivityInference {
     private var resolvedOutputKey: String?
     private var validationLogged = false
 
-    var classes: [String] { config.classes }
+    nonisolated var classes: [String] { config.classes }
 
     init() {
         self.config = EMGClassifierConfig.loadFromBundle()
@@ -232,7 +233,7 @@ final class EMGActivityInference {
         loadModel()
     }
 
-    struct Prediction {
+    struct Prediction: Sendable {
         let label: String
         let confidence: Double
         let probabilities: [String: Double]

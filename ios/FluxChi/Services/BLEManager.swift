@@ -66,6 +66,9 @@ final class BLEManager: NSObject, ObservableObject {
     private let classifier = EMGActivityInference()
     private var lowSignalConsecutive = 0
     private var detachNotified = false
+    /// 标记 ML/FFT compute 是否正在进行；若是，本轮 buildAndPushState 跳过避免 Task 堆积。
+    /// 5Hz 触发频率下偶尔丢一帧对 UI 视感无影响，但能防止慢推理把 Task queue 撑爆。
+    private var computeInFlight = false
     /// 区分用户主动 disconnect 与意外断连。主动断时不需要 didDisconnect 再清一遍状态。
     private var intentionalDisconnect = false
 
@@ -166,56 +169,74 @@ final class BLEManager: NSObject, ObservableObject {
     }
 
     private func buildAndPushState() {
+        // Drop-if-in-flight：5Hz 触发 vs ~20-50ms ML+FFT compute，慢推理时跳过本轮避免 Task 堆积。
+        guard !computeInFlight else { return }
+
+        // 在 MainActor 上捕获所有输入（emgBuffer / emgFrameCount 都是 MainActor 隔离的）
         let rms = emgBuffer.rms()
         let now = Date().timeIntervalSince1970
         let rawChannels = emgBuffer.channelTimeSeries()
+        let frameCount = emgFrameCount
 
-        let prediction = classifier.predict(channels: rawChannels)
-        let classifiedActivity = prediction?.label
+        computeInFlight = true
+        Task { [weak self, staminaEngine, classifier] in
+            // 这两个 await 自动从 MainActor 跳到各自的 actor 隔离域，CoreML/FFT 在后台执行
+            let prediction = await classifier.predict(channels: rawChannels)
+            let r = await staminaEngine.update(
+                rms: rms,
+                rawChannels: rawChannels,
+                timestamp: now,
+                classifiedActivity: prediction?.label
+            )
 
-        let r = staminaEngine.update(rms: rms, rawChannels: rawChannels, timestamp: now, classifiedActivity: classifiedActivity)
+            await MainActor.run {
+                guard let self else { return }
+                self.computeInFlight = false
 
-        let activity = classifiedActivity ?? (r.isWorking ? "working" : "rest")
-        let confidence = prediction?.confidence ?? 1.0
-        let probs = prediction?.probabilities ?? [activity: 1.0]
+                let classifiedActivity = prediction?.label
+                let activity = classifiedActivity ?? (r.isWorking ? "working" : "rest")
+                let confidence = prediction?.confidence ?? 1.0
+                let probs = prediction?.probabilities ?? [activity: 1.0]
 
-        let state = FluxState(
-            timestamp: now,
-            activity: activity,
-            confidence: confidence,
-            probabilities: probs,
-            rms: rms,
-            emgSampleCount: emgFrameCount,
-            stamina: StaminaData(
-                value: r.stamina,
-                state: r.state,
-                consistency: r.consistency,
-                tension: r.tension,
-                fatigue: r.fatigue,
-                drainRate: r.drainRate,
-                recoveryRate: r.recoveryRate,
-                suggestedWorkMin: r.suggestedWorkMin,
-                suggestedBreakMin: r.suggestedBreakMin,
-                continuousWorkMin: r.continuousWorkMin,
-                totalWorkMin: r.totalWorkMin
-            ),
-            decision: DecisionData(
-                state: r.state,
-                recommendation: r.stamina > 60 ? "keep_working" : r.stamina > 30 ? "take_break" : "rest_more",
-                urgency: r.stamina < 30 ? 0.8 : r.stamina < 60 ? 0.5 : 0,
-                reasons: [r.isWorking
-                    ? "BLE 直连 · 已工作 \(Int(r.continuousWorkMin)) 分钟 · Stamina \(Int(r.stamina))"
-                    : "BLE 直连 · 恢复中 · Stamina \(Int(r.stamina))"],
-                stamina: r.stamina,
-                continuousWorkMin: r.continuousWorkMin,
-                totalWorkMin: r.totalWorkMin,
-                suggestedWorkMin: r.suggestedWorkMin,
-                suggestedBreakMin: r.suggestedBreakMin
-            ),
-            fusion: nil,
-            vision: nil
-        )
-        onStateUpdate?(state)
+                let state = FluxState(
+                    timestamp: now,
+                    activity: activity,
+                    confidence: confidence,
+                    probabilities: probs,
+                    rms: rms,
+                    emgSampleCount: frameCount,
+                    stamina: StaminaData(
+                        value: r.stamina,
+                        state: r.state,
+                        consistency: r.consistency,
+                        tension: r.tension,
+                        fatigue: r.fatigue,
+                        drainRate: r.drainRate,
+                        recoveryRate: r.recoveryRate,
+                        suggestedWorkMin: r.suggestedWorkMin,
+                        suggestedBreakMin: r.suggestedBreakMin,
+                        continuousWorkMin: r.continuousWorkMin,
+                        totalWorkMin: r.totalWorkMin
+                    ),
+                    decision: DecisionData(
+                        state: r.state,
+                        recommendation: r.stamina > 60 ? "keep_working" : r.stamina > 30 ? "take_break" : "rest_more",
+                        urgency: r.stamina < 30 ? 0.8 : r.stamina < 60 ? 0.5 : 0,
+                        reasons: [r.isWorking
+                            ? "BLE 直连 · 已工作 \(Int(r.continuousWorkMin)) 分钟 · Stamina \(Int(r.stamina))"
+                            : "BLE 直连 · 恢复中 · Stamina \(Int(r.stamina))"],
+                        stamina: r.stamina,
+                        continuousWorkMin: r.continuousWorkMin,
+                        totalWorkMin: r.totalWorkMin,
+                        suggestedWorkMin: r.suggestedWorkMin,
+                        suggestedBreakMin: r.suggestedBreakMin
+                    ),
+                    fusion: nil,
+                    vision: nil
+                )
+                self.onStateUpdate?(state)
+            }
+        }
     }
 
     // MARK: - Detach Detection
@@ -316,7 +337,10 @@ extension BLEManager: CBCentralManagerDelegate {
             self.lowSignalConsecutive = 0
             self.detachNotified = false
             self.latestRMS = Array(repeating: 0, count: 8)
-            self.staminaEngine.reset()
+            // staminaEngine 是 actor，reset 需要 await
+            Task { [staminaEngine = self.staminaEngine] in
+                await staminaEngine.reset()
+            }
 
             if wasIntentional {
                 FluxLog.ble.info("已断开: \(deviceName)")
