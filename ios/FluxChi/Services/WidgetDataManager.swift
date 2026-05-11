@@ -76,28 +76,18 @@ enum WidgetDataManager {
         defaults.set(todayTotalMin, forKey: Key.todayTotalMin)
         defaults.set(todayAvg, forKey: Key.todayAvgStamina)
 
-        // 最佳时段
-        var slotMap: [String: [Double]] = [:]
+        // 最佳时段（先按 slot 分桶 → 求平均 → 一次 max；避免 O(n²)）
+        var slotSums: [Flux.TimeSlot: (sum: Double, n: Int)] = [:]
         for s in today {
             guard let avg = s.sessionAvgStamina else { continue }
-            let hour = Calendar.current.component(.hour, from: s.sessionStartedAt)
-            let slot: String
-            switch hour {
-            case 6..<12:  slot = "上午"
-            case 12..<14: slot = "午间"
-            case 14..<18: slot = "下午"
-            case 18..<22: slot = "晚间"
-            default:      slot = "其他"
-            }
-            slotMap[slot, default: []].append(avg)
+            let slot = Flux.TimeSlot.from(date: s.sessionStartedAt)
+            let cur = slotSums[slot] ?? (0, 0)
+            slotSums[slot] = (cur.sum + avg, cur.n + 1)
         }
-        if let best = slotMap.max(by: {
-            $0.value.reduce(0, +) / Double($0.value.count) <
-            $1.value.reduce(0, +) / Double($1.value.count)
-        }) {
-            let avg = best.value.reduce(0, +) / Double(best.value.count)
-            defaults.set(best.key, forKey: Key.bestSlotName)
-            defaults.set(avg, forKey: Key.bestSlotAvg)
+        let slotAvgs: [(slot: Flux.TimeSlot, avg: Double)] = slotSums.map { ($0.key, $0.value.sum / Double($0.value.n)) }
+        if let best = slotAvgs.max(by: { $0.avg < $1.avg }) {
+            defaults.set(best.slot.rawValue, forKey: Key.bestSlotName)
+            defaults.set(best.avg, forKey: Key.bestSlotAvg)
         } else {
             defaults.removeObject(forKey: Key.bestSlotName)
             defaults.removeObject(forKey: Key.bestSlotAvg)

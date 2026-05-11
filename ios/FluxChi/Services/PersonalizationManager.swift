@@ -25,11 +25,6 @@ final class PersonalizationManager: ObservableObject {
     weak var fluxService: FluxService?
 
     private static let feedbackDataFileName = "feedback_pairs.json"
-    private static let deviceCalibrationDefaultsKey = "flux_ml_device_calibrations"
-    private static let profileIDDefaultsKey = "flux_ml_profile_id"
-    private static let deviceIDDefaultsKey = "flux_ml_device_id"
-    private static let profileUpdatedAtDefaultsKey = "flux_ml_profile_updated_at"
-    private static let lastSyncAtDefaultsKey = "flux_ml_last_sync_at"
 
     private var dataDir: URL {
         let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
@@ -177,30 +172,30 @@ final class PersonalizationManager: ObservableObject {
 
     private func loadState() {
         let d = UserDefaults.standard
-        trainingCount = d.integer(forKey: "flux_ml_count")
-        calibrationOffset = d.double(forKey: "flux_ml_offset")
-        estimatedAccuracy = d.double(forKey: "flux_ml_accuracy")
-        let updatedAt = d.double(forKey: Self.profileUpdatedAtDefaultsKey)
+        trainingCount = d.integer(forKey: Flux.DefaultsKeys.mlCount)
+        calibrationOffset = d.double(forKey: Flux.DefaultsKeys.mlOffset)
+        estimatedAccuracy = d.double(forKey: Flux.DefaultsKeys.mlAccuracy)
+        let updatedAt = d.double(forKey: Flux.DefaultsKeys.mlProfileUpdatedAt)
         if updatedAt > 0 {
             profileUpdatedAt = Date(timeIntervalSince1970: updatedAt)
         }
-        let syncedAt = d.double(forKey: Self.lastSyncAtDefaultsKey)
+        let syncedAt = d.double(forKey: Flux.DefaultsKeys.mlLastSyncAt)
         if syncedAt > 0 {
             lastSyncAt = Date(timeIntervalSince1970: syncedAt)
         }
-        profileID = d.string(forKey: Self.profileIDDefaultsKey) ?? ""
-        deviceID = d.string(forKey: Self.deviceIDDefaultsKey) ?? ""
+        profileID = d.string(forKey: Flux.DefaultsKeys.mlProfileID) ?? ""
+        deviceID = d.string(forKey: Flux.DefaultsKeys.mlDeviceID) ?? ""
     }
 
     private func saveState() {
         let d = UserDefaults.standard
-        d.set(trainingCount, forKey: "flux_ml_count")
-        d.set(calibrationOffset, forKey: "flux_ml_offset")
-        d.set(estimatedAccuracy, forKey: "flux_ml_accuracy")
-        d.set(profileID, forKey: Self.profileIDDefaultsKey)
-        d.set(deviceID, forKey: Self.deviceIDDefaultsKey)
-        d.set(profileUpdatedAt?.timeIntervalSince1970 ?? 0, forKey: Self.profileUpdatedAtDefaultsKey)
-        d.set(lastSyncAt?.timeIntervalSince1970 ?? 0, forKey: Self.lastSyncAtDefaultsKey)
+        d.set(trainingCount, forKey: Flux.DefaultsKeys.mlCount)
+        d.set(calibrationOffset, forKey: Flux.DefaultsKeys.mlOffset)
+        d.set(estimatedAccuracy, forKey: Flux.DefaultsKeys.mlAccuracy)
+        d.set(profileID, forKey: Flux.DefaultsKeys.mlProfileID)
+        d.set(deviceID, forKey: Flux.DefaultsKeys.mlDeviceID)
+        d.set(profileUpdatedAt?.timeIntervalSince1970 ?? 0, forKey: Flux.DefaultsKeys.mlProfileUpdatedAt)
+        d.set(lastSyncAt?.timeIntervalSince1970 ?? 0, forKey: Flux.DefaultsKeys.mlLastSyncAt)
     }
 
     private func loadFeedbackPairs() {
@@ -216,14 +211,14 @@ final class PersonalizationManager: ObservableObject {
 
     private func loadDeviceCalibrations() {
         let defaults = UserDefaults.standard
-        guard let data = defaults.data(forKey: Self.deviceCalibrationDefaultsKey),
+        guard let data = defaults.data(forKey: Flux.DefaultsKeys.mlDeviceCalibrations),
               let decoded = try? Self.makeDecoder().decode([String: DeviceCalibration].self, from: data) else { return }
         deviceCalibrations = decoded
     }
 
     private func saveDeviceCalibrations() {
         guard let data = try? Self.makeEncoder().encode(deviceCalibrations) else { return }
-        UserDefaults.standard.set(data, forKey: Self.deviceCalibrationDefaultsKey)
+        UserDefaults.standard.set(data, forKey: Flux.DefaultsKeys.mlDeviceCalibrations)
     }
 
     private func ensureStableIDs() {
@@ -231,7 +226,7 @@ final class PersonalizationManager: ObservableObject {
             profileID = UUID().uuidString
         }
         if deviceID.isEmpty {
-            deviceID = UserDefaults.standard.string(forKey: Self.deviceIDDefaultsKey)
+            deviceID = UserDefaults.standard.string(forKey: Flux.DefaultsKeys.mlDeviceID)
                 ?? UIDevice.current.identifierForVendor?.uuidString
                 ?? UUID().uuidString
         }

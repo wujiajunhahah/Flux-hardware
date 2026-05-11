@@ -21,6 +21,9 @@ private enum BLEConstants {
     static let detachRMSThreshold: Double = 25.0
     /// 脱落检测：需持续低信号的帧数（约 30 秒，50帧/s × 30s ÷ 每50帧检测一次 = 30次）
     static let detachConsecutiveCount = 30
+    /// CoreBluetooth state restoration 标识；与 Info.plist 的 `bluetooth-central` background mode 配套，
+    /// 让系统在 app 被挂起后唤回时恢复正在监听的 peripheral。
+    static let centralRestoreIdentifier = "com.fluxchi.ble.central"
 }
 
 // MARK: - Notification Names
@@ -63,13 +66,22 @@ final class BLEManager: NSObject, ObservableObject {
     private let classifier = EMGActivityInference()
     private var lowSignalConsecutive = 0
     private var detachNotified = false
+    /// 区分用户主动 disconnect 与意外断连。主动断时不需要 didDisconnect 再清一遍状态。
+    private var intentionalDisconnect = false
 
     // MARK: - Init
 
     override init() {
         super.init()
-        central = CBCentralManager(delegate: nil, queue: nil)
-        central.delegate = self
+        // 用 restore identifier 时，CoreBluetooth 在 init 时就要校验 delegate 是否实现
+        // `centralManager(_:willRestoreState:)`。delegate=nil + 之后赋值的两步写法会抛
+        // NSException："provided a restore identifier but the delegate doesn't implement..."。
+        // 必须 init 时直接把 self 传进去。
+        central = CBCentralManager(
+            delegate: self,
+            queue: nil,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: BLEConstants.centralRestoreIdentifier]
+        )
     }
 
     // MARK: - Scanning
@@ -110,15 +122,12 @@ final class BLEManager: NSObject, ObservableObject {
 
     func disconnect() {
         guard let p = peripheral else { return }
+        intentionalDisconnect = true
         if let c = dataChar { p.setNotifyValue(false, for: c) }
-        central.cancelPeripheralConnection(p)
         let deviceName = p.name ?? connectedDeviceName ?? "未知设备"
         FluxLog.ble.info("主动断开: \(deviceName)")
-        peripheral = nil
-        dataChar = nil
-        connectedDeviceName = nil
-        peripheralState = .disconnected
-        staminaEngine.reset()
+        // 实际状态清理交给 didDisconnect，避免重复 reset 与日志
+        central.cancelPeripheralConnection(p)
     }
 
     // MARK: - EMG Parsing
@@ -241,6 +250,24 @@ extension BLEManager: CBCentralManagerDelegate {
         Task { @MainActor in _ = central.state }
     }
 
+    /// 系统 restoration：app 在后台被系统终止后再恢复时，CoreBluetooth 会通过此回调把之前的 peripheral 还回来。
+    /// 此处只接管 peripheral 引用，让 didConnect/didUpdateValueFor 自然继续。
+    nonisolated func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        guard let restored = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral],
+              let first = restored.first else { return }
+        Task { @MainActor in
+            FluxLog.ble.info("BLE 状态恢复：接管 \(first.name ?? "未知设备")")
+            self.peripheral = first
+            first.delegate = self
+            self.connectedDeviceName = first.name ?? "WAVELETECH"
+            self.peripheralState = first.state
+            // 若恢复时仍处 connected，主动重发现服务以补全 dataChar
+            if first.state == .connected {
+                first.discoverServices([BLEConstants.serviceUUID, BLEConstants.batteryServiceUUID])
+            }
+        }
+    }
+
     nonisolated func centralManager(
         _ central: CBCentralManager,
         didDiscover peripheral: CBPeripheral,
@@ -277,6 +304,9 @@ extension BLEManager: CBCentralManagerDelegate {
     ) {
         Task { @MainActor in
             let deviceName = self.connectedDeviceName ?? peripheral.name ?? "未知设备"
+            let wasIntentional = self.intentionalDisconnect
+            self.intentionalDisconnect = false
+
             self.peripheral = nil
             self.dataChar = nil
             self.connectedDeviceName = nil
@@ -287,10 +317,13 @@ extension BLEManager: CBCentralManagerDelegate {
             self.detachNotified = false
             self.latestRMS = Array(repeating: 0, count: 8)
             self.staminaEngine.reset()
-            if let error = error {
+
+            if wasIntentional {
+                FluxLog.ble.info("已断开: \(deviceName)")
+            } else if let error = error {
                 FluxLog.ble.error("意外断开: \(deviceName) — 状态已完整重置", error: error)
             } else {
-                FluxLog.ble.info("正常断开: \(deviceName)")
+                FluxLog.ble.info("断开（系统）: \(deviceName)")
             }
         }
     }

@@ -86,10 +86,10 @@ final class FluxService: ObservableObject {
     }
 
     @Published var host: String {
-        didSet { UserDefaults.standard.set(host, forKey: Self.hostDefaultsKey) }
+        didSet { UserDefaults.standard.set(host, forKey: Flux.DefaultsKeys.host) }
     }
     @Published var port: Int {
-        didSet { UserDefaults.standard.set(port, forKey: Self.portDefaultsKey) }
+        didSet { UserDefaults.standard.set(port, forKey: Flux.DefaultsKeys.port) }
     }
 
     /// 短请求（REST）；长连接用 `streamSession`
@@ -105,11 +105,6 @@ final class FluxService: ObservableObject {
             platformDeviceID = platformSessionState?.deviceID
         }
     }
-
-    private static let hostDefaultsKey = "flux_host"
-    private static let portDefaultsKey = "flux_port"
-    private static let platformClientDeviceKeyDefaultsKey = "flux_platform_client_device_key"
-    private static let platformSessionDefaultsKey = "flux_platform_session"
 
     init() {
         let endpoint = Self.loadEndpointDefaults()
@@ -155,8 +150,11 @@ final class FluxService: ObservableObject {
         return trimmed
     }
 
+    /// 端口启发式：443/8443/9443 视为 HTTPS；其它端口默认 HTTP。
+    /// 注意：这是兜底逻辑——若需明确写死 scheme，应在 host 字段里直接传 `https://your.host`，
+    /// `normalizeHost` 会保留原始的 host 并由 URLComponents 接管。
     nonisolated static func scheme(forPort port: Int) -> String {
-        port == 443 ? "https" : "http"
+        [443, 8443, 9443].contains(port) ? "https" : "http"
     }
 
     // MARK: - Wi‑Fi 传输：优先 SSE，失败后轮询
@@ -248,10 +246,22 @@ final class FluxService: ObservableObject {
         }
     }
 
+    /// 轮询循环：成功后回到 500ms 节奏；连续失败按 `Flux.RetryPolicy` 指数退避，封顶 5s。
+    /// 这样断网/429/服务器宕机时不会一直撞，电池更友好。
     private func runPollingLoop() async {
+        var failureStreak = 0
         while !Task.isCancelled {
+            let wasConnected = isConnected
             await fetchState()
-            try? await Task.sleep(for: .milliseconds(500))
+            if isConnected {
+                failureStreak = 0
+            } else if wasConnected || failureStreak == 0 {
+                failureStreak = 1
+            } else {
+                failureStreak += 1
+            }
+            let delayMs = Flux.RetryPolicy.nextDelayMs(failureCount: failureStreak)
+            try? await Task.sleep(for: .milliseconds(delayMs))
         }
     }
 
@@ -642,12 +652,12 @@ final class FluxService: ObservableObject {
 
     private func platformClientDeviceKey() -> String {
         let defaults = UserDefaults.standard
-        if let key = defaults.string(forKey: Self.platformClientDeviceKeyDefaultsKey), !key.isEmpty {
+        if let key = defaults.string(forKey: Flux.DefaultsKeys.platformClientDeviceKey), !key.isEmpty {
             return key
         }
         let generated = UIDevice.current.identifierForVendor?.uuidString.lowercased()
             ?? UUID().uuidString.lowercased()
-        defaults.set(generated, forKey: Self.platformClientDeviceKeyDefaultsKey)
+        defaults.set(generated, forKey: Flux.DefaultsKeys.platformClientDeviceKey)
         return generated
     }
 
@@ -660,13 +670,13 @@ final class FluxService: ObservableObject {
     private func persistPlatformSession() {
         let defaults = UserDefaults.standard
         guard let platformSessionState else {
-            defaults.removeObject(forKey: Self.platformSessionDefaultsKey)
+            defaults.removeObject(forKey: Flux.DefaultsKeys.platformSession)
             return
         }
         guard let data = try? Self.makeEncoder().encode(platformSessionState) else {
             return
         }
-        defaults.set(data, forKey: Self.platformSessionDefaultsKey)
+        defaults.set(data, forKey: Flux.DefaultsKeys.platformSession)
     }
 
     private func buildURL(path: String, queryItems: [URLQueryItem] = []) -> URL {
@@ -683,7 +693,7 @@ final class FluxService: ObservableObject {
     }
 
     private static func loadPlatformSession() -> PlatformAuthSession? {
-        guard let data = UserDefaults.standard.data(forKey: platformSessionDefaultsKey) else {
+        guard let data = UserDefaults.standard.data(forKey: Flux.DefaultsKeys.platformSession) else {
             return nil
         }
         return try? makeDecoder().decode(PlatformAuthSession.self, from: data)
@@ -691,27 +701,27 @@ final class FluxService: ObservableObject {
 
     private static func loadEndpointDefaults() -> (host: String, port: Int) {
         let defaults = UserDefaults.standard
-        let storedHost = defaults.string(forKey: hostDefaultsKey).map(normalizeHost)
-        let storedPort = defaults.integer(forKey: portDefaultsKey).nonZero
+        let storedHost = defaults.string(forKey: Flux.DefaultsKeys.host).map(normalizeHost)
+        let storedPort = defaults.integer(forKey: Flux.DefaultsKeys.port).nonZero
 
         switch (storedHost, storedPort) {
         case (.none, .none):
-            defaults.set(defaultHost, forKey: hostDefaultsKey)
-            defaults.set(defaultPort, forKey: portDefaultsKey)
+            defaults.set(defaultHost, forKey: Flux.DefaultsKeys.host)
+            defaults.set(defaultPort, forKey: Flux.DefaultsKeys.port)
             return (defaultHost, defaultPort)
         case let (.some(host), .some(port)) where shouldMigrateLegacyEndpoint(host: host, port: port):
-            defaults.set(defaultHost, forKey: hostDefaultsKey)
-            defaults.set(defaultPort, forKey: portDefaultsKey)
+            defaults.set(defaultHost, forKey: Flux.DefaultsKeys.host)
+            defaults.set(defaultPort, forKey: Flux.DefaultsKeys.port)
             return (defaultHost, defaultPort)
         case let (.some(host), .some(port)):
             return (host, port)
         case let (.some(host), .none):
             let port = host == defaultHost ? defaultPort : 8000
-            defaults.set(port, forKey: portDefaultsKey)
+            defaults.set(port, forKey: Flux.DefaultsKeys.port)
             return (host, port)
         case let (.none, .some(port)):
             let host = port == defaultPort ? defaultHost : "127.0.0.1"
-            defaults.set(host, forKey: hostDefaultsKey)
+            defaults.set(host, forKey: Flux.DefaultsKeys.host)
             return (host, port)
         }
     }

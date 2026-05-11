@@ -26,22 +26,6 @@ struct DashboardView: View {
     @State private var selectedDayDate: Date?
     @State private var selectedTimeSlot: String?
 
-    // Daily Insight
-    @State private var dailyInsightText: String?
-    @State private var isDailyInsightLoading = false
-
-    // Coach Chat (B3/B4)
-    @State private var showCoachChat = false
-    @State private var coachMessages: [(question: String, answer: String)] = []
-    @State private var isCoachLoading = false
-    @State private var customQuestion = ""
-
-    private let coachPresetQuestions: [String] = [
-        "为什么我下午续航总是下降？",
-        "怎样延长高效时间？",
-        "我的紧张度正常吗？"
-    ]
-
     /// 今日已完成的 Session（计算属性过滤，避免 init 中初始化 @Query 导致崩溃）
     private var todaySessions: [Session] {
         let startOfDay = Calendar.current.startOfDay(for: Date())
@@ -61,11 +45,7 @@ struct DashboardView: View {
     private var staminaState: StaminaState { service.displayStaminaState }
     private var isLive: Bool { service.isConnected || bleManager.isConnected }
 
-    private var isCalibratedToday: Bool {
-        let last = UserDefaults.standard.double(forKey: "flux_last_calibration")
-        guard last > 0 else { return false }
-        return Calendar.current.isDateInToday(Date(timeIntervalSince1970: last))
-    }
+    private var isCalibratedToday: Bool { Flux.Calibration.isCalibratedToday }
 
     // MARK: - Body
 
@@ -105,10 +85,14 @@ struct DashboardView: View {
                         todaySummaryCard
                     }
 
+                    // AI 洞察 — Hero Card 风格（详见 InsightSection.swift）
+                    DailyInsightHeroCard(
+                        todaySessions: todaySessions,
+                        recentSessions: recentSessions
+                    )
+
                     // 洞察组件区 (iOS Widget 风格)
                     insightWidgetGrid
-
-                    dailyInsightCard
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 80)
@@ -496,330 +480,10 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Daily Insight Card
+    // 旧的 dailyInsightCard / coachChatSheet / loadDailyInsight / askCoach 已搬到
+    // Views/InsightSection.swift（DailyInsightHeroCard + InsightDetailView + AskCoachSheet），
+    // 体验对齐 Oura / Whoop：headline → 量化次行 → 趋势 chip → narrative → dimension chip → 深入页。
 
-    @ViewBuilder
-    private var dailyInsightCard: some View {
-        let hasAnomalies: Bool = {
-            if #available(iOS 26.0, *) {
-                return !NLPSummaryEngine.shared.detectDailyAnomalies(sessions: todaySessions).isEmpty
-            }
-            return false
-        }()
-        let hasCriticalAnomaly: Bool = {
-            if #available(iOS 26.0, *) {
-                return NLPSummaryEngine.shared.detectDailyAnomalies(sessions: todaySessions).contains { $0.severity == .critical }
-            }
-            return false
-        }()
-        let anomalyCount: Int = {
-            if #available(iOS 26.0, *) {
-                return NLPSummaryEngine.shared.detectDailyAnomalies(sessions: todaySessions).count
-            }
-            return 0
-        }()
-
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                ZStack {
-                    Circle()
-                        .fill(Color.cyan.opacity(0.12))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: "waveform.path")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.cyan)
-                }
-                Text("体能洞察")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                // 引擎状态指示
-                if #available(iOS 26.0, *) {
-                    let engineAvailable = BodyInsightEngine.shared.isAvailable
-                    Image(systemName: engineAvailable ? "cpu.fill" : "cpu")
-                        .font(.system(size: 9))
-                        .foregroundStyle(engineAvailable ? Flux.Colors.success : Flux.Colors.warning)
-                        .help(BodyInsightEngine.shared.diagnosticInfo)
-                }
-
-                // 异常 badge
-                if hasAnomalies {
-                    HStack(spacing: 3) {
-                        Image(systemName: hasCriticalAnomaly ? "exclamationmark.triangle.fill" : "info.circle.fill")
-                            .font(.system(size: 9))
-                        Text("\(anomalyCount) 项异常")
-                            .font(.system(size: 10, weight: .medium))
-                    }
-                    .foregroundStyle(hasCriticalAnomaly ? Flux.Colors.accent : Flux.Colors.warning)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background((hasCriticalAnomaly ? Flux.Colors.accent : Flux.Colors.warning).opacity(0.1), in: Capsule())
-                }
-
-                Spacer()
-                if isDailyInsightLoading {
-                    ProgressView()
-                        .controlSize(.mini)
-                }
-            }
-
-            if let text = dailyInsightText {
-                Text(text)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if !isDailyInsightLoading {
-                Text("加载中…")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
-            }
-
-            // 追问按钮行（可选：了解自己的状态数据）
-            if dailyInsightText != nil {
-                Divider()
-                Button {
-                    showCoachChat = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "info.circle")
-                            .font(.caption2)
-                        Text("了解数据含义")
-                            .font(.caption.weight(.medium))
-                    }
-                    .foregroundStyle(.cyan)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(14)
-        .background(
-            LinearGradient(
-                colors: [Flux.Colors.accent.opacity(0.06), Color(.secondarySystemGroupedBackground)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: .rect(cornerRadius: Flux.Radius.large)
-        )
-        .onAppear { loadDailyInsight() }
-        .onChange(of: todaySessions.count) { _, _ in
-            loadDailyInsight()
-        }
-        .sheet(isPresented: $showCoachChat) {
-            coachChatSheet
-        }
-    }
-
-    private func loadDailyInsight() {
-        guard !isDailyInsightLoading else { return }
-        isDailyInsightLoading = true
-
-        Task {
-            let text: String
-            if #available(iOS 26.0, *) {
-                if todaySessions.isEmpty {
-                    text = "今天还没有记录。连上设备开始专注，让身体数据帮你了解自己的状态。"
-                } else {
-                    text = await BodyInsightEngine.shared.generateDailySummary(sessions: todaySessions)
-                }
-            } else {
-                text = generateFallbackDailyInsight()
-            }
-            await MainActor.run {
-                dailyInsightText = text
-                isDailyInsightLoading = false
-            }
-        }
-    }
-
-    // MARK: - Coach Chat Sheet (B3/B4)
-
-    private var coachChatSheet: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        // 预设问题
-                        if coachMessages.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("想知道数据背后的含义？")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-
-                                ForEach(coachPresetQuestions, id: \.self) { q in
-                                    Button {
-                                        askCoach(question: q)
-                                    } label: {
-                                        Text(q)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.cyan)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 8)
-                                            .background(Color.cyan.opacity(0.08), in: Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .disabled(isCoachLoading)
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-
-                        // 消息列表
-                        ForEach(Array(coachMessages.enumerated()), id: \.offset) { idx, msg in
-                            VStack(alignment: .leading, spacing: 8) {
-                                // 用户问题
-                                HStack {
-                                    Spacer()
-                                    Text(msg.question)
-                                        .font(.subheadline)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(Flux.Colors.accent.opacity(0.12), in: .rect(cornerRadius: 12))
-                                }
-
-                                // 教练回答
-                                HStack(alignment: .top, spacing: 8) {
-                                    Image(systemName: "brain.head.profile.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(Flux.Colors.accent)
-                                        .padding(.top, 4)
-                                    Text(msg.answer)
-                                        .font(.subheadline)
-                                        .lineSpacing(3)
-                                }
-                            }
-                            .padding(.horizontal)
-                            .id(idx)
-                        }
-
-                        if isCoachLoading {
-                            HStack(spacing: 8) {
-                                Image(systemName: "brain.head.profile.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(Flux.Colors.accent)
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("思考中…")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-                    .padding(.vertical)
-                }
-                .onChange(of: coachMessages.count) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo(coachMessages.count - 1, anchor: .bottom)
-                    }
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                HStack(spacing: 8) {
-                    TextField("输入你的问题…", text: $customQuestion)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.subheadline)
-                        .submitLabel(.send)
-                        .onSubmit { sendCustomQuestion() }
-
-                    Button {
-                        sendCustomQuestion()
-                    } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(customQuestion.isEmpty ? .gray : Flux.Colors.accent)
-                    }
-                    .disabled(customQuestion.isEmpty || isCoachLoading)
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(.bar)
-            }
-            .navigationTitle("了解数据")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { showCoachChat = false }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
-    private func sendCustomQuestion() {
-        let q = customQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return }
-        customQuestion = ""
-        askCoach(question: q)
-    }
-
-    private func askCoach(question: String) {
-        guard !isCoachLoading else { return }
-        isCoachLoading = true
-
-        Task {
-            let answer: String
-            if #available(iOS 26.0, *) {
-                let anomalies = NLPSummaryEngine.shared.detectDailyAnomalies(sessions: todaySessions)
-                let weeklyTrend = recentSessions.count >= 2
-                    ? NLPSummaryEngine.shared.generateWeeklyTrend(sessions: recentSessions)
-                    : nil
-
-                let context = NLPSummaryEngine.CoachContext(
-                    todaySessions: todaySessions,
-                    dailyInsight: dailyInsightText,
-                    anomalies: anomalies,
-                    weeklyTrend: weeklyTrend
-                )
-
-                answer = await NLPSummaryEngine.shared.askFollowUp(context: context, question: question)
-            } else {
-                answer = "AI 教练需要 iOS 26.0 或更高版本。建议每 25 分钟主动休息 5 分钟，保持良好的专注节奏。"
-            }
-
-            await MainActor.run {
-                coachMessages.append((question: question, answer: answer))
-                isCoachLoading = false
-            }
-        }
-    }
-
-    /// iOS 26 以下的 fallback（不依赖 NLPSummaryEngine）
-    private func generateFallbackDailyInsight() -> String {
-        guard !todaySessions.isEmpty else {
-            let hour = Calendar.current.component(.hour, from: Date())
-            if hour < 12 {
-                return "早上好！连上设备开始今天的第一段专注吧。"
-            } else if hour < 18 {
-                return "下午好，今天还没有专注记录。找个时间段开始一段吧。"
-            } else {
-                return "今天还没有记录，没关系，适当休息也是提升的一部分。"
-            }
-        }
-
-        let count = todaySessions.count
-        let totalMin = Int(todaySessions.reduce(0) { $0 + $1.duration } / 60)
-        let avgVals = todaySessions.compactMap(\.avgStamina)
-        let avg = avgVals.isEmpty ? 0.0 : avgVals.reduce(0, +) / Double(avgVals.count)
-
-        if avg >= 75 {
-            return [
-                "今天 \(count) 段专注累计 \(totalMin) 分钟，续航 \(Int(avg))，状态很好。",
-                "身体信号稳定，\(totalMin) 分钟专注、续航 \(Int(avg))，保持这个节奏。"
-            ].randomElement()!
-        } else if avg >= 50 {
-            return [
-                "今天 \(count) 段专注共 \(totalMin) 分钟，续航 \(Int(avg))，试试在疲劳前主动休息 5 分钟。",
-                "\(totalMin) 分钟专注，续航 \(Int(avg))，有提升空间——关键在休息节奏。"
-            ].randomElement()!
-        } else {
-            return [
-                "今天身体信号偏弱，续航 \(Int(avg))，早点休息明天会更好。",
-                "续航 \(Int(avg)) 偏低，身体需要恢复，不要勉强自己。"
-            ].randomElement()!
-        }
-    }
 
     private func batteryIcon(_ level: Int) -> String {
         if level > 75 { return "battery.100" }
@@ -966,35 +630,16 @@ private struct WidgetBestSlot: View {
     let sessions: [Session]
 
     private var bestSlot: (name: String, avg: Double, icon: String)? {
-        var map: [String: [Double]] = [:]
+        var sums: [Flux.TimeSlot: (sum: Double, n: Int)] = [:]
         for s in sessions {
             guard let avg = s.avgStamina else { continue }
-            let hour = Calendar.current.component(.hour, from: s.startedAt)
-            let slot: String
-            switch hour {
-            case 6..<12:  slot = "上午"
-            case 12..<14: slot = "午间"
-            case 14..<18: slot = "下午"
-            case 18..<22: slot = "晚间"
-            default:      slot = "其他"
-            }
-            map[slot, default: []].append(avg)
+            let slot = Flux.TimeSlot.from(date: s.startedAt)
+            let cur = sums[slot] ?? (0, 0)
+            sums[slot] = (cur.sum + avg, cur.n + 1)
         }
-        guard let best = map.max(by: {
-            $0.value.reduce(0, +) / Double($0.value.count) <
-            $1.value.reduce(0, +) / Double($1.value.count)
-        }) else { return nil }
-
-        let avg = best.value.reduce(0, +) / Double(best.value.count)
-        let icon: String
-        switch best.key {
-        case "上午": icon = "sunrise.fill"
-        case "午间": icon = "sun.max.fill"
-        case "下午": icon = "sun.haze.fill"
-        case "晚间": icon = "moon.stars.fill"
-        default:     icon = "clock.fill"
-        }
-        return (best.key, avg, icon)
+        let avgs: [(slot: Flux.TimeSlot, avg: Double)] = sums.map { ($0.key, $0.value.sum / Double($0.value.n)) }
+        guard let best = avgs.max(by: { $0.avg < $1.avg }) else { return nil }
+        return (best.slot.rawValue, best.avg, best.slot.iconName)
     }
 
     var body: some View {
@@ -1338,29 +983,18 @@ private struct TimeSlotChartCard: View {
     let sessions: [Session]
     @Binding var selectedSlot: String?
 
-    private static let slotOrder = ["上午": 0, "午间": 1, "下午": 2, "晚间": 3]
-
     private var slots: [SlotData] {
-        var map: [String: [Double]] = [:]
+        var map: [Flux.TimeSlot: [Double]] = [:]
         for s in sessions {
             guard let avg = s.avgStamina else { continue }
-            let hour = Calendar.current.component(.hour, from: s.startedAt)
-            let slot: String
-            switch hour {
-            case 6..<12:  slot = "上午"
-            case 12..<14: slot = "午间"
-            case 14..<18: slot = "下午"
-            case 18..<22: slot = "晚间"
-            default:      slot = "其他"
-            }
-            map[slot, default: []].append(avg)
+            map[Flux.TimeSlot.from(date: s.startedAt), default: []].append(avg)
         }
         return map.map { (slot, values) in
             SlotData(
-                slot: slot,
+                slot: slot.rawValue,
                 avgStamina: values.reduce(0, +) / Double(values.count),
                 count: values.count,
-                order: Self.slotOrder[slot] ?? 4
+                order: slot.order
             )
         }.sorted { $0.order < $1.order }
     }

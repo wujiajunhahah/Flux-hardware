@@ -24,13 +24,13 @@ final class OnDeviceStaminaEngine {
         let isWorking: Bool
     }
 
-    // MARK: - Weights
+    // MARK: - Weights (引用 Flux.StaminaWeights — 单一权重源)
 
-    private let w1: Double = 0.40
-    private let w2: Double = 0.25
-    private let w3: Double = 0.35
-    private let baseDrain: Double = 1.8
-    private let baseRecovery: Double = 5.0
+    private let w1: Double = Flux.StaminaWeights.consistency
+    private let w2: Double = Flux.StaminaWeights.tension
+    private let w3: Double = Flux.StaminaWeights.fatigue
+    private let baseDrain: Double = Flux.StaminaWeights.baseDrain
+    private let baseRecovery: Double = Flux.StaminaWeights.baseRecovery
 
     // MARK: - Adaptive baseline calibration
 
@@ -81,8 +81,8 @@ final class OnDeviceStaminaEngine {
     private var recoveryEMA: Double
 
     init() {
-        drainEMA = 1.8
-        recoveryEMA = 5.0
+        drainEMA = Flux.StaminaWeights.baseDrain
+        recoveryEMA = Flux.StaminaWeights.baseRecovery
     }
 
     // MARK: - Update
@@ -203,10 +203,10 @@ final class OnDeviceStaminaEngine {
         }
 
         let state: String = {
-            if !isWork { return "recovering" }
-            if stamina > 60 { return "focused" }
-            if stamina > 30 { return "fading" }
-            return "depleted"
+            if !isWork { return StaminaState.recovering.rawValue }
+            if stamina > Flux.StaminaWeights.focusedMin { return StaminaState.focused.rawValue }
+            if stamina > Flux.StaminaWeights.fadingMin  { return StaminaState.fading.rawValue }
+            return StaminaState.depleted.rawValue
         }()
 
         let dr = max(0.01, drainEMA)

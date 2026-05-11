@@ -117,7 +117,7 @@ struct GeekDataPanel: View {
 
     private var calibrationSection: some View {
         Section {
-            let last = UserDefaults.standard.double(forKey: "flux_last_calibration")
+            let last = UserDefaults.standard.double(forKey: Flux.DefaultsKeys.lastCalibration)
             if last > 0 {
                 let date = Date(timeIntervalSince1970: last)
                 geekRow("上次校准", date.formatted(.dateTime.month().day().hour().minute()))

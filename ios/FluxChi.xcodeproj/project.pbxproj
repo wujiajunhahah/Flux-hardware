@@ -56,6 +56,9 @@
 		NLP00000001STATS0000000001 /* NLPStatsExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = NLP00000002STATS0000000001 /* NLPStatsExtractor.swift */; };
 		NLP00000001ANOML0000000001 /* NLPAnomalyDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = NLP00000002ANOML0000000001 /* NLPAnomalyDetector.swift */; };
 		META0000001BUILD0000000001 /* FluxMeta.swift in Sources */ = {isa = PBXBuildFile; fileRef = META0000002FREF00000000001 /* FluxMeta.swift */; };
+		FXDOMA01BUILD000000000001 /* FluxDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = FXDOMA02FILE0000000000001 /* FluxDomain.swift */; };
+		FXSCHE01BUILD000000000001 /* FluxSchema.swift in Sources */ = {isa = PBXBuildFile; fileRef = FXSCHE02FILE0000000000001 /* FluxSchema.swift */; };
+		INSGTSEC01BUILD0000000001 /* InsightSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = INSGTSEC02FILE0000000001 /* InsightSection.swift */; };
 		FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371B9343B23F955F6F6A51BF /* FluxModels.swift */; };
 		C0C0C0C0C0C0C0C0C0C0C002 /* ConnectionGuideSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */; };
 				WD00000001000000000000001 /* FluxChiWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = WD00000002000000000000001 /* FluxChiWidgets.swift */; };
@@ -110,6 +113,9 @@
 		32067C2042217E02560ABB85 /* FluxChi.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FluxChi.entitlements; sourceTree = "<group>"; };
 		34C4C08A362F4D9CE7712D17 /* BLEManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEManager.swift; sourceTree = "<group>"; };
 		371B9343B23F955F6F6A51BF /* FluxModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxModels.swift; sourceTree = "<group>"; };
+		FXDOMA02FILE0000000000001 /* FluxDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxDomain.swift; sourceTree = "<group>"; };
+		FXSCHE02FILE0000000000001 /* FluxSchema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxSchema.swift; sourceTree = "<group>"; };
+		INSGTSEC02FILE0000000001 /* InsightSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightSection.swift; sourceTree = "<group>"; };
 		380BBB1F3FD98322B2060455 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		3CB0F83592C8DF2E36A992D2 /* model_meta.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = model_meta.json; sourceTree = "<group>"; };
 		5B14342F8A691567B25C488F /* PersonalizationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalizationManager.swift; sourceTree = "<group>"; };
@@ -227,6 +233,7 @@
 				0C2D3E4F5A6B7C8D9E0F1A2B /* OnboardingView.swift */,
 				0D2E3F4A5B6C7D8E9F0A1B2C /* GeekDataPanel.swift */,
 				F5BA43E68EE9F04A74C0DF01 /* DashboardView.swift */,
+				INSGTSEC02FILE0000000001 /* InsightSection.swift */,
 				C0C0C0C0C0C0C0C0C0C0C001 /* ConnectionGuideSheet.swift */,
 				DCALV01FILE000000000001 /* DailyCalibrationView.swift */,
 				B304D5891CBDFF2564CBBE02 /* FeedbackView.swift */,
@@ -267,6 +274,8 @@
 		8D9D200F4FE8E3A98EEA8C97 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				FXDOMA02FILE0000000000001 /* FluxDomain.swift */,
+				FXSCHE02FILE0000000000001 /* FluxSchema.swift */,
 				371B9343B23F955F6F6A51BF /* FluxModels.swift */,
 				META0000002FREF00000000001 /* FluxMeta.swift */,
 				PPROF01FILEREF0000000001 /* PersonalizationProfile.swift */,
@@ -459,6 +468,7 @@
 				2C17DEBF311E0371CC8E5D50 /* AlertManager.swift in Sources */,
 				FCCC0D6429710AC7DCEA3523 /* BLEManager.swift in Sources */,
 				41EB0AED9E3D37E9D144B449 /* DashboardView.swift in Sources */,
+				INSGTSEC01BUILD0000000001 /* InsightSection.swift in Sources */,
 				C0C0C0C0C0C0C0C0C0C0C002 /* ConnectionGuideSheet.swift in Sources */,
 				DCALV01BUILD000000000001 /* DailyCalibrationView.swift in Sources */,
 				EMGCS01BUILD000000000001 /* EMGCalibrationStore.swift in Sources */,
@@ -469,6 +479,8 @@
 				37D1B293D85533CBE3726A66 /* FluxChiApp.swift in Sources */,
 				A9EBB5B316A867AB2285ABE3 /* FluxComponents.swift in Sources */,
 				FE7186AF0D82C0FA26301C2B /* FluxModels.swift in Sources */,
+				FXDOMA01BUILD000000000001 /* FluxDomain.swift in Sources */,
+				FXSCHE01BUILD000000000001 /* FluxSchema.swift in Sources */,
 				66E6A5ADCD0E5DFFDB401A86 /* FluxService.swift in Sources */,
 				5909BF9467E24D418EE4A8F4 /* FluxTokens.swift in Sources */,
 				STMPALETTE01BUILDMAIN00001 /* StaminaStatePalette.swift in Sources */,
@@ -522,7 +534,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = FluxChiLive/FluxChiLive.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				DEVELOPMENT_TEAM = M4T239BM58;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FluxChiLive/Info.plist;
@@ -675,7 +687,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = FluxChi/FluxChi.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				DEVELOPMENT_TEAM = M4T239BM58;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FluxChi/Resources/Info.plist;
@@ -704,7 +716,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = FluxChi/FluxChi.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				DEVELOPMENT_TEAM = M4T239BM58;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FluxChi/Resources/Info.plist;
@@ -733,7 +745,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = FluxChiLive/FluxChiLive.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				DEVELOPMENT_TEAM = M4T239BM58;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FluxChiLive/Info.plist;

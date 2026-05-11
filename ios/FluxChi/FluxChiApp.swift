@@ -13,7 +13,7 @@ struct FluxChiApp: App {
     @StateObject private var alertManager = AlertManager()
     @StateObject private var liveActivityManager = LiveActivityManager()
 
-    @AppStorage("flux_onboarding_done") private var onboardingDone = false
+    @AppStorage(Flux.DefaultsKeys.onboardingDone) private var onboardingDone = false
 
     /// Deep link notification names
     static let showActiveSessionNotification = Notification.Name("FluxChi.showActiveSession")
@@ -75,13 +75,13 @@ struct FluxChiApp: App {
 
                         guard let svc = service,
                               let stVal = svc.personalizedDisplayStamina else { return }
-                        let stRaw = svc.displayStaminaState.rawValue
+                        let stEnum = svc.displayStaminaState
                         let contMin = state.stamina?.continuousWorkMin ?? 0
                         let emg = state.stamina
-                        alertManager?.evaluate(stamina: stVal, state: stRaw, continuousWorkMin: contMin)
+                        alertManager?.evaluate(stamina: stVal, state: stEnum, continuousWorkMin: contMin)
                         liveActivityManager?.updateActivity(
                             stamina: stVal,
-                            state: stRaw,
+                            state: stEnum.rawValue,
                             activity: state.activity,
                             consistency: emg?.consistency ?? 0,
                             tension: emg?.tension ?? 0,
@@ -96,16 +96,16 @@ struct FluxChiApp: App {
             .onChange(of: service.state?.timestamp) { _, _ in
                 guard !bleManager.isConnected, let s = service.state else { return }
                 guard let stVal = service.personalizedDisplayStamina else { return }
-                let stRaw = service.displayStaminaState.rawValue
+                let stEnum = service.displayStaminaState
                 let emg = s.stamina
                 alertManager.evaluate(
                     stamina: stVal,
-                    state: stRaw,
+                    state: stEnum,
                     continuousWorkMin: emg?.continuousWorkMin ?? 0
                 )
                 liveActivityManager.updateActivity(
                     stamina: stVal,
-                    state: stRaw,
+                    state: stEnum.rawValue,
                     activity: s.activity,
                     consistency: emg?.consistency ?? 0,
                     tension: emg?.tension ?? 0,
@@ -122,6 +122,7 @@ struct FluxChiApp: App {
                 handleDeepLink(url)
             }
         }
+        // 迁移计划留在 FluxSchema.swift，等真正要 V2 字段时再切到 FluxModelContainer.makeShared()
         .modelContainer(for: [
             Session.self, Segment.self, FluxSnapshot.self, UserFeedback.self
         ])
@@ -161,11 +162,7 @@ struct FluxChiApp: App {
 
     private var isLive: Bool { service.isConnected || bleManager.isConnected }
 
-    private var isCalibratedToday: Bool {
-        let last = UserDefaults.standard.double(forKey: "flux_last_calibration")
-        guard last > 0 else { return false }
-        return Calendar.current.isDateInToday(Date(timeIntervalSince1970: last))
-    }
+    private var isCalibratedToday: Bool { Flux.Calibration.isCalibratedToday }
 
     @ViewBuilder
     private var mainTabView: some View {

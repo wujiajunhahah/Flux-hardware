@@ -1,5 +1,12 @@
 import Foundation
 
+/// 安全 random：空数组时返回 fallback 而非 crash。
+private extension Array where Element == String {
+    func randomOr(_ fallback: String) -> String {
+        randomElement() ?? fallback
+    }
+}
+
 /// Template-based fallback generators when Foundation Models are unavailable.
 @available(iOS 26.0, *)
 enum NLPFallbackGenerator {
@@ -234,6 +241,6 @@ enum NLPFallbackGenerator {
             "基于你的身体数据，最重要的建议是建立固定节奏——工作 25 分钟、休息 5 分钟、每 2 小时一次长休息 15 分钟。节奏感比「坚持更久」更能提升效率。",
             "好问题。如果只能给一个建议，那就是「主动休息」——不要等身体发出疲劳信号才休息，在状态还好的时候就主动停下来 5 分钟。这一个习惯就能带来明显改变。"
         ]
-        return genericAnswers.randomElement()!
+        return genericAnswers.randomOr("建议关注主动休息节奏：每 25 分钟站起来活动 5 分钟。")
     }
 }

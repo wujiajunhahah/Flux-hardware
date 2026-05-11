@@ -393,8 +393,14 @@ final class FluxLogger: ObservableObject {
         os_log("%{public}@", log: osLog, type: osLogType, entry.formatCompact())
 
         // 节流持久化 - 不再每条都写磁盘
+        // 但 .error 级别立即 flush——防止崩溃前 5s 节流窗口里的关键日志丢失。
+        // FluxLogger 已是 @MainActor，performSave 是同步函数，直接调即可。
         if config.enableFilePersistence {
-            scheduleSave()
+            if level == .error {
+                performSave()
+            } else {
+                scheduleSave()
+            }
         }
     }
 

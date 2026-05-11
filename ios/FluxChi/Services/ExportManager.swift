@@ -235,16 +235,8 @@ enum ExportManager {
                 )
             },
             processing: ProcessingInfo(
-                staminaWeights: [
-                    "consistency": 0.40,
-                    "tension": 0.25,
-                    "fatigue": 0.35
-                ],
-                staminaThresholds: [
-                    "focused": 60,
-                    "fading": 30,
-                    "depleted": 0
-                ],
+                staminaWeights: Flux.StaminaWeights.weightsDict,
+                staminaThresholds: Flux.StaminaWeights.thresholdsDict,
                 emgDecoding: "24-bit signed -> uV = (value / 8388607) * 4.5 / 1200 * 1e6",
                 featureWindow: "250 samples @ 1kHz = 250ms sliding window"
             ),
@@ -413,9 +405,9 @@ enum ExportManager {
     static func uploadSessionToGateway(session: Session) async throws -> String {
         let data = try export(session: session)
         let host = FluxService.normalizeHost(
-            UserDefaults.standard.string(forKey: "flux_host") ?? FluxService.defaultHost
+            UserDefaults.standard.string(forKey: Flux.DefaultsKeys.host) ?? FluxService.defaultHost
         )
-        var port = UserDefaults.standard.integer(forKey: "flux_port")
+        var port = UserDefaults.standard.integer(forKey: Flux.DefaultsKeys.port)
         if port == 0 { port = FluxService.defaultPort }
         return try await uploadExportData(data, host: host, port: port)
     }

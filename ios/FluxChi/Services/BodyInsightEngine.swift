@@ -53,7 +53,11 @@ final class BodyInsightEngine {
 
     // MARK: - Public API
 
-    /// 为 session 生成体能洞察（状态描述，非建议）
+    /// 为 session 生成体能洞察（状态描述，非建议）。
+    /// `@MainActor`：内部 `extractStats` / `detectPatterns` 会读 SwiftData `@Model` 属性
+    /// （`session.segments.snapshots`），必须在 MainActor 上访问。Foundation Models 的
+    /// `await session.respond(to:)` 仍会在 SDK 内部 hop 到后台跑推理，不会卡 UI。
+    @MainActor
     func generateInsight(for session: Session) async -> String {
         let stats = extractStats(session)
         let patterns = detectPatterns(for: session)
@@ -65,7 +69,8 @@ final class BodyInsightEngine {
         return fallbackInsight(stats, patterns: patterns)
     }
 
-    /// 生成每日体能总结
+    /// 生成每日体能总结。同 `generateInsight` 的 actor 约束：必须在 MainActor 上。
+    @MainActor
     func generateDailySummary(sessions: [Session]) async -> String {
         guard !sessions.isEmpty else { return "今天还没有记录。" }
 
@@ -161,19 +166,10 @@ final class BodyInsightEngine {
         let avgStaminas = sessions.compactMap(\.avgStamina).compactMap { $0 }
 
         // 时段分析
-        var timeSlotData: [String: [Double]] = [:]
+        var timeSlotData: [Flux.TimeSlot: [Double]] = [:]
         for s in sessions {
             guard let avg = s.avgStamina else { continue }
-            let hour = Calendar.current.component(.hour, from: s.startedAt)
-            let slot: String
-            switch hour {
-            case 6..<12: slot = "上午"
-            case 12..<14: slot = "午间"
-            case 14..<18: slot = "下午"
-            case 18..<22: slot = "晚间"
-            default: slot = "其他"
-            }
-            timeSlotData[slot, default: []].append(avg)
+            timeSlotData[Flux.TimeSlot.from(date: s.startedAt), default: []].append(avg)
         }
 
         // 找最佳时段
@@ -181,8 +177,8 @@ final class BodyInsightEngine {
         if let best = slotAvgs.max(by: { $0.value < $1.value }) {
             patterns.append(Pattern(
                 type: .stablePerformance,
-                description: "\(best.key)平均续航 \(Int(best.value))，是最佳时段",
-                data: ["timeSlot": best.key, "avg": best.value]
+                description: "\(best.key.rawValue)平均续航 \(Int(best.value))，是最佳时段",
+                data: ["timeSlot": best.key.rawValue, "avg": best.value]
             ))
         }
 
@@ -231,15 +227,7 @@ final class BodyInsightEngine {
         let fatigue = snapshots.isEmpty ? 0 : snapshots.map(\.fatigue).reduce(0, +) / Double(snapshots.count)
         let consistency = snapshots.isEmpty ? 0 : snapshots.map(\.consistency).reduce(0, +) / Double(snapshots.count)
 
-        let hour = Calendar.current.component(.hour, from: session.startedAt)
-        let timeOfDay: String
-        switch hour {
-        case 6..<12: timeOfDay = "上午"
-        case 12..<14: timeOfDay = "午间"
-        case 14..<18: timeOfDay = "下午"
-        case 18..<22: timeOfDay = "晚间"
-        default: timeOfDay = "其他"
-        }
+        let timeOfDay = Flux.TimeSlot.from(date: session.startedAt).rawValue
 
         return SessionStats(
             durationMinutes: durationMin,
@@ -353,7 +341,7 @@ final class BodyInsightEngine {
             let text = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
             return text.isEmpty ? nil : text
         } catch {
-            print("[BodyInsight] Foundation Models 错误: \(error)")
+            FluxLog.nlp.error("BodyInsight Foundation Models 失败", error: error)
             return nil
         }
         #else

@@ -9,10 +9,9 @@ struct EMGCalibrationStore: Codable, Equatable {
     var calibratedAt: TimeInterval?
 
     static let channelCount = 8
-    private static let defaultsKey = "flux_emg_calibration_v1"
 
     static func load() -> EMGCalibrationStore? {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+        guard let data = UserDefaults.standard.data(forKey: Flux.DefaultsKeys.emgCalibrationV1),
               let v = try? JSONDecoder().decode(EMGCalibrationStore.self, from: data)
         else { return nil }
         return v
@@ -22,8 +21,8 @@ struct EMGCalibrationStore: Codable, Equatable {
         var copy = self
         copy.calibratedAt = Date().timeIntervalSince1970
         guard let data = try? JSONEncoder().encode(copy) else { return }
-        UserDefaults.standard.set(data, forKey: Self.defaultsKey)
-        UserDefaults.standard.set(copy.calibratedAt, forKey: "flux_last_calibration")
+        UserDefaults.standard.set(data, forKey: Flux.DefaultsKeys.emgCalibrationV1)
+        UserDefaults.standard.set(copy.calibratedAt, forKey: Flux.DefaultsKeys.lastCalibration)
     }
 
     /// 由采样序列计算质量：用力峰值需明显高于安静。

@@ -28,6 +28,9 @@ final class NLPSummaryEngine {
     // MARK: - Public API
 
     /// Generate AI summary for a session (prefer on-device LLM, fallback to template)
+    /// `@MainActor`：内部 `NLPStatsExtractor.extractSessionStats` 会访问 `session.segments.snapshots`
+    /// (SwiftData `@Model`),跨 actor 访问会 SIGABRT。FM 推理通过 `await` 自然 hop 到后台。
+    @MainActor
     func generateSummary(for session: Session) async -> String {
         let stats = NLPStatsExtractor.extractSessionStats(session)
         let anomalies = NLPAnomalyDetector.detectAnomalies(for: session)
@@ -40,6 +43,7 @@ final class NLPSummaryEngine {
     }
 
     /// Generate AI advice for a session (used by SessionSummarySheet)
+    @MainActor
     func generateAdvice(for session: Session) async -> String? {
         let stats = NLPStatsExtractor.extractSessionStats(session)
         let prompt = NLPPromptBuilder.buildAdvicePrompt(stats)
@@ -49,6 +53,7 @@ final class NLPSummaryEngine {
     // MARK: - Daily Insight
 
     /// Generate daily insight across all today's sessions
+    @MainActor
     func generateDailyInsight(sessions: [Session], allRecentSessions: [Session] = []) async -> String {
         guard !sessions.isEmpty else { return "今天还没有专注记录，开始第一段吧。" }
 
@@ -105,6 +110,7 @@ final class NLPSummaryEngine {
     ]
 
     /// Smart follow-up: answer user question based on current context
+    @MainActor
     func askFollowUp(context: CoachContext, question: String) async -> String {
         let stats = context.todaySessions.isEmpty
             ? nil

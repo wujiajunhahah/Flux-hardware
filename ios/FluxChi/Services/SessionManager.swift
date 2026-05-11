@@ -15,6 +15,19 @@ final class SessionManager: ObservableObject {
     private var snapshotTimer: Timer?
     private var elapsedTimer: Timer?
 
+    /// 累计已暂停的时长（秒）；在 elapsed/duration 显示时扣除，使"已暂停"期间时间不再增长。
+    private var totalPausedSec: TimeInterval = 0
+    /// 当前暂停区间起点；resume 或 end 时合入 `totalPausedSec`。
+    private var pausedAt: Date?
+
+    /// 当前应展示的"实际工作时长"——已减去暂停累计。
+    private func currentActiveElapsed(now: Date = Date()) -> TimeInterval {
+        guard let session = activeSession else { return 0 }
+        let raw = (session.endedAt ?? now).timeIntervalSince(session.startedAt)
+        let live = pausedAt.map { now.timeIntervalSince($0) } ?? 0
+        return max(0, raw - totalPausedSec - live)
+    }
+
     func configure(modelContext: ModelContext, stateProvider: @escaping () -> FluxState?) {
         self.modelContext = modelContext
         self.stateProvider = stateProvider
@@ -38,6 +51,8 @@ final class SessionManager: ObservableObject {
         activeSegment = segment
         isRecording = true
         isPaused = false
+        totalPausedSec = 0
+        pausedAt = nil
 
         startTimers()
         ctx.saveLogged()
@@ -58,18 +73,31 @@ final class SessionManager: ObservableObject {
     }
 
     func pauseSession() {
+        guard !isPaused else { return }
         isPaused = true
+        pausedAt = Date()
         snapshotTimer?.invalidate()
         snapshotTimer = nil
     }
 
     func resumeSession() {
+        guard isPaused else { return }
+        if let start = pausedAt {
+            totalPausedSec += Date().timeIntervalSince(start)
+        }
+        pausedAt = nil
         isPaused = false
         startSnapshotTimer()
     }
 
     func endSession() -> Session? {
         guard let ctx = modelContext, let session = activeSession else { return nil }
+
+        // 若结束时仍处于暂停态，先合入暂停累计
+        if let start = pausedAt {
+            totalPausedSec += Date().timeIntervalSince(start)
+            pausedAt = nil
+        }
 
         activeSegment?.endedAt = Date()
         session.endedAt = Date()
@@ -82,6 +110,7 @@ final class SessionManager: ObservableObject {
         isRecording = false
         isPaused = false
         elapsed = 0
+        totalPausedSec = 0
 
         ctx.saveLogged()
         return finished
@@ -94,8 +123,8 @@ final class SessionManager: ObservableObject {
 
         elapsedTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, let session = self.activeSession else { return }
-                self.elapsed = session.duration
+                guard let self else { return }
+                self.elapsed = self.currentActiveElapsed()
             }
         }
     }
