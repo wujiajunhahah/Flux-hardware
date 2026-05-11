@@ -38,6 +38,12 @@ final class EMGRingEngine: ObservableObject {
         timer = nil
     }
 
+    /// 安全网：若 View 异常销毁未调用 stop()，deinit 会清掉 Timer
+    /// 避免 60fps 闭包继续在 RunLoop.main 上跑（@MainActor 类的 deinit 自动在 MainActor 执行）
+    deinit {
+        timer?.invalidate()
+    }
+
     /// 非对称 EMA：快攻 (α=0.45) 慢释 (α=0.12)
     private func tick() {
         let ch = currentRMS
