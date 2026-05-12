@@ -32,20 +32,23 @@ final class EMGFeatureExtractor {
     }
 
     /// Extract 84 features from a multi-channel EMG window.
-    /// - Parameter channels: Array of per-channel time series. If < 8 channels, remainder are zero-filled.
-    func extract(channels: [[Double]]) -> [Double] {
+    /// - Parameters:
+    ///   - channels: Array of per-channel time series. If < 8 channels, remainder are zero-filled.
+    ///   - overrideSampleRate: 调用方传入的实测采样率；nil 时用 init 时给的标称值。
+    func extract(channels: [[Double]], overrideSampleRate: Double? = nil) -> [Double] {
         var padded = channels
         while padded.count < Self.channelCount {
             let len = channels.first?.count ?? 0
             padded.append([Double](repeating: 0, count: len))
         }
 
+        let fs = overrideSampleRate ?? self.sampleRate
         var features = [Double]()
         features.reserveCapacity(Self.totalFeatures)
 
         for ch in 0..<Self.channelCount {
             let sig = padded[ch]
-            features.append(contentsOf: channelFeatures(sig))
+            features.append(contentsOf: channelFeatures(sig, sampleRate: fs))
         }
 
         features.append(contentsOf: pairCorrelations(padded))
@@ -61,7 +64,7 @@ final class EMGFeatureExtractor {
         return values.map { $0 - m }
     }
 
-    private func channelFeatures(_ values: [Double]) -> [Double] {
+    private func channelFeatures(_ values: [Double], sampleRate: Double) -> [Double] {
         guard !values.isEmpty else { return [Double](repeating: 0, count: Self.featuresPerChannel) }
 
         let values = removeDC(values)
@@ -70,7 +73,7 @@ final class EMGFeatureExtractor {
         let wl = zip(values.dropFirst(), values).reduce(0.0) { $0 + abs($1.0 - $1.1) }
         let zc = Double(zeroCrossings(values))
         let ssc = Double(slopeSignChanges(values))
-        let (mnf, mdf) = frequencyFeatures(values)
+        let (mnf, mdf) = frequencyFeatures(values, sampleRate: sampleRate)
 
         return [mav, rms, wl, zc, ssc, mnf, mdf]
     }
@@ -99,7 +102,7 @@ final class EMGFeatureExtractor {
     }
 
     /// MNF (mean frequency) and MDF (median frequency) via Accelerate vDSP FFT — O(n log n).
-    private func frequencyFeatures(_ signal: [Double]) -> (Double, Double) {
+    private func frequencyFeatures(_ signal: [Double], sampleRate: Double) -> (Double, Double) {
         let n = signal.count
         guard n >= 16 else { return (0, 0) }
 
@@ -250,9 +253,11 @@ actor EMGActivityInference {
         let probabilities: [String: Double]
     }
 
-    func predict(channels: [[Double]]) -> Prediction? {
+    func predict(channels: [[Double]], sampleRateHz: Double? = nil) -> Prediction? {
         guard let model else { return nil }
-        let features = extractor.extract(channels: channels)
+        // 优先用实测 sampleRate（BLEManager.measuredSampleRateHz），fallback 到 config 里写的标称值。
+        // FFT 频率轴对采样率敏感，错配会让 MNF/MDF 特征值偏移并被 RF 学成噪声。
+        let features = extractor.extract(channels: channels, overrideSampleRate: sampleRateHz)
 
         let nFeatures = NSNumber(value: config.n_features)
         guard let mlArray = try? MLMultiArray(shape: [1, nFeatures], dataType: .float32) else { return nil }

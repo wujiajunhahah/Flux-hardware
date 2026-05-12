@@ -47,6 +47,14 @@ final class BLEManager: NSObject, ObservableObject {
     @Published var emgFrameCount: Int = 0
     @Published var activeChannelCount: Int = 8
     @Published var batteryLevel: Int? // 0-100，nil = 未知
+    /// 实测 BLE 帧率（rolling 64 帧）。WAVELETECH BLE 标称 1000Hz，实际受蓝牙拥塞约 100-340Hz。
+    /// 没有这个测量、用硬编码 320Hz 算 FFT，会让 MNF/MDF 频率轴整体偏移 ×3 倍以上。
+    @Published private(set) var measuredSampleRateHz: Double = 320
+
+    /// IMU 运动幅度 — 滚动均值的 ||gyro|| (rad/s)。
+    /// 用途：辅助 work/rest 判定（手在动 ≠ 安静）+ 抑制运动伪迹（高 IMU 期间 EMG fatigue 不可信）。
+    /// 之前 IMU 帧（0xBB）被完全丢弃，这是巨大的浪费——硬件已经发了，我们没用上。
+    @Published private(set) var imuMotion: Double = 0
 
     var isConnected: Bool { peripheralState == .connected }
 
@@ -69,6 +77,11 @@ final class BLEManager: NSObject, ObservableObject {
     /// 标记 ML/FFT compute 是否正在进行；若是，本轮 buildAndPushState 跳过避免 Task 堆积。
     /// 5Hz 触发频率下偶尔丢一帧对 UI 视感无影响，但能防止慢推理把 Task queue 撑爆。
     private var computeInFlight = false
+
+    /// 滚动 64 帧时间戳，用于实时估算 BLE 帧率。
+    /// 选 64 而非更大：BLE 帧率本身有抖动，~200ms 窗口在响应快慢之间折中。
+    private var frameTimestamps: [TimeInterval] = []
+    private let fpsWindowSize = 64
     /// 区分用户主动 disconnect 与意外断连。主动断时不需要 didDisconnect 再清一遍状态。
     private var intentionalDisconnect = false
 
@@ -136,7 +149,14 @@ final class BLEManager: NSObject, ObservableObject {
     // MARK: - EMG Parsing
 
     private func handleNotification(_ data: Data) {
-        guard data.count >= 20, data[0] == BLEConstants.emgFlag else { return }
+        guard data.count >= 20 else { return }
+
+        // IMU 帧（0xBB）单独走 IMU 处理路径，不参与 EMG 计算。
+        if data[0] == BLEConstants.imuFlag {
+            handleIMUFrame(data)
+            return
+        }
+        guard data[0] == BLEConstants.emgFlag else { return }
 
         let payload = data.dropFirst(2)
         let nCh = min(payload.count / 3, BLEConstants.channelCount)
@@ -155,6 +175,18 @@ final class BLEManager: NSObject, ObservableObject {
         emgFrameCount += 1
         onEMGSample?(values)
 
+        // 滚动 fps 估计：保留最近 64 帧的时间戳，rate = (N-1) / (t_last - t_first)
+        let now = Date().timeIntervalSince1970
+        frameTimestamps.append(now)
+        if frameTimestamps.count > fpsWindowSize { frameTimestamps.removeFirst() }
+        if frameTimestamps.count >= 16,
+           let first = frameTimestamps.first, let last = frameTimestamps.last,
+           last > first {
+            let estimated = Double(frameTimestamps.count - 1) / (last - first)
+            // 限制在合理范围 [50, 1500] Hz，避免单点抖动把估计带飞
+            measuredSampleRateHz = min(1500, max(50, estimated))
+        }
+
         if emgFrameCount % 8 == 0 {
             latestRMS = emgBuffer.rms(window: 24)
         }
@@ -164,7 +196,7 @@ final class BLEManager: NSObject, ObservableObject {
             buildAndPushState()
 
             let rmsPreview = latestRMS.prefix(3).map { String(format: "%.1f", $0) }.joined(separator: ", ")
-            FluxLog.ble.debug("Frame \(emgFrameCount) | RMS: [\(rmsPreview), ...] | Channels: \(nCh)")
+            FluxLog.ble.debug("Frame \(emgFrameCount) | RMS: [\(rmsPreview), ...] | Ch: \(nCh) | fps: \(String(format: "%.1f", measuredSampleRateHz))")
         }
     }
 
@@ -177,16 +209,21 @@ final class BLEManager: NSObject, ObservableObject {
         let now = Date().timeIntervalSince1970
         let rawChannels = emgBuffer.channelTimeSeries()
         let frameCount = emgFrameCount
+        let sampleRate = measuredSampleRateHz
+        let imu = imuMotion  // IMU 运动量，用来辅助 work/rest 判定 + 抑制 MDF 运动伪迹
 
         computeInFlight = true
         Task { [weak self, staminaEngine, classifier] in
             // 这两个 await 自动从 MainActor 跳到各自的 actor 隔离域，CoreML/FFT 在后台执行
-            let prediction = await classifier.predict(channels: rawChannels)
+            // 传 measuredSampleRateHz 让 FFT 频率轴与实际 BLE 帧率对齐
+            let prediction = await classifier.predict(channels: rawChannels, sampleRateHz: sampleRate)
             let r = await staminaEngine.update(
                 rms: rms,
                 rawChannels: rawChannels,
                 timestamp: now,
-                classifiedActivity: prediction?.label
+                classifiedActivity: prediction?.label,
+                sampleRateHz: sampleRate,
+                imuMotion: imu
             )
 
             await MainActor.run {
@@ -253,6 +290,35 @@ final class BLEManager: NSObject, ObservableObject {
             lowSignalConsecutive = 0
             detachNotified = false
         }
+    }
+
+    // MARK: - IMU Parsing
+
+    /// IMU 帧：`[0xBB][seq][gyro x/y/z BE int16][accel x/y/z BE int16][pad]`
+    /// 缩放系数与 `src/stream.py` 对齐：gyro × 0.0012 → rad/s，accel × 0.0005978 → m/s²
+    private func handleIMUFrame(_ data: Data) {
+        guard data.count >= 14 else { return }
+        let start = data.startIndex + 2  // 跳过 flag + seq
+
+        let g0 = Self.decodeBigEndianInt16(data, start)
+        let g1 = Self.decodeBigEndianInt16(data, start + 2)
+        let g2 = Self.decodeBigEndianInt16(data, start + 4)
+
+        // 用陀螺仪幅度做运动量，加速度受重力主导噪声大
+        // ||gyro|| in rad/s
+        let gx = Double(g0) * 0.0012
+        let gy = Double(g1) * 0.0012
+        let gz = Double(g2) * 0.0012
+        let magnitude = (gx * gx + gy * gy + gz * gz).squareRoot()
+
+        // 滚动 EMA 平滑（IMU 噪声大，单帧不可信）
+        imuMotion = imuMotion * 0.85 + magnitude * 0.15
+    }
+
+    private static func decodeBigEndianInt16(_ data: Data, _ offset: Int) -> Int16 {
+        let hi = UInt16(data[offset])
+        let lo = UInt16(data[offset + 1])
+        return Int16(bitPattern: (hi << 8) | lo)
     }
 
     /// WAVELETECH：24-bit 大端有符号整数，**值即为 µV**（与 `src/stream.py` 一致，不再做 V_ref/Gain 换算）
