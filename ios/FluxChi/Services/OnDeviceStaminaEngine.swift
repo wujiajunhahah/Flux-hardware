@@ -285,8 +285,16 @@ actor OnDeviceStaminaEngine {
         return max(0, min(1, 1 - cv))
     }
 
-    // MARK: - D2 Tension (current muscle tone vs resting baseline)
+    // MARK: - D2 Tension (current muscle tone vs resting baseline, adaptive EMA)
 
+    /// 张力估计 — 用自适应 EMA + baseline 离散度做 z-score 风格的归一化。
+    ///
+    /// 改进点：
+    /// 1. **Baseline std 替代固定 EMA α**：从 baselineBuf 算出 std，让"显著偏离"用 σ 单位
+    ///    而非绝对 RMS 值表达 — 跨用户/跨 session 一致。
+    /// 2. **自适应 EMA**：变化大时 α=0.30 快跟踪（捕捉紧张突发），稳态时 α=0.10 抗噪。
+    ///    旧版固定 α=0.15 在两个极端都次优。
+    /// 3. **保留 p10/p90 percentile** 思路（抗瞬时尖峰）。
     private func d2Tension() -> Double {
         guard rmsRecent.count >= 5 else { return 0 }
 
@@ -297,15 +305,33 @@ actor OnDeviceStaminaEngine {
 
         let base = restBaseline ?? baselineMeanRMS
         guard base > 10 else {
+            // 无 baseline：回退到范围 / 均值
             let range = p90 - p10
             let mean = rmsRecent.reduce(0, +) / Double(rmsRecent.count)
             return mean > 10 ? min(1, range / mean) : 0
         }
 
-        let deviation = max(0, (p10 - base) / base)
-        let rangeRatio = (p90 - p10) / max(base, 1)
-        let raw = deviation * 0.6 + rangeRatio * 0.4
-        tensionEMA = tensionEMA * 0.85 + raw * 0.15
+        // 用 baselineBuf 的 std 做归一化 — 跨人/跨 session 在统计意义上一致
+        // baselineBuf 可能未满，给个 floor 避免 σ=0
+        let baselineStd: Double = {
+            guard baselineBuf.count >= 4 else { return max(base * 0.10, 5.0) }  // 默认 σ ≈ 10% baseline
+            return max(variance(baselineBuf).squareRoot(), base * 0.05)
+        }()
+
+        // 用 std 而非绝对值的相对偏离：1.0 = 偏离 1σ
+        let deviationSigma = max(0, (p10 - base) / baselineStd)
+        let rangeSigma = (p90 - p10) / baselineStd
+        // 归一化到 [0, 1] —— 3σ 视为接近满量程
+        let raw = min(1.0, (deviationSigma * 0.6 + rangeSigma * 0.4) / 3.0)
+
+        // 自适应 EMA：根据当前 raw 与 ema 的差异决定 α
+        let delta = abs(raw - tensionEMA)
+        let alpha: Double
+        if delta > 0.15 { alpha = 0.30 }       // 快跟（突变）
+        else if delta > 0.05 { alpha = 0.20 }  // 中速
+        else { alpha = 0.10 }                  // 慢跟（抗噪）
+        tensionEMA = tensionEMA * (1 - alpha) + raw * alpha
+
         return max(0, min(1, tensionEMA))
     }
 
