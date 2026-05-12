@@ -73,6 +73,11 @@ actor OnDeviceStaminaEngine {
     private let mdfBaselineN = 15
     private let mdfHistoryLen: Double = 120
 
+    /// 进入 rest 状态的时刻；rest 持续 > rebaseliningRestSec 时触发 MDF baseline 重建，
+    /// 解决长时间使用后电极位移导致 baseline 漂移、被误识别成「持续疲劳」的问题。
+    private var restStartedAt: Double?
+    private let rebaseliningRestSec: Double = 300  // 5 分钟连续 rest 触发
+
     // MARK: - State
 
     private(set) var stamina: Double = 100
@@ -96,8 +101,10 @@ actor OnDeviceStaminaEngine {
         let targetCalibrationN = useProfile ? 8 : calibrationN
         let personalSpan = max(profile?.meanSignalSpan ?? 25, 25)
 
-        let activeRMS = rms.filter { $0 > 1 }
-        let meanRMS = activeRMS.isEmpty ? 0 : activeRMS.reduce(0, +) / Double(activeRMS.count)
+        // 通道质量加权聚合：电极接触不良时单路 RMS 会比 baseline 高 50-200×，
+        // 直接 mean(rms) 会被噪声电极主导。按每路相对 baseline 的合理度加权。
+        // 无 calibration 时回退到 RMS>1 过滤的简单均值。
+        let meanRMS = Self.weightedMeanRMS(rms: rms, profile: profile)
 
         // --- Adaptive calibration（无档案约 15 帧；有每日校准档案约 8 帧并融合安静基线）---
         if !isCalibrated {
@@ -146,10 +153,15 @@ actor OnDeviceStaminaEngine {
         if isWork && !working {
             working = true
             workStart = timestamp
+            restStartedAt = nil  // 工作开始，重置 rest 计时
         } else if !isWork && working {
             if let s = workStart { totalWorkSec += timestamp - s }
             working = false
             workStart = nil
+            restStartedAt = timestamp  // 进入 rest，开始计时
+        } else if !isWork && restStartedAt == nil {
+            // 系统刚启动就处于 rest，也记录起点
+            restStartedAt = timestamp
         }
 
         let contSec = workStart.map { timestamp - $0 } ?? 0
@@ -246,6 +258,7 @@ actor OnDeviceStaminaEngine {
         calibrationSamples.removeAll(); calibrationVariances.removeAll()
         isCalibrated = false; baselineMeanRMS = 0; baselineVariance = 0
         rmsWindow.removeAll(); tensionEMA = 0
+        restStartedAt = nil
     }
 
     // MARK: - D1 Consistency (always active, measures signal stability)
@@ -301,6 +314,19 @@ actor OnDeviceStaminaEngine {
             if mdfBaselineBuf.count >= mdfBaselineN {
                 mdfBaseline = Self.median(mdfBaselineBuf)
                 mdfBaselineBuf.removeAll()
+            }
+        } else if let restStart = restStartedAt,
+                  ts - restStart > rebaseliningRestSec,
+                  !working {
+            // 连续 rest > 5 分钟，认为电极位移已稳定 + 神经肌已恢复。
+            // 用最近 rest 期间的 MDF 重新建立 baseline，避免 fatigue 被"baseline 漂移"误报。
+            let recentRestMDFs = mdfHistory
+                .filter { ts - $0.t < rebaseliningRestSec }
+                .map(\.v)
+            if recentRestMDFs.count >= 5 {
+                mdfBaseline = Self.median(recentRestMDFs)
+                restStartedAt = ts  // 重置防止反复触发
+                FluxLog.ml.info("MDF baseline re-rotated after \(Int(rebaseliningRestSec))s rest: new = \(String(format: "%.1f", mdfBaseline ?? 0)) Hz")
             }
         }
 
@@ -393,5 +419,34 @@ actor OnDeviceStaminaEngine {
         let s = values.sorted()
         guard !s.isEmpty else { return 0 }
         return s.count % 2 == 0 ? (s[s.count / 2 - 1] + s[s.count / 2]) / 2 : s[s.count / 2]
+    }
+
+    /// 通道质量加权 RMS 均值。
+    /// 当存在每日校准时，每路 ratio = rms[i] / baseline[i] 应在 [0.5, 10] 内为正常活动。
+    /// 超过 10× 几乎肯定是电极故障，降权；超过 30× 几乎完全忽略。
+    /// 这样一个掉线的电极不会让全 8 路均值飘到天上去。
+    static func weightedMeanRMS(rms: [Double], profile: EMGCalibrationStore?) -> Double {
+        guard let baseline = profile?.relaxMean,
+              baseline.count >= rms.count else {
+            // 无 calibration：回退到原本的「过滤静音通道」逻辑
+            let active = rms.filter { $0 > 1 }
+            return active.isEmpty ? 0 : active.reduce(0, +) / Double(active.count)
+        }
+
+        var totalW = 0.0
+        var weightedSum = 0.0
+        for i in 0..<rms.count {
+            let base = max(baseline[i], 5.0)  // floor 避免 baseline=0 时除零
+            let ratio = rms[i] / base
+            let w: Double
+            if ratio < 0.3 { w = 0.0 }       // 通道死了
+            else if ratio < 10 { w = 1.0 }    // 正常范围
+            else if ratio < 30 { w = 0.4 }    // 强信号但可能电极松了
+            else { w = 0.05 }                 // 几乎肯定噪声
+            weightedSum += rms[i] * w
+            totalW += w
+        }
+        guard totalW > 0 else { return 0 }
+        return weightedSum / totalW
     }
 }
