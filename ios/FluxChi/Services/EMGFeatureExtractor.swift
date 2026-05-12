@@ -239,7 +239,9 @@ actor EMGActivityInference {
         self.config = cfg
         // 采样率从 config 读取（默认 320），保证 FFT 频率步长与训练数据对齐
         self.extractor = EMGFeatureExtractor(sampleRate: cfg.effectiveSampleRate, zcThreshold: 20)
-        loadModel()
+        // Swift 6：actor init 是 nonisolated 上下文，不能调用 actor-isolated 方法。
+        // 把模型加载抽成 static，在 init 内同步完成，避免 Task 异步初始化导致 model 短暂 nil。
+        self.model = Self.loadModelSync(config: cfg)
     }
 
     struct Prediction: Sendable {
@@ -334,25 +336,28 @@ actor EMGActivityInference {
         )
     }
 
-    // MARK: - Model Loading
+    // MARK: - Model Loading (Swift 6 兼容：static + nonisolated)
 
-    private func loadModel() {
+    /// 从 bundle 同步加载并校验模型。
+    /// 标 `nonisolated` 是为了能在 actor init 中调用；不访问任何 actor 状态。
+    nonisolated private static func loadModelSync(config: EMGClassifierConfig) -> MLModel? {
         guard let url = Bundle.main.url(forResource: "ActivityClassifier", withExtension: "mlmodelc")
-            ?? compileModel() else {
+            ?? compileModelURL() else {
             FluxLog.ml.error("ActivityClassifier 未在 bundle 中找到 (.mlmodelc / .mlpackage)")
-            return
+            return nil
         }
         do {
-            model = try MLModel(contentsOf: url)
-            validateModelContract()
+            let m = try MLModel(contentsOf: url)
+            validateModelContract(m, config: config)
+            return m
         } catch {
             FluxLog.ml.error("ActivityClassifier 加载失败", error: error)
+            return nil
         }
     }
 
     /// 启动时一次性校验模型契约：输入/输出维度、类别数
-    private func validateModelContract() {
-        guard let model else { return }
+    nonisolated private static func validateModelContract(_ model: MLModel, config: EMGClassifierConfig) {
         let desc = model.modelDescription
 
         if let inputDesc = desc.inputDescriptionsByName["features"],
@@ -368,7 +373,7 @@ actor EMGActivityInference {
         FluxLog.ml.info("ActivityClassifier 已加载 — 输出键: \(outputNames), 类别: \(config.classes.count)个, 特征: \(config.n_features)维")
     }
 
-    private func compileModel() -> URL? {
+    nonisolated private static func compileModelURL() -> URL? {
         guard let packageURL = Bundle.main.url(forResource: "ActivityClassifier", withExtension: "mlpackage") else { return nil }
         return try? MLModel.compileModel(at: packageURL)
     }
