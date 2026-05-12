@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import errno
+import fcntl
 import sys
 import threading
 import time
@@ -34,6 +36,35 @@ BLE_SERVICE_UUID = "974cbe30-3e83-465e-acde-6f92fe712134"
 BLE_DATA_CHAR = "974cbe31-3e83-465e-acde-6f92fe712134"
 BLE_WRITE_CHAR = "974cbe32-3e83-465e-acde-6f92fe712134"
 BLE_DEVICE_PREFIX = "WL"
+
+
+def _is_ignorable_modem_control_error(exc: BaseException) -> bool:
+    return isinstance(exc, OSError) and getattr(exc, "errno", None) in {
+        errno.EPERM,
+        errno.EINVAL,
+        errno.ENOTTY,
+    }
+
+
+if serial is not None:
+    class CompatSerial(serial.Serial):
+        """Tolerate USB serial bridges that reject modem-control ioctls."""
+
+        def _update_dtr_state(self):  # type: ignore[override]
+            try:
+                super()._update_dtr_state()
+            except OSError as exc:
+                if not _is_ignorable_modem_control_error(exc):
+                    raise
+
+        def _update_rts_state(self):  # type: ignore[override]
+            try:
+                super()._update_rts_state()
+            except OSError as exc:
+                if not _is_ignorable_modem_control_error(exc):
+                    raise
+else:  # pragma: no cover - exercised only when pyserial is unavailable
+    CompatSerial = None
 
 
 @dataclass
@@ -148,7 +179,8 @@ class SerialEMGStream(BaseEMGStream):
     def _run(self) -> None:
         assert serial is not None
         try:
-            conn = serial.Serial(self.port, self.baudrate, timeout=0.01)
+            assert CompatSerial is not None
+            conn = CompatSerial(self.port, self.baudrate, timeout=0.01)
         except Exception as exc:  # pragma: no cover - hardware side effect
             print(f"[stream] Failed to open {self.port}: {exc}")
             self._running = False
@@ -283,7 +315,8 @@ class SerialEMGStream(BaseEMGStream):
         if serial is None:
             raise RuntimeError("pyserial is required for hardware streaming")
         try:
-            conn = serial.Serial(self.port, self.baudrate, timeout=0.01)
+            assert CompatSerial is not None
+            conn = CompatSerial(self.port, self.baudrate, timeout=0.01)
         except Exception as exc:
             raise RuntimeError(f"Unable to open {self.port}: {exc}") from exc
         else:
@@ -299,6 +332,13 @@ class BleEMGStream(BaseEMGStream):
     def __init__(self, address: Optional[str] = None) -> None:
         if BleakClient is None:
             raise RuntimeError("bleak is required: pip install bleak")
+        # 防御：构造时如果有人传字面量 "auto"，立即归一化成 None 触发扫描
+        if address == "auto":
+            import traceback
+            print(f"[ble] WARN: BleEMGStream constructed with address='auto', falling back to scan")
+            print("[ble] Stack trace:")
+            traceback.print_stack()
+            address = None
         self._address = address
         self._thread: Optional[threading.Thread] = None
         self._running = False
@@ -309,6 +349,9 @@ class BleEMGStream(BaseEMGStream):
         self._stats = FrameStats()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._connected = False
+        # debug：让 instance id 出现在日志里，方便看到底有几个 BleEMGStream 实例
+        import os
+        self._inst_id = f"{os.getpid()}-{id(self) & 0xFFFFFF:x}"
 
     def start(self) -> None:
         if self._running:
@@ -330,32 +373,85 @@ class BleEMGStream(BaseEMGStream):
         try:
             self._loop.run_until_complete(self._ble_main())
         except Exception as exc:
-            print(f"[ble] Event loop error: {exc}")
+            print(f"[ble] Event loop fatal: {exc}")
         finally:
             self._running = False
 
     async def _ble_main(self) -> None:
-        address = self._address
-        if not address:
-            address = await self._scan_for_wristband()
-            if not address:
+        """主循环：扫描一次 + 多次重连。每次连接断开后退避重试。
+
+        修复点：
+        - 扫描成功后 cache 到 self._address，避免空地址重连去拼接成 "auto"
+        - 用 disconnect callback + asyncio.Event 监听断开，比 mtu_size 轮询稳
+        - 每次连接独立 try/except 隔离单次异常，不让单次失败干掉整个线程
+        - 退避：1s → 2s → 4s → 8s 上限，避免狂打蓝牙栈
+        """
+        if not self._address:
+            scanned = await self._scan_for_wristband()
+            if not scanned:
                 print("[ble] Wristband not found. Make sure it's ON and USB dongle is UNPLUGGED.")
                 return
+            self._address = scanned  # 缓存，后续重连复用
 
-        print(f"[ble] Connecting to {address}...")
-        async with BleakClient(address) as client:
-            self._connected = True
-            print(f"[ble] Connected! MTU={client.mtu_size}")
+        backoff = 1.0
+        max_backoff = 8.0
+        attempt = 0
 
-            await client.start_notify(BLE_DATA_CHAR, self._on_notify)
-            print(f"[ble] Subscribed to EMG data stream")
+        while self._running:
+            attempt += 1
+            print(f"[ble inst={self._inst_id}] Connecting to {self._address} (attempt {attempt})...")
+            disconnect_event = asyncio.Event()
 
-            while self._running:
-                await asyncio.sleep(0.1)
+            def _on_disconnect(_client) -> None:
+                # CoreBluetooth 在断连时调用；切换 event 让 keep-alive 跳出
+                if not disconnect_event.is_set():
+                    print("[ble] Peripheral disconnected")
+                    disconnect_event.set()
 
-            await client.stop_notify(BLE_DATA_CHAR)
-            self._connected = False
-            print("[ble] Disconnected")
+            try:
+                async with BleakClient(self._address, disconnected_callback=_on_disconnect) as client:
+                    self._connected = True
+                    # 立即尝试加大 MTU 到 247（macOS 一般会协商到 185）；失败不致命
+                    try:
+                        await client._backend._acquire_mtu()  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                    print(f"[ble] Connected! MTU={client.mtu_size}")
+
+                    await client.start_notify(BLE_DATA_CHAR, self._on_notify)
+                    print(f"[ble] Subscribed to EMG data stream")
+
+                    # 等待断开 OR 停止信号；不再用 sleep(0.1) 轮询
+                    while self._running and not disconnect_event.is_set():
+                        try:
+                            await asyncio.wait_for(disconnect_event.wait(), timeout=0.5)
+                            break
+                        except asyncio.TimeoutError:
+                            continue
+
+                    try:
+                        await client.stop_notify(BLE_DATA_CHAR)
+                    except Exception:
+                        pass  # 已经断开时 stop_notify 会失败，吞掉
+
+                self._connected = False
+                if not self._running:
+                    print("[ble] Stopped by user")
+                    return
+                # 否则进入重连退避
+                print(f"[ble] Reconnecting in {backoff:.1f}s...")
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
+
+            except asyncio.CancelledError:
+                print("[ble] Cancelled")
+                self._connected = False
+                return
+            except Exception as exc:
+                self._connected = False
+                print(f"[ble] Connection error: {exc!r} — retrying in {backoff:.1f}s")
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
 
     async def _scan_for_wristband(self, timeout: float = 10.0) -> Optional[str]:
         print(f"[ble] Scanning for WAVELETECH wristband ({timeout}s)...")
