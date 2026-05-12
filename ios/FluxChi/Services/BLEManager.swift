@@ -51,6 +51,11 @@ final class BLEManager: NSObject, ObservableObject {
     /// 没有这个测量、用硬编码 320Hz 算 FFT，会让 MNF/MDF 频率轴整体偏移 ×3 倍以上。
     @Published private(set) var measuredSampleRateHz: Double = 320
 
+    /// IMU 运动幅度 — 滚动均值的 ||gyro|| (rad/s)。
+    /// 用途：辅助 work/rest 判定（手在动 ≠ 安静）+ 抑制运动伪迹（高 IMU 期间 EMG fatigue 不可信）。
+    /// 之前 IMU 帧（0xBB）被完全丢弃，这是巨大的浪费——硬件已经发了，我们没用上。
+    @Published private(set) var imuMotion: Double = 0
+
     var isConnected: Bool { peripheralState == .connected }
 
     // MARK: - Callbacks
@@ -144,7 +149,14 @@ final class BLEManager: NSObject, ObservableObject {
     // MARK: - EMG Parsing
 
     private func handleNotification(_ data: Data) {
-        guard data.count >= 20, data[0] == BLEConstants.emgFlag else { return }
+        guard data.count >= 20 else { return }
+
+        // IMU 帧（0xBB）单独走 IMU 处理路径，不参与 EMG 计算。
+        if data[0] == BLEConstants.imuFlag {
+            handleIMUFrame(data)
+            return
+        }
+        guard data[0] == BLEConstants.emgFlag else { return }
 
         let payload = data.dropFirst(2)
         let nCh = min(payload.count / 3, BLEConstants.channelCount)
@@ -198,6 +210,7 @@ final class BLEManager: NSObject, ObservableObject {
         let rawChannels = emgBuffer.channelTimeSeries()
         let frameCount = emgFrameCount
         let sampleRate = measuredSampleRateHz
+        let imu = imuMotion  // IMU 运动量，用来辅助 work/rest 判定 + 抑制 MDF 运动伪迹
 
         computeInFlight = true
         Task { [weak self, staminaEngine, classifier] in
@@ -209,7 +222,8 @@ final class BLEManager: NSObject, ObservableObject {
                 rawChannels: rawChannels,
                 timestamp: now,
                 classifiedActivity: prediction?.label,
-                sampleRateHz: sampleRate
+                sampleRateHz: sampleRate,
+                imuMotion: imu
             )
 
             await MainActor.run {
@@ -276,6 +290,35 @@ final class BLEManager: NSObject, ObservableObject {
             lowSignalConsecutive = 0
             detachNotified = false
         }
+    }
+
+    // MARK: - IMU Parsing
+
+    /// IMU 帧：`[0xBB][seq][gyro x/y/z BE int16][accel x/y/z BE int16][pad]`
+    /// 缩放系数与 `src/stream.py` 对齐：gyro × 0.0012 → rad/s，accel × 0.0005978 → m/s²
+    private func handleIMUFrame(_ data: Data) {
+        guard data.count >= 14 else { return }
+        let start = data.startIndex + 2  // 跳过 flag + seq
+
+        let g0 = Self.decodeBigEndianInt16(data, start)
+        let g1 = Self.decodeBigEndianInt16(data, start + 2)
+        let g2 = Self.decodeBigEndianInt16(data, start + 4)
+
+        // 用陀螺仪幅度做运动量，加速度受重力主导噪声大
+        // ||gyro|| in rad/s
+        let gx = Double(g0) * 0.0012
+        let gy = Double(g1) * 0.0012
+        let gz = Double(g2) * 0.0012
+        let magnitude = (gx * gx + gy * gy + gz * gz).squareRoot()
+
+        // 滚动 EMA 平滑（IMU 噪声大，单帧不可信）
+        imuMotion = imuMotion * 0.85 + magnitude * 0.15
+    }
+
+    private static func decodeBigEndianInt16(_ data: Data, _ offset: Int) -> Int16 {
+        let hi = UInt16(data[offset])
+        let lo = UInt16(data[offset + 1])
+        return Int16(bitPattern: (hi << 8) | lo)
     }
 
     /// WAVELETECH：24-bit 大端有符号整数，**值即为 µV**（与 `src/stream.py` 一致，不再做 V_ref/Gain 换算）

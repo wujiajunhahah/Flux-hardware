@@ -105,7 +105,7 @@ actor OnDeviceStaminaEngine {
 
     // MARK: - Update
 
-    func update(rms: [Double], rawChannels: [[Double]]?, timestamp: Double, classifiedActivity: String? = nil, sampleRateHz: Double = 320) -> Reading {
+    func update(rms: [Double], rawChannels: [[Double]]?, timestamp: Double, classifiedActivity: String? = nil, sampleRateHz: Double = 320, imuMotion: Double = 0) -> Reading {
         let profile = EMGCalibrationStore.load()
         let useProfile = profile?.isUsableForStamina == true
         let targetCalibrationN = useProfile ? 8 : calibrationN
@@ -147,9 +147,15 @@ actor OnDeviceStaminaEngine {
         let rmsDeviation = abs(meanRMS - baselineMeanRMS) / max(baselineMeanRMS, 1)
         let rmsExcursion = abs(meanRMS - baselineMeanRMS) / max(personalSpan, 1)
 
+        // IMU 增强 work/rest 判定：手在动（gyro magnitude > 0.3 rad/s ≈ 17°/s）几乎肯定不是 rest，
+        // 这能避免「手在打字但 EMG 噪声低 → 误判 rest」的情况。
+        let imuIndicatesActivity = imuMotion > 0.3
+
         let currentWork: Bool
         if let cls = classifiedActivity,
            cls != "rest" && cls != "idle" {
+            currentWork = true
+        } else if imuIndicatesActivity {
             currentWork = true
         } else {
             let strongDeviation = useProfile ? (rmsExcursion > 0.26) : (rmsDeviation > 0.3)
@@ -200,7 +206,11 @@ actor OnDeviceStaminaEngine {
         if let ch = rawChannels, !ch.isEmpty, ch[0].count >= 32 {
             // 使用 BLEManager 实测的 fps，而非硬编码 320Hz。
             // 之前用错的采样率会让 MDF 频率值整体偏移 3× 以上，物理意义错乱。
-            fat = d3Fatigue(ch, timestamp, sampleRate: sampleRateHz, meanRMS: meanRMS, isWork: isWork)
+            let rawFat = d3Fatigue(ch, timestamp, sampleRate: sampleRateHz, meanRMS: meanRMS, isWork: isWork)
+            // IMU 抑制：剧烈运动（>1.5 rad/s ≈ 大幅挥手）下 MDF 受运动伪迹污染，可信度下降。
+            // 线性缩放：motion=0 → ×1.0, motion=1.5 → ×0.5, motion≥3 → ×0.2
+            let imuConfidence = max(0.2, 1.0 - imuMotion / 3.0)
+            fat = rawFat * imuConfidence
         } else {
             let timeFat = totalSec > 0 ? min(totalSec / 60 / 45, 0.8) : 0
             let varianceFat = isCalibrated && baselineVariance > 0
