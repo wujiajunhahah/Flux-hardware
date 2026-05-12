@@ -52,37 +52,31 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 16) {
                     if !isLive { connectionBanner }
+                    if isLive && !isCalibratedToday { calibrationBanner }
 
-                    if isLive && !isCalibratedToday {
-                        calibrationBanner
-                    }
-
-                    if isLive {
-                        StaminaRingView(value: ringStaminaValue, state: staminaState)
-                            .drawingGroup()
-                            .padding(.vertical, 4)
-                    } else {
-                        // 未连接：干净的占位
-                        disconnectedPlaceholder
-                    }
+                    // 主 Hero：续航环 + 状态 + 维度 + 今日 metric + 推荐
+                    // 一张暗渐变大卡替代原本 4 个浅色卡片（ring / recommendation / dimensions / today summary）
+                    DashboardTodayHero(
+                        stamina: stamina,
+                        decision: decision,
+                        ringValue: ringStaminaValue,
+                        state: staminaState,
+                        isLive: isLive,
+                        consistency: stamina?.consistency ?? 0,
+                        tension: stamina?.tension ?? 0,
+                        fatigue: stamina?.fatigue ?? 0,
+                        todaySessionCount: todaySessions.count,
+                        todayTotalMinutes: Int(todaySessions.reduce(0) { $0 + $1.duration } / 60),
+                        todayAvgStamina: {
+                            let v = todaySessions.compactMap(\.avgStamina)
+                            return v.isEmpty ? 0 : v.reduce(0, +) / Double(v.count)
+                        }()
+                    )
 
                     if sessionManager.isRecording {
                         recordingBar
-                    }
-
-                    recommendationCard
-
-                    // 提取为独立 struct，stamina 不变时不重绘
-                    DimensionsRow(
-                        consistency: stamina?.consistency ?? 0,
-                        tension: stamina?.tension ?? 0,
-                        fatigue: stamina?.fatigue ?? 0
-                    )
-
-                    if !todaySessions.isEmpty {
-                        todaySummaryCard
                     }
 
                     // AI 洞察 — Hero Card 风格（详见 InsightSection.swift）
@@ -196,82 +190,6 @@ struct DashboardView: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    // MARK: - Disconnected Placeholder
-
-    private var disconnectedPlaceholder: some View {
-        VStack(spacing: 20) {
-            ZStack {
-                Circle()
-                    .stroke(Color(.separator).opacity(0.2), lineWidth: 10)
-                    .frame(width: 200, height: 200)
-
-                VStack(spacing: 8) {
-                    Image(systemName: "sensor.tag.radiowaves.forward")
-                        .font(.system(size: 32))
-                        .foregroundStyle(.quaternary)
-                        .symbolEffect(.variableColor.iterative, options: .repeating)
-                    Text("--")
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
-                        .foregroundStyle(.quaternary)
-                }
-            }
-            .padding(.vertical, 4)
-
-            VStack(spacing: 8) {
-                Text("等待设备连接")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Button {
-                    showConnectionSheet = true
-                } label: {
-                    Text("连接设备")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 10)
-                        .background(Flux.Colors.accent, in: Capsule())
-                        .foregroundStyle(.white)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    // MARK: - Recommendation
-
-    @ViewBuilder
-    private var recommendationCard: some View {
-        if let d = decision {
-            let rec = Recommendation(rawValue: d.recommendation) ?? .keepWorking
-            let urgencyColor = Flux.Colors.forUrgency(d.urgency)
-
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(urgencyColor.opacity(0.12))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: rec.systemImage)
-                        .font(.title3)
-                        .foregroundStyle(urgencyColor)
-                        .symbolRenderingMode(.hierarchical)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(rec.displayName)
-                        .font(.subheadline.weight(.semibold))
-                    if let reason = d.reasons.first {
-                        Text(reason)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-                Spacer()
-            }
-            .padding(14)
-            .background(.thinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
-        }
-    }
-
     // MARK: - Recording
 
     private var recordButton: some View {
@@ -302,100 +220,6 @@ struct DashboardView: View {
                 .symbolEffect(.pulse, isActive: sessionManager.isRecording)
         }
         .disabled(!isLive && !sessionManager.isRecording)
-    }
-
-    // MARK: - Start Focus
-
-    // MARK: - Today Summary (重设计：紧凑横排 + 进度条)
-
-    private var todaySummaryCard: some View {
-        let totalMin = Int(todaySessions.reduce(0) { $0 + $1.duration } / 60)
-        let avgVals = todaySessions.compactMap(\.avgStamina)
-        let avgStamina = avgVals.isEmpty ? 0.0 : avgVals.reduce(0, +) / Double(avgVals.count)
-        let unfeedbackCount = todaySessions.filter { $0.feedback == nil }.count
-
-        return VStack(alignment: .leading, spacing: 12) {
-            // 标题行
-            HStack {
-                Label("今日", systemImage: "chart.bar.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if unfeedbackCount > 0 {
-                    Text("\(unfeedbackCount) 条待反馈")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                }
-            }
-
-            // Gauge 指标行
-            HStack(spacing: 0) {
-                summaryGauge(
-                    value: Double(todaySessions.count) / 10.0,
-                    label: "场次",
-                    display: "\(todaySessions.count)",
-                    tint: Color(.systemOrange)
-                )
-                dividerLine
-                summaryGauge(
-                    value: min(Double(totalMin) / 240.0, 1.0),
-                    label: "时长",
-                    display: totalMin > 0 ? "\(totalMin)m" : "—",
-                    tint: Color(.systemTeal)
-                )
-                dividerLine
-                summaryGauge(
-                    value: avgStamina / 100.0,
-                    label: "续航",
-                    display: avgStamina > 0 ? "\(Int(avgStamina))" : "—",
-                    tint: Flux.Colors.forStaminaValue(avgStamina)
-                )
-            }
-
-            // 今日累计进度条（目标 4 小时）
-            if totalMin > 0 {
-                VStack(spacing: 4) {
-                    ProgressView(value: min(Double(totalMin) / 240.0, 1.0))
-                        .tint(Color(.systemTeal))
-                    HStack {
-                        Text("今日累计")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.tertiary)
-                        Spacer()
-                        Text("\(totalMin) / 240 min")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            }
-        }
-        .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
-    }
-
-    private func summaryGauge(value: Double, label: String, display: String, tint: Color) -> some View {
-        VStack(spacing: 6) {
-            Gauge(value: min(max(value, 0), 1)) {
-                EmptyView()
-            } currentValueLabel: {
-                Text(display)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-            }
-            .gaugeStyle(.accessoryCircular)
-            .tint(Gradient(colors: [tint.opacity(0.3), tint]))
-            .scaleEffect(0.9)
-
-            Text(label)
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var dividerLine: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.06))
-            .frame(width: 1, height: 28)
     }
 
     @ViewBuilder
@@ -501,44 +325,6 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - Dimensions Row (独立 struct，只在 value 变化时重绘)
-
-private struct DimensionsRow: View, Equatable {
-    let consistency: Double
-    let tension: Double
-    let fatigue: Double
-
-    var body: some View {
-        HStack(spacing: 12) {
-            dimensionGauge("一致性", value: consistency, icon: "waveform.path", tint: Color(.systemTeal))
-            dimensionGauge("紧张度", value: tension, icon: "arrow.up.right", tint: Color(.systemOrange).opacity(0.75))
-            dimensionGauge("疲劳度", value: fatigue, icon: "flame", tint: Color(.systemPink).opacity(0.75))
-        }
-    }
-
-    private func dimensionGauge(_ title: String, value: Double, icon: String, tint: Color) -> some View {
-        VStack(spacing: 10) {
-            Gauge(value: value) {
-                Image(systemName: icon)
-                    .font(.caption2)
-            } currentValueLabel: {
-                Text("\(Int(value * 100))")
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-            }
-            .gaugeStyle(.accessoryCircular)
-            .tint(Gradient(colors: [tint.opacity(0.35), tint]))
-            .scaleEffect(1.15)
-
-            Text(title)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: Flux.Radius.large))
-    }
-}
-
 // MARK: - iOS Widget Design Constants
 
 private enum WidgetStyle {
@@ -552,7 +338,7 @@ private enum WidgetStyle {
     static let mediumHeight: CGFloat = 170
 }
 
-// MARK: - Widget Placeholder (占位组件)
+// MARK: - Widget Placeholder (占位组件 — 暗色低强度)
 
 private struct WidgetPlaceholder: View {
     let icon: String
@@ -567,21 +353,20 @@ private struct WidgetPlaceholder: View {
             Spacer()
             Image(systemName: icon)
                 .font(.system(size: style == .small ? 24 : 28))
-                .foregroundStyle(.quaternary)
+                .foregroundStyle(.white.opacity(0.35))
             Text(title)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.white.opacity(0.55))
             Text(hint)
                 .font(.system(size: 11))
-                .foregroundStyle(.quaternary)
+                .foregroundStyle(.white.opacity(0.4))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
             Spacer()
         }
-        .padding(WidgetStyle.padding)
         .frame(maxWidth: .infinity)
         .frame(height: style == .small ? WidgetStyle.smallHeight : WidgetStyle.mediumHeight)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
+        .fluxDarkCard(cornerRadius: WidgetStyle.cornerRadius, padding: WidgetStyle.padding, tintIntensity: 0.25)
     }
 }
 
@@ -596,7 +381,7 @@ private struct WidgetSessionCount: View {
             HStack {
                 Image(systemName: "flame.fill")
                     .font(.system(size: 13))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.white.opacity(0.85))
                 Spacer()
             }
 
@@ -604,23 +389,22 @@ private struct WidgetSessionCount: View {
 
             Text("\(count)")
                 .font(.system(size: 44, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
+                .foregroundStyle(.white)
                 .contentTransition(.numericText())
 
             Text("场专注")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.7))
 
             Spacer().frame(height: 6)
 
             Text(totalMin > 0 ? "累计 \(totalMin) 分钟" : "今日未记录")
                 .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.white.opacity(0.5))
         }
-        .padding(WidgetStyle.padding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: WidgetStyle.smallHeight)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
+        .fluxDarkCard(cornerRadius: WidgetStyle.cornerRadius, padding: WidgetStyle.padding, tint: .orange, tintIntensity: 0.35)
     }
 }
 
@@ -647,7 +431,7 @@ private struct WidgetBestSlot: View {
             HStack {
                 Image(systemName: "clock.arrow.circlepath")
                     .font(.system(size: 13))
-                    .foregroundStyle(.cyan)
+                    .foregroundStyle(.white.opacity(0.85))
                 Spacer()
             }
 
@@ -656,41 +440,40 @@ private struct WidgetBestSlot: View {
             if let slot = bestSlot {
                 Image(systemName: slot.icon)
                     .font(.system(size: 22))
-                    .foregroundStyle(Flux.Colors.forStaminaValue(slot.avg))
+                    .foregroundStyle(.white)
                     .padding(.bottom, 4)
 
                 Text(slot.name)
                     .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
 
                 Text("最佳时段")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.7))
 
                 Spacer().frame(height: 6)
 
                 Text("平均续航 \(Int(slot.avg))")
                     .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.white.opacity(0.5))
             } else {
                 Text("--")
                     .font(.system(size: 44, weight: .bold, design: .rounded))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(.white.opacity(0.35))
                 Text("最佳时段")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.white.opacity(0.55))
 
                 Spacer().frame(height: 6)
 
                 Text("记录后解锁")
                     .font(.system(size: 11))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(.white.opacity(0.4))
             }
         }
-        .padding(WidgetStyle.padding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: WidgetStyle.smallHeight)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
+        .fluxDarkCard(cornerRadius: WidgetStyle.cornerRadius, padding: WidgetStyle.padding, tint: .cyan, tintIntensity: 0.35)
     }
 }
 
@@ -706,13 +489,13 @@ private struct WidgetAvgStamina: View {
     }
 
     var body: some View {
-        let color = Flux.Colors.forStaminaValue(avgStamina)
+        let tint = avgStamina > 0 ? Flux.Colors.forStaminaValue(avgStamina) : Color.gray
 
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: 13))
-                    .foregroundStyle(color)
+                    .foregroundStyle(.white.opacity(0.85))
                 Spacer()
             }
 
@@ -721,38 +504,46 @@ private struct WidgetAvgStamina: View {
             if avgStamina > 0 {
                 Text("\(Int(avgStamina))")
                     .font(.system(size: 44, weight: .bold, design: .rounded))
-                    .foregroundStyle(color)
+                    .foregroundStyle(.white)
                     .contentTransition(.numericText())
 
                 Text("平均续航")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.7))
 
                 Spacer().frame(height: 6)
 
                 // 迷你进度条
-                ProgressView(value: avgStamina / 100)
-                    .tint(color)
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.white.opacity(0.18))
+                            .frame(height: 4)
+                        Capsule()
+                            .fill(Color.white)
+                            .frame(width: geo.size.width * CGFloat(min(1, avgStamina / 100)), height: 4)
+                    }
+                }
+                .frame(height: 4)
             } else {
                 Text("--")
                     .font(.system(size: 44, weight: .bold, design: .rounded))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(.white.opacity(0.35))
 
                 Text("平均续航")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.white.opacity(0.55))
 
                 Spacer().frame(height: 6)
 
                 Text("开始记录后显示")
                     .font(.system(size: 11))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(.white.opacity(0.4))
             }
         }
-        .padding(WidgetStyle.padding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: WidgetStyle.smallHeight)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: WidgetStyle.cornerRadius))
+        .fluxDarkCard(cornerRadius: WidgetStyle.cornerRadius, padding: WidgetStyle.padding, tint: tint, tintIntensity: 0.4)
     }
 }
 
