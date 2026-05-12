@@ -7,13 +7,13 @@
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>FluxChi 需要蓝牙权限以连接 WAVELETECH EMG 手环，实时接收肌电信号数据。</string>
+	<string>focux 需要蓝牙权限以连接 WAVELETECH EMG 手环，实时接收肌电信号数据。</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>FluxChi 需要蓝牙权限以连接 WAVELETECH EMG 手环。</string>
+	<string>focux 需要蓝牙权限以连接 WAVELETECH EMG 手环。</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>FluxChi 需要访问本地网络以连接运行在电脑上的 EMG 数据服务器。</string>
+	<string>focux 需要访问本地网络以连接运行在电脑上的 EMG 数据服务器。</string>
 	<key>NSCameraUsageDescription</key>
-	<string>FluxChi 在严重疲劳提醒时会闪烁手电筒（仅作环境提示），调用手电筒需要相机权限。你可在系统设置中关闭。</string>
+	<string>focux 在严重疲劳提醒时会闪烁手电筒（仅作环境提示），调用手电筒需要相机权限。你可在系统设置中关闭。</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

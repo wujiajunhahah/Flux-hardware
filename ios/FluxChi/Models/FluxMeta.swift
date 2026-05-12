@@ -2,8 +2,8 @@ import Foundation
 
 /// 应用元数据 — 与视觉 token 分离，职责单一
 enum FluxMeta {
-    static let name    = "FluxChi"
-    static let version = "1.2"
+    static let name    = "focux"
+    static let version = "1.3"
     static let schemaVersion = 1
     /// 快照采样间隔。1000ms 在 stamina 视觉曲线（约 0.05 Hz 实际变化频率）下视觉无差异，
     /// 但相比 500ms 减半内存压力（segment.snapshots 关系数组 + SwiftData dirty graph）。

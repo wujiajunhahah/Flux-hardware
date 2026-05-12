@@ -81,10 +81,6 @@ struct DashboardView: View {
                         fatigue: stamina?.fatigue ?? 0
                     )
 
-                    if !todaySessions.isEmpty {
-                        todaySummaryCard
-                    }
-
                     // AI 洞察 — Hero Card 风格（详见 InsightSection.swift）
                     DailyInsightHeroCard(
                         todaySessions: todaySessions,
@@ -302,100 +298,6 @@ struct DashboardView: View {
                 .symbolEffect(.pulse, isActive: sessionManager.isRecording)
         }
         .disabled(!isLive && !sessionManager.isRecording)
-    }
-
-    // MARK: - Start Focus
-
-    // MARK: - Today Summary (重设计：紧凑横排 + 进度条)
-
-    private var todaySummaryCard: some View {
-        let totalMin = Int(todaySessions.reduce(0) { $0 + $1.duration } / 60)
-        let avgVals = todaySessions.compactMap(\.avgStamina)
-        let avgStamina = avgVals.isEmpty ? 0.0 : avgVals.reduce(0, +) / Double(avgVals.count)
-        let unfeedbackCount = todaySessions.filter { $0.feedback == nil }.count
-
-        return VStack(alignment: .leading, spacing: 12) {
-            // 标题行
-            HStack {
-                Label("今日", systemImage: "chart.bar.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if unfeedbackCount > 0 {
-                    Text("\(unfeedbackCount) 条待反馈")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                }
-            }
-
-            // Gauge 指标行
-            HStack(spacing: 0) {
-                summaryGauge(
-                    value: Double(todaySessions.count) / 10.0,
-                    label: "场次",
-                    display: "\(todaySessions.count)",
-                    tint: Color(.systemOrange)
-                )
-                dividerLine
-                summaryGauge(
-                    value: min(Double(totalMin) / 240.0, 1.0),
-                    label: "时长",
-                    display: totalMin > 0 ? "\(totalMin)m" : "—",
-                    tint: Color(.systemTeal)
-                )
-                dividerLine
-                summaryGauge(
-                    value: avgStamina / 100.0,
-                    label: "续航",
-                    display: avgStamina > 0 ? "\(Int(avgStamina))" : "—",
-                    tint: Flux.Colors.forStaminaValue(avgStamina)
-                )
-            }
-
-            // 今日累计进度条（目标 4 小时）
-            if totalMin > 0 {
-                VStack(spacing: 4) {
-                    ProgressView(value: min(Double(totalMin) / 240.0, 1.0))
-                        .tint(Color(.systemTeal))
-                    HStack {
-                        Text("今日累计")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.tertiary)
-                        Spacer()
-                        Text("\(totalMin) / 240 min")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            }
-        }
-        .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: Flux.Radius.large))
-    }
-
-    private func summaryGauge(value: Double, label: String, display: String, tint: Color) -> some View {
-        VStack(spacing: 6) {
-            Gauge(value: min(max(value, 0), 1)) {
-                EmptyView()
-            } currentValueLabel: {
-                Text(display)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-            }
-            .gaugeStyle(.accessoryCircular)
-            .tint(Gradient(colors: [tint.opacity(0.3), tint]))
-            .scaleEffect(0.9)
-
-            Text(label)
-                .font(.system(size: 9))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var dividerLine: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.06))
-            .frame(width: 1, height: 28)
     }
 
     @ViewBuilder
