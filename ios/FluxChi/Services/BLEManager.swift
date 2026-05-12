@@ -47,6 +47,9 @@ final class BLEManager: NSObject, ObservableObject {
     @Published var emgFrameCount: Int = 0
     @Published var activeChannelCount: Int = 8
     @Published var batteryLevel: Int? // 0-100，nil = 未知
+    /// 实测 BLE 帧率（rolling 64 帧）。WAVELETECH BLE 标称 1000Hz，实际受蓝牙拥塞约 100-340Hz。
+    /// 没有这个测量、用硬编码 320Hz 算 FFT，会让 MNF/MDF 频率轴整体偏移 ×3 倍以上。
+    @Published private(set) var measuredSampleRateHz: Double = 320
 
     var isConnected: Bool { peripheralState == .connected }
 
@@ -69,6 +72,11 @@ final class BLEManager: NSObject, ObservableObject {
     /// 标记 ML/FFT compute 是否正在进行；若是，本轮 buildAndPushState 跳过避免 Task 堆积。
     /// 5Hz 触发频率下偶尔丢一帧对 UI 视感无影响，但能防止慢推理把 Task queue 撑爆。
     private var computeInFlight = false
+
+    /// 滚动 64 帧时间戳，用于实时估算 BLE 帧率。
+    /// 选 64 而非更大：BLE 帧率本身有抖动，~200ms 窗口在响应快慢之间折中。
+    private var frameTimestamps: [TimeInterval] = []
+    private let fpsWindowSize = 64
     /// 区分用户主动 disconnect 与意外断连。主动断时不需要 didDisconnect 再清一遍状态。
     private var intentionalDisconnect = false
 
@@ -155,6 +163,18 @@ final class BLEManager: NSObject, ObservableObject {
         emgFrameCount += 1
         onEMGSample?(values)
 
+        // 滚动 fps 估计：保留最近 64 帧的时间戳，rate = (N-1) / (t_last - t_first)
+        let now = Date().timeIntervalSince1970
+        frameTimestamps.append(now)
+        if frameTimestamps.count > fpsWindowSize { frameTimestamps.removeFirst() }
+        if frameTimestamps.count >= 16,
+           let first = frameTimestamps.first, let last = frameTimestamps.last,
+           last > first {
+            let estimated = Double(frameTimestamps.count - 1) / (last - first)
+            // 限制在合理范围 [50, 1500] Hz，避免单点抖动把估计带飞
+            measuredSampleRateHz = min(1500, max(50, estimated))
+        }
+
         if emgFrameCount % 8 == 0 {
             latestRMS = emgBuffer.rms(window: 24)
         }
@@ -164,7 +184,7 @@ final class BLEManager: NSObject, ObservableObject {
             buildAndPushState()
 
             let rmsPreview = latestRMS.prefix(3).map { String(format: "%.1f", $0) }.joined(separator: ", ")
-            FluxLog.ble.debug("Frame \(emgFrameCount) | RMS: [\(rmsPreview), ...] | Channels: \(nCh)")
+            FluxLog.ble.debug("Frame \(emgFrameCount) | RMS: [\(rmsPreview), ...] | Ch: \(nCh) | fps: \(String(format: "%.1f", measuredSampleRateHz))")
         }
     }
 
@@ -177,16 +197,19 @@ final class BLEManager: NSObject, ObservableObject {
         let now = Date().timeIntervalSince1970
         let rawChannels = emgBuffer.channelTimeSeries()
         let frameCount = emgFrameCount
+        let sampleRate = measuredSampleRateHz
 
         computeInFlight = true
         Task { [weak self, staminaEngine, classifier] in
             // 这两个 await 自动从 MainActor 跳到各自的 actor 隔离域，CoreML/FFT 在后台执行
-            let prediction = await classifier.predict(channels: rawChannels)
+            // 传 measuredSampleRateHz 让 FFT 频率轴与实际 BLE 帧率对齐
+            let prediction = await classifier.predict(channels: rawChannels, sampleRateHz: sampleRate)
             let r = await staminaEngine.update(
                 rms: rms,
                 rawChannels: rawChannels,
                 timestamp: now,
-                classifiedActivity: prediction?.label
+                classifiedActivity: prediction?.label,
+                sampleRateHz: sampleRate
             )
 
             await MainActor.run {

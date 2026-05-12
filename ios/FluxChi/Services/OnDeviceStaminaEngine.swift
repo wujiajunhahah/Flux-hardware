@@ -90,7 +90,7 @@ actor OnDeviceStaminaEngine {
 
     // MARK: - Update
 
-    func update(rms: [Double], rawChannels: [[Double]]?, timestamp: Double, classifiedActivity: String? = nil) -> Reading {
+    func update(rms: [Double], rawChannels: [[Double]]?, timestamp: Double, classifiedActivity: String? = nil, sampleRateHz: Double = 320) -> Reading {
         let profile = EMGCalibrationStore.load()
         let useProfile = profile?.isUsableForStamina == true
         let targetCalibrationN = useProfile ? 8 : calibrationN
@@ -176,8 +176,9 @@ actor OnDeviceStaminaEngine {
         // --- D3: Fatigue (MDF spectral decline) ---
         let fat: Double
         if let ch = rawChannels, !ch.isEmpty, ch[0].count >= 32 {
-            // BLE 有效采样率远低于名义 1kHz；用 ~320Hz 尺度减轻 MDF 频偏（与网关估率同量级）
-            fat = d3Fatigue(ch, timestamp, sampleRate: 320)
+            // 使用 BLEManager 实测的 fps，而非硬编码 320Hz。
+            // 之前用错的采样率会让 MDF 频率值整体偏移 3× 以上，物理意义错乱。
+            fat = d3Fatigue(ch, timestamp, sampleRate: sampleRateHz)
         } else {
             let timeFat = totalSec > 0 ? min(totalSec / 60 / 45, 0.8) : 0
             let varianceFat = isCalibrated && baselineVariance > 0
