@@ -16,6 +16,9 @@ struct FluxChiLiveAttributes: ActivityAttributes {
     }
 
     var sessionTitle: String
+    /// 会话开始时刻；通过 `Text(_:style:.timer)` 自动跳秒显示，无需 LiveActivityManager 推 state
+    /// 仅为更新计时器。
+    var startedAt: Date
 }
 
 // MARK: - Live Activity Manager
@@ -39,7 +42,7 @@ final class LiveActivityManager: ObservableObject {
             return
         }
 
-        let attributes = FluxChiLiveAttributes(sessionTitle: title)
+        let attributes = FluxChiLiveAttributes(sessionTitle: title, startedAt: Date())
 
         let initialState = FluxChiLiveAttributes.ContentState(
             stamina: 100,
